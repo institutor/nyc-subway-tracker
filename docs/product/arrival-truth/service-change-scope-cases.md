@@ -23,19 +23,27 @@ Every case is **Pending** until its setup is exercised against a fixed reviewed 
 
 **Setup**
 
-Provide a planned alert with an active period or applicable early-display window, one route, one station or segment, and normalized direction metadata. The official text agrees with that structured scope. Provide coherent candidate trains for the affected direction, the opposite direction, and a station on the same route outside the scoped station or segment.
+Exercise the same planned alert in two runs. The alert names one route, one station or segment, and one normalized direction, and its official text agrees with that structured scope. Provide coherent candidate trains for the named direction, the opposite direction, and a station on the same route outside the scoped station or segment.
+
+1. **Pre-active early display.** The alert is visible under applicable early-display guidance, but its supported operational window has not begun.
+2. **Active operation.** Advance authoritative time into the supported operational window without changing the alert's route, station or segment, direction, or official text.
 
 **Expected decision**
 
-Treat time, route, station or segment, and direction as jointly constrained. Apply the resolved impact only to candidate claims inside all supported dimensions. For each affected candidate, use the actual consequence: keep it visible if its exact stop remains confirmed, or suppress it if the planned pattern or alert establishes that the exact stop is not served. Continue evaluating the opposite direction and out-of-scope station normally.
+Treat time, route, station or segment, and direction as jointly constrained in both runs.
+
+1. Before the operational window begins, early display is informational only. Keep every otherwise-admitted coherent train visible; the planned change cannot alter stop admission or suppress an arrival yet.
+2. Once the supported operational window begins, apply the resolved impact only to candidate claims inside all supported dimensions. Keep an affected-direction train visible if its exact stop remains confirmed, or suppress it if active resolved evidence establishes that the exact stop is not served.
+
+Continue evaluating the opposite direction and out-of-scope station normally in both runs.
 
 **Visible result**
 
-The board shows the localized planned-work explanation only where relevant. Coherent trains in the opposite direction and at the out-of-scope station remain available. Details preserve the original official alert text even if the board uses a shorter plain-language summary.
+Before activation, the board may show a localized advance notice, but all otherwise-admitted arrivals remain visible. Once active, the localized operational consequence appears only where relevant. Coherent trains in the opposite direction and at the out-of-scope station remain available in both runs. Details preserve the original official alert text even if the board uses a shorter plain-language summary.
 
 **Prohibited outcome**
 
-Do not treat the route field as line-wide scope, apply the alert to both directions, infer that every station on the route is affected, or invent a bypass not supported by the resolved impact. Missing metadata in a separate record must not be used as proof that a station is unaffected.
+Do not change stop admission, suppress an arrival, or apply any operational restriction during pre-active early display. Once active, do not treat the route field as line-wide scope, apply the alert to both directions, infer that every station on the route is affected, or invent a bypass not supported by the resolved impact. In either run, missing metadata in a separate record must not be used as proof that a station is unaffected.
 
 ## Scenario 10 — Unresolved reroute scope
 
@@ -97,15 +105,15 @@ Do not suppress every route at the complex, invent closure of another constituen
 
 **Setup**
 
-Provide an active record with a generic **Affected** category and partial structured scope. Its official text does not establish a bypass, suspension, closure, delay, platform change, or other specific consequence.
+Provide an active record with a generic **Affected** category and partial structured scope. Its official text does not establish a bypass, suspension, closure, delay, platform change, or other specific consequence. Provide an otherwise-admitted coherent train at the scoped exact directional stop. No independent structured record, official text, live stopping evidence, planned-pattern exclusion, or other evidence establishes or materially leaves unresolved a high-impact change.
 
 **Expected decision**
 
-Treat the category as a changeable descriptive label, not a permanent machine meaning. Do not assign a specific impact. If the record leaves a high-impact arrival claim materially unresolved, make only that claim unavailable; otherwise preserve the independently admitted train and show only supported context.
+Treat the category as a changeable descriptive label, not a permanent machine meaning. Do not assign a specific impact, veto, or high-impact exception. Keep the otherwise-admitted coherent train visible and show only the context that the generic record actually supports. Scenario 10 separately governs unavailability when independent reroute evidence establishes a materially unresolved high-impact change.
 
 **Prohibited outcome**
 
-Do not hard-code **Affected** as a bypass, infer normal service from missing detail, invent a stop or impact, or widen the record beyond its supported route, direction, station, or segment.
+Do not suppress the train or make its arrival claim unavailable from the generic category and non-specific text alone. Do not hard-code **Affected** as a bypass, infer a specific impact from missing detail, invent a stop or impact, or widen the record beyond its supported route, direction, station, or segment.
 
 ### Case S14 — Equipment impact without service closure
 
@@ -139,11 +147,11 @@ Do not let the correction fabricate movement, create a train or stop call, add a
 
 | Case | Required actual-result evidence | Status |
 |---|---|---|
-| Scenario 9 — Direction-specific planned work | Joint time, route, station or segment, and direction resolution; affected direction localized; opposite direction and out-of-scope station preserved; official text retained | Pending |
+| Scenario 9 — Direction-specific planned work | Two-run boundary proof: pre-active early display is informational and changes no stop admission or arrival visibility; active resolved evidence may keep or suppress only the scoped direction; opposite direction and out-of-scope station remain preserved in both runs; official text retained | Pending |
 | Scenario 10 — Unresolved reroute scope | Positive prediction withheld only inside the materially unresolved route-direction or segment; no guessed pattern; unrelated service preserved; ambiguity recorded | Pending |
 | Scenario 11 — Delay-only service | Every coherent train remains visible; delay changes only supported explanation or confidence; no stop suppression | Pending |
 | Scenario 12 — Constituent-station closure | Closed constituent-station arrivals removed; unrelated transfer routes in the complex remain available; no invented platform or wider closure | Pending |
-| S13 — Generic category | No permanent category mapping or invented consequence; any unavailable claim remains narrowly scoped | Pending |
+| S13 — Generic category | Otherwise-admitted coherent train remains visible; generic category and non-specific text create no veto or high-impact exception; no suppression, unavailable claim, permanent category mapping, or invented consequence | Pending |
 | S14 — Equipment impact | Arrivals remain visible; only affected path or preference claim changes; unrelated service remains available | Pending |
 | S15 — Authorized correction | Correction stays within supported negative or explanatory authority and creates no positive train claim | Pending |
 
