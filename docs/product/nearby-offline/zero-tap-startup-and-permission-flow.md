@@ -15,9 +15,15 @@
 
 This flow owns the first visible Nearby context, the timing and explanation of the location request, permission-outcome fallbacks, temporary-location-failure behavior, and the foreground-return lifecycle trigger. It fulfills the startup and no-location experience in specification §§14.1–14.2 and 28.1 and defines the expected product result for scenario 22. It does not own station or entrance ranking, arrival admission or ordering, service-change scope, feed health, accessibility truth, direct refresh controls, location retention, tunnel behavior, measurement, or release approval.
 
-The [nearby and offline experience contract](experience-contract.md) owns persistent destinations and context continuity. Shared concepts retain their meanings in the [approved transit product glossary](../contracts/transit-product-glossary.md), and all public wording remains subject to the [approved rider language rules](../contracts/rider-language-rules.md). The [approved product specification](../../superpowers/specs/2026-07-30-nyc-subway-train-time-tracker-design.md) controls every conflict.
+The [nearby and offline experience contract](experience-contract.md) owns persistent destinations and context continuity. The [location and personal-data rules](location-and-personal-data-rules.md), Task 12, own minimization, retention, private-by-default treatment, diagnostic separation, broad reset/deletion assurance, and the nearby/offline notification-permission boundary. Shared concepts retain their meanings in the [approved transit product glossary](../contracts/transit-product-glossary.md), and all public wording remains subject to the [approved rider language rules](../contracts/rider-language-rules.md). The [approved product specification](../../superpowers/specs/2026-07-30-nyc-subway-train-time-tracker-design.md) controls every conflict.
 
 This artifact is **Draft**. Its lifecycle outcomes, timing, scenario evidence, and Release 1 disposition remain **Pending**. The authoritative [Gate 0 exit record](../quality/gate-0-exit-record.md) is **NO-GO — GATE 0 NOT PASSED**, so public arrival boards remain blocked. This artifact makes no approval, launch, measured-performance, or scenario-passage claim.
+
+### §28.2 applying-provenance reconciliation
+
+The [artifact index](../artifact-index.md) and metadata above cite §§14.1–14.2, 28.1, and §31.4 scenario 22. This flow also applies §28.2 by prohibiting a notification-permission prompt during Nearby startup, permission handling, foreground return, Map, Saved, and offline-trip use. The [location and personal-data rules](location-and-personal-data-rules.md), Task 12, own that no-prompt boundary; the companion Commute workstream owns any later prompt after explicit first commute-alert enablement.
+
+Record §28.2 as applying provenance in the index and artifact metadata before advancement from **Draft**. This Task 12 update does not edit the index, reassign the prompt to Task 2, manufacture review, or treat reconciliation as complete.
 
 ## Zero-tap contract
 
@@ -198,12 +204,13 @@ Expected, Holding, Uncertain, Scheduled, cached, degraded, unavailable, and offl
 - Do not require or infer continuous background location for core arrivals.
 - Do not retain movement history by default.
 - Do not make an account, search, or broader permission a condition of arrival utility.
-- Nearby, Map, Saved, and offline startup never trigger notification permission. Notification permission belongs only to an explicit companion commute-alert action.
+- Nearby, station boards, Map, Saved, and offline-trip capture, open, or manual progress never trigger notification permission. Saving a commute without enabling alerts does not trigger it. Only explicit first commute-alert enablement may hand off to the companion Commute-owned prompt, disruption-only default, permission states, and per-commute controls.
+- Location and notification permission are never bundled. Denial of either preserves complete nearby/offline utility.
 - Do not link location, permission, saved-station, search, account, or device context to an operational train-truth decision or its non-personal quality record.
 - Preserve Accessible Route Only through every lifecycle and permission outcome.
 - Keep Unknown accessibility or equipment state distinct from verified usable.
 - Task 3 owns ranking to a verified accessible entrance and complete path; this flow does not infer one from proximity.
-- Task 12 owns broader location purpose, retention, diagnostic separation, saved-data privacy, deletion, and reset rules in `docs/product/nearby-offline/location-and-personal-data-rules.md`.
+- Task 12 owns broader location purpose, retention, diagnostic separation, saved-data privacy, deletion, reset, and the §28.2 no-notification-prompt boundary in the [location and personal-data rules](location-and-personal-data-rules.md).
 
 Declining or limiting location must not produce coercive copy, repeated prompts, diminished transit truth, or loss of the no-account capability set.
 
@@ -222,7 +229,7 @@ Planned paths remain code text until those artifacts exist.
 | Station-board refresh controls and freshness | `docs/product/nearby-offline/station-board-and-controls-contract.md`, Task 5 | Own only the lifecycle trigger and context-restoration invocation. | Task 5 and Task 14 evidence Pending |
 | Scenario 22 denied-location fallback | This artifact, Task 2 | Own last-used, saved, and bottom-picker precedence without a blank screen. | Task 14 and Release 1 evidence Pending |
 | Scenario 23 tunnel preservation | `docs/product/nearby-offline/offline-degraded-and-reconnection-states.md`, Task 10 | Do not claim tunnel or offline acceptance here. | Not claimed by Task 2; Pending |
-| Location retention, deletion, and reset | `docs/product/nearby-offline/location-and-personal-data-rules.md`, Task 12 | State the startup minimum and defer broader rules. | Task 12 review and evidence Pending |
+| Location retention, deletion, reset, and nearby/offline notification boundary | [Location and personal-data rules](location-and-personal-data-rules.md), Task 12 | State the startup minimum, apply §28.2 by never prompting, and defer broader privacy assurance. | Draft; PRIV-L01, PRIV-M01, PRIV-S01, and PRIV-N01 Not run — Pending |
 | Startup timing and usefulness metrics | `docs/product/nearby-offline/measurement-plan.md`, Task 13 | Define no measured threshold or performance result here. | Metrics and evidence Pending |
 | Observed startup and permission evidence | `docs/product/nearby-offline/acceptance-evidence.md`, Task 14 | Supply expected results and prohibited outcomes for observation. | Pending |
 | Release 1 decision | `docs/product/nearby-offline/release-1-readiness.md`, Task 15 | Make no readiness or launch claim. | Pending |
@@ -239,4 +246,5 @@ Planned paths remain code text until those artifacts exist.
 | Does temporary location failure preserve a station screen without claiming old location is current? | Yes; it uses the required sentence and bottom actions. | Task 14 temporary-failure case |
 | Does foreground return restore context before refresh without another prompt or jump? | Yes. | Task 14 foreground-return case |
 | Can location admit, reorder, or strengthen a train or accessibility decision? | No. | Upstream evidence plus Task 14 integration cases |
+| Does this flow apply §28.2 only as a no-prompt boundary, with location and notification unbundled and every prompt decision retained by Commute? | Yes by contract; not observed. | PRIV-N01 and Product Governance provenance reconciliation |
 | Does the artifact preserve the current Gate 0 decision while keeping privacy, metrics, scenario evidence, and Release 1 claims Pending? | Yes. Gate 0 is **NO-GO — GATE 0 NOT PASSED** and public boards are blocked; the other listed claims remain Pending. | A later signed Gate 0 record plus required owner reviews and observed evidence |

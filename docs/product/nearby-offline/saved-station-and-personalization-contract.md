@@ -15,7 +15,7 @@
 
 This contract owns the rider-visible saved-station record, immediate saved-station opening, explicit personalization inputs, contextual-ordering permission, and station-specific inspection, editing, pause, reset, and deletion behavior. It distinguishes durable rider intent from operational truth.
 
-The [useful station and entrance ranking rules](station-ranking-and-entrance-rules.md), Task 3, own practical-walk eligibility and the baseline nearest-useful order. The [station board and controls contract](station-board-and-controls-contract.md), Task 5, owns board controls, direction and filter behavior, and scoped disruption placement. The [offline, degraded, and reconnection states contract](offline-degraded-and-reconnection-states.md), Task 10, owns global Offline presentation, historical-value treatment, and reconnection order. The [nearby and offline experience contract](experience-contract.md) retains cross-surface restore-first, refresh-second continuity.
+The [useful station and entrance ranking rules](station-ranking-and-entrance-rules.md), Task 3, own practical-walk eligibility and the baseline nearest-useful order. The [station board and controls contract](station-board-and-controls-contract.md), Task 5, owns board controls, direction and filter behavior, and scoped disruption placement. The [offline, degraded, and reconnection states contract](offline-degraded-and-reconnection-states.md), Task 10, owns global Offline presentation, historical-value treatment, and reconnection order. The [location and personal-data rules](location-and-personal-data-rules.md), Task 12, own private-by-default treatment, minimization and retention, broad reset and deletion assurance, diagnostic separation, notification boundaries, and optional synchronization constraints. The [nearby and offline experience contract](experience-contract.md) retains cross-surface restore-first, refresh-second continuity.
 
 Arrival, service-change, entrance, accessibility, equipment, map, and guidance owners retain operational authority. The [approved product specification](../../superpowers/specs/2026-07-30-nyc-subway-train-time-tracker-design.md) controls every conflict. Shared concepts retain their meanings in the [transit product glossary](../contracts/transit-product-glossary.md), and visible and spoken wording remains subject to the [rider language rules](../contracts/rider-language-rules.md).
 
@@ -23,19 +23,20 @@ This artifact is **Draft**. The authoritative [Gate 0 exit record](../quality/ga
 
 ## Governance mismatch and mandatory review
 
-The [artifact index](../artifact-index.md) registers Product, Accessibility, Content, and Privacy for this artifact. The [review and approval policy](../review-and-approval-policy.md) additionally requires Data Quality because opening and reconnecting a saved station presents live, scheduled, cached, degraded, and service-change truth.
+The [artifact index](../artifact-index.md) registers Product, Accessibility, Content, and Privacy and cites specification §26 for this artifact. The [review and approval policy](../review-and-approval-policy.md) additionally requires Data Quality because opening and reconnecting a saved station presents live, scheduled, cached, degraded, and service-change truth. This contract also applies §28.3 when it distinguishes per-station reset and deletion from Task 12's broad personal-data controls.
 
 | Governance question | Current record | Required disposition |
 |---|---|---|
 | Registered reviewer set | Product, Accessibility, Content, Privacy | Retain the index-aligned metadata above until governed reconciliation. |
 | Applicable policy minimum | Product, Accessibility, Data Quality, Content, Privacy | All five roles must review the same fixed version. Data Quality reviews refresh, hidden-route disruption, offline-value, and fail-closed truth application. |
-| Reconciliation and review evidence | Pending | A Data Quality decision and Product Governance Lead reconciliation of the index and artifact metadata are required before advancement from **Draft**. |
+| Registered source provenance | Specification §26 in the index and §§26.1–26.3 above | Add §28.3 as applying provenance for the per-station control boundary. The [location and personal-data rules](location-and-personal-data-rules.md), Task 12, retain broad privacy and deletion assurance. |
+| Reconciliation and review evidence | Pending | A Data Quality decision and Product Governance Lead reconciliation of both reviewer and §28.3 applying-provenance mismatches are required before advancement from **Draft**. |
 
 This contract does not edit the index, invent approval, or treat the mismatch as waived.
 
 ## Saved record and memory boundary
 
-A saved station is a device-held rider-intent record. It opens without an account and is not delayed by account, synchronization, or network availability. Task 12 owns the broader privacy, retention, synchronization, and full-reset rules; this contract owns only the product fields and visible behavior below.
+A saved station is a device-held rider-intent record. It opens without an account and is not delayed by account, synchronization, or network availability. The [location and personal-data rules](location-and-personal-data-rules.md), Task 12, own the broader privacy, retention, optional synchronization, broad reset, and personal-data deletion rules; this contract owns only the product fields and visible behavior below.
 
 | Saved field | Exact retained intent | Boundary |
 |---|---|---|
@@ -130,7 +131,9 @@ Each control exposes its consequence before it mutates the saved record. Destruc
 | Reset station preferences | **Reset station preferences** clears preferred entrance, preferred direction and actual-destination context, route filters, common-destination guidance input, and optional time-window influence. The station/constituent remains saved and openable, and cleared fields have no future defaulting or ordering effect until explicitly edited and saved again. | The current or global Accessible Route Only hard constraint remains in its rider-selected state and is never silently turned off. Official arrival, disruption, entrance, accessibility, equipment, and guidance information remain intact. |
 | Delete saved station | **Delete saved station** removes the saved card and its station-specific personalization. Future Nearby personalization order may recompute without the deleted preference. If its board is already open, that board remains open in the same context as an unsaved station and the bottom control becomes **Save station**. | Deletion does not blank the board, navigate away, remove official information, clear an operational warning, reorder arrival rows or other operational content on the already-open board, or delete another saved item. |
 
-Task 12 owns privacy assurance, storage and retention policy, deletion assurance, diagnostic separation, notification-permission boundaries, and full personal-data reset. This contract does not define or claim those results. Its reset is station-specific and its delete action removes one visible saved-station record.
+The [location and personal-data rules](location-and-personal-data-rules.md), Task 12, own privacy assurance, storage and retention policy, broad deletion assurance, diagnostic separation, notification-permission boundaries, and optional synchronization constraints. This contract does not define or claim those results.
+
+**Reset station preferences** is station-specific: it clears the listed optional fields for one saved station and may leave that station as a neutral private card. **Delete saved station** removes one visible saved-station record. Task 12's **Reset all personalization** spans every covered station and companion-confirmed preference category, while **Delete personal data** removes every disclosed covered local, companion, queued, and future synchronized copy before completion may be claimed. None of these actions deletes official information or silently turns off the active/current/global Accessible Route Only constraint.
 
 ## SAVE-C01 — Saved-state continuity
 
@@ -177,7 +180,7 @@ This is an expected fixed-version fixture, not observed evidence.
 | Offline banner, historical-value rules, preserved screen, and reconnection priority | [Offline, degraded, and reconnection states contract](offline-degraded-and-reconnection-states.md), Task 10 | Open immediately and consume the exact offline and recovery behavior. | Draft; OFF-T23 and Task 14 Not run — Pending |
 | Stored structure, schedule validity, and exact reference-map label | [Offline content and validity contract](offline-content-and-validity-contract.md), Task 8 | Use only separately eligible stored content; saved preference never upgrades it. | Draft; Task 8 cases and Task 14 Not run — Pending |
 | Arrival, service-change, accessibility, equipment, platform, and guidance truth | Arrival Truth and companion accessibility/guidance owners | Apply accepted decisions at exact scope and fail closed; never persist them as preference. | Gate 0 and companion approval evidence absent |
-| Location privacy, personal-data inventory, retention, deletion assurance, diagnostics, notification boundary, and full reset | `docs/product/nearby-offline/location-and-personal-data-rules.md`, Task 12 | Reserve ownership; define only the immediate visible station-specific actions above. | Planned artifact and evidence absent |
+| Location privacy, personal-data inventory, retention, broad deletion assurance, diagnostics, notification boundary, and optional synchronization | [Location and personal-data rules](location-and-personal-data-rules.md), Task 12 | Consume the private-by-default and lifecycle boundary; define only the immediate visible station-specific actions above. | Draft; PRIV-M01, PRIV-S01, PRIV-Q01, and PRIV-N01 Not run — Pending |
 | Observed saved-state acceptance | `docs/product/nearby-offline/acceptance-evidence.md`, Task 14 | Record fixed-version observations and prohibited-result checks. | Artifact and observations absent |
 
 ## Scenario traceability
@@ -208,6 +211,6 @@ All Task 11 observations must identify one fixed product version and record expe
 | Does contextual ordering start from Task 3 and retain every closer workable result with distance and usability? | Yes by contract; not observed. | UR-C05 fixed-version observation |
 | Do pause, station reset, and delete preserve their exact bounded state and leave official truth intact? | Yes by contract; not observed. | SAVE-R01 before/after comparison |
 | Does station reset silently disable Accessible Route Only or does delete blank an already open board? | No. | SAVE-R01 accessibility and open-board branches |
-| Are Task 12 privacy assurance, retention, diagnostics, notifications, and full reset kept out of Task 11 ownership? | Yes. | Task 12 artifact and cross-domain review |
-| Have Product, Accessibility, Data Quality, Content, and Privacy reviewed the same fixed version and has the reviewer mismatch been reconciled? | No. | All five decisions and Product Governance Lead reconciliation |
+| Are Task 12 privacy assurance, retention, diagnostics, notification, optional synchronization, broad reset, and deletion kept out of Task 11 ownership? | Yes. | Task 12 cross-domain review and PRIV-S01 |
+| Have Product, Accessibility, Data Quality, Content, and Privacy reviewed the same fixed version and have the reviewer and §28.3 applying-provenance mismatches been reconciled? | No. | All five decisions and Product Governance Lead reconciliation |
 | Does this Draft claim Gate 0 passage, SAVE-C01, SAVE-R01, UR-C05, Task 14, privacy assurance, companion approval, or release readiness? | No. The decision remains **NO-GO — GATE 0 NOT PASSED**; public boards blocked. | Fixed evidence, all mandatory reviews, governance reconciliation, and later release gate |
