@@ -2,7 +2,7 @@
 
 | Governance field | Value |
 |---|---|
-| Source sections | Approved specification §§20.1, 20.5, 21, 29.1, 31.5, 31.8 cases 45–46, and 32.2; accessibility and platform-guidance plan `Product artifact map` and Task 6 `Product artifacts`, `Dependencies`, `Produces for later tasks`, `Ordered steps`, and `Evidence and acceptance checks` |
+| Source sections | Approved specification §§20.1, 20.5, 21, 29.1, 31.5, 31.8 cases 45–46, 32.2, and applying §§33.1–33.3; accessibility and platform-guidance plan `Product artifact map`, Task 6 `Product artifacts`, `Dependencies`, `Produces for later tasks`, `Ordered steps`, and `Evidence and acceptance checks`, and Task 12 Steps 1–4 with the checkpoint-1 Release 1 gate handoff |
 | Owner | Release Quality Lead |
 | Required reviewers | Product, Accessibility, Data Quality, Content, Operations |
 | Status | Draft |
@@ -31,7 +31,7 @@ Task 6 consolidates evidence definitions. It does not pass Gate 0 or make the Re
 
 ## Governance and wording reconciliation
 
-The [artifact index](../artifact-index.md) cites specification §§21, 31.5, and 32.2 for this pack. Task 6 also applies equipment boundaries §§20.1 and 20.5, the known-outage and Unknown-state targets in §29.1, and §31.8 cases 45–46. Product Governance Lead reconciliation of that narrower index citation and this full applying provenance is **Pending**. This task does not edit the index or treat the mismatch as approved.
+The [artifact index](../artifact-index.md) cites specification §§21, 31.5, and 32.2 for this pack. Task 6 also applies equipment boundaries §§20.1 and 20.5, the known-outage and Unknown-state targets in §29.1, and §31.8 cases 45–46. The index also omits applying specification §§33.1–33.3 and the detailed Task 12 Steps 1–4 and checkpoint-1 provenance now recorded by this pack. Product Governance Lead reconciliation of all cited omissions and this full applying provenance is **Pending**. This task does not edit the index or treat any mismatch as approved.
 
 The plan's broad equipment sentence is applied consistently with the approved specification and accepted Task 4 artifacts:
 
@@ -316,6 +316,48 @@ Document text equality is not rendered or spoken product evidence. Each row requ
 | Release 1 accessibility decision | Not decided here; Task 12 owns it | Pending |
 
 A future passing Task 6 pack cannot override Gate 0, the separate [Nearby/offline Release 1 readiness](../nearby-offline/release-1-readiness.md), or a narrower owner's Draft, Pending, failed, or inconclusive blocker. Tasks 7–11, platform positioning, transfer guidance, crowding, and Commute push work do not delay this evidence definition and cannot waive a Release 1 accessibility safety blocker. Task 5's scenario-39 handoff contains accessibility impact only; Commute retains every push decision.
+
+## Task 12 checkpoint 1 Release 1 gate handoff
+
+This is an append-only decision handoff from the unchanged Task 6 package to the independent [accessibility and guidance release-gate record](../quality/accessibility-and-guidance-release-gates.md). It does not upgrade, rewrite, merge, or remove any canonical case, fixture definition, pack-local control, coverage row, evidence field, disposition, reviewer state, correction, or rerun above.
+
+| Handoff field | Checkpoint-1 value |
+|---|---|
+| Gate record and identifier | [Accessibility and guidance release gates](../quality/accessibility-and-guidance-release-gates.md); `A11Y-R1-GATE-v1` is a decision-record identifier only |
+| Evaluation date | 2026-07-30 |
+| Evaluated Task 6 package | Commit `935c79477ccc73cb9d27fde06f31e8f31e85eca9`; this pack blob `ac5ad77627588b50f0ec5ed8d9111c5cb01326ae` |
+| Evaluated Task 6 handoffs | Station-direction coverage register blob `dee79c34eeb07864c8453c1d05ba01ca2408f310`; equipment-status acceptance-table blob `09d2ee2400726baa4362ad7bcb402306117408f6` |
+| Checkpoint record binding | The repository commit containing this append and the linked gate record binds the checkpoint after commit; no future self-blob is asserted here |
+| Canonical source-case census | 17 total; 17 **Not run — Pending** |
+| Fixture-definition census | 54 total; 54 **Not run — Pending** |
+| Pack-local failed-response control | 1 total; **Not run — Pending** |
+| Coverage | 0 real rows; 0 structurally accepted rows; 0 eligible station-direction combinations established; coverage included **None** |
+| Product and evidence package | Fixed executable product/build, configuration, source snapshot, inventory, coverage, output, attachment, and reviewer package all **Pending** |
+| Known-outage target | **Not measured — blocks**; no observed denominator; `0/0` is not Pass |
+| Unknown-state safety target | Contract defined but not executed; **Not measured — blocks** |
+| Visible and assistive evidence | **Pending**; no same-version visible/assistive output or parity evidence |
+| Underway-warning evidence | IMP-09, IMP-10, IMP-13, IMP-14, timing, priority, safe-action, and persistence evidence **Not run — Pending** |
+| Unresolved blockers | No fixed product/run package; 17 cases Pending; 54 definitions Pending; failed-response control Pending; zero real coverage; both safety targets unobserved; no visible/assistive parity; no warning timing/persistence proof; no named P/A/D/C/O decisions or signatures; Gate 0 and separate Nearby/offline no-gos remain active |
+| Release 1 accessibility outcome | **NO-GO — REQUIRED ACCESSIBILITY EVIDENCE AND COVERAGE ARE NOT DEMONSTRATED** |
+| Release authorization | **INTENTIONALLY UNSIGNED — REQUIRED EVIDENCE, COVERAGE, AND REVIEWER DECISIONS ARE NOT DEMONSTRATED.** |
+| Release effect | Direction-aware accessibility, live equipment-status treatment, and Accessible Route Only are not authorized for release; no later feature can waive the blocker |
+| Correction scope and owner | **Pending — no correction recorded** |
+| Rerun attempt and durable evidence | **Pending — no rerun recorded** |
+| Future gate reevaluation | **Pending — must be a new linked decision against a complete same-version package; this no-go remains preserved** |
+
+| Required reviewer role | Actual reviewer identity | Decision | Decision date | Durable signature/evidence |
+|---|---|---|---|---|
+| Product | **Pending** | **Pending** | **Pending** | **Pending** |
+| Accessibility | **Pending** | **Pending** | **Pending** | **Pending** |
+| Data Quality | **Pending** | **Pending** | **Pending** | **Pending** |
+| Content | **Pending** | **Pending** | **Pending** | **Pending** |
+| Operations | **Pending** | **Pending** | **Pending** | **Pending** |
+
+The accepted equipment reconciliation remains unchanged: **raw/unconfirmed empty**, stale, anomalous, failed, malformed, incomplete, unmatched, or unjoinable responses never become **No official outage reported**. EQ-06 and EQ-13 remain separate valid positive controls only within their exact accepted gates, and the prior-adverse copy remains **Out of service—status being rechecked**.
+
+The authoritative arrival-truth outcome remains **NO-GO — GATE 0 NOT PASSED**. Public arrival boards remain blocked. The [Nearby/offline Release 1 readiness](../nearby-offline/release-1-readiness.md) remains a separate no-go decision and is neither merged nor overridden by this accessibility outcome.
+
+Task 12 Steps 5–13 remain **Pending — not evaluated at checkpoint 1**: Release 2 positioning and transfer, pre-commute accessibility notification, platform-feedback observability, guidance coverage expansion, subway crowding, cross-risk controls, later release decisions, and final terminology review. Their future artifacts and evidence are not created or claimed here.
 
 ## Draft review checklist
 
