@@ -41,6 +41,8 @@ Snapshot age is measured from the latest complete snapshot's authoritative sourc
 
 Exactly 90 seconds is **Current**. Exactly 91 seconds and exactly 180 seconds are **Degraded**. Any age greater than 180 seconds is **Unavailable**.
 
+The approved feed-age state input is whole elapsed seconds from authoritative source chronology. Therefore 91 seconds is the immediate representable age above 90, and 181 seconds is the immediate representable age above 180. Do not round a differently represented source age into a stronger state; any change in source-time precision returns this Draft policy and its boundary cases to Product and Data Quality review.
+
 “Repeated update failures” is a named invalidating condition, not a numeric threshold in this policy. No reviewer may invent a count, interval, or percentage for it. Calibration requires observed evidence and Product and Data Quality approval.
 
 An invalidating condition controls even when the apparent snapshot age would otherwise be Current or Degraded. A timestamp regression therefore makes the affected route/feed-group health **Unavailable** immediately. The preservation and recovery presentation below may still show the last coherent state as frozen context; it does not relabel the regressed snapshot as Degraded or accept it.

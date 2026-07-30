@@ -33,6 +33,8 @@ Unless a case says otherwise:
 
 Each run must record the actual inputs, authoritative timestamps, admission gates, state, board area, primary eligibility, displayed precision and copy, prohibited outcomes, product version, run date, and reviewer. A case remains Pending without observed evidence.
 
+For every case that uses “first representable instant,” the fixed evidence record must declare the authoritative timestamp precision `p` used by both sides of the pair. The just-over fixture is exactly `boundary + p`; the exact-boundary fixture uses the same precision. Do not round, truncate, or substitute a different clock resolution between paired runs.
+
 ## Confidence-state treatment matrix
 
 | State case | Required evidence | Primary next-three? | Required precision and rider result | Prohibited result |
@@ -40,7 +42,7 @@ Each run must record the actual inputs, authoritative timestamps, admission gate
 | Live | Healthy feed; assigned coherent train; movement or stop progress within 90 seconds; all admission gates and the Due/no-progress rule pass. A Due episode beyond 60 seconds cannot remain Live. | Yes | Rounded countdown, such as **3 min · Live**. | Exact precision unsupported by evidence, Scheduled clock time, Live after more than 60 seconds Due without progress, or a row admitted despite a stop or track veto. |
 | Expected | Assigned physical train at origin; no movement yet; departure not materially overdue; stable across two updates; all other gates pass. | Yes | Evidence-supported range, such as **Expected in 6–8 min**. | Live or Due without movement, an exact live countdown, or exclusion merely because the train is Expected. |
 | Holding | Current feed but movement or stop progress is older than 90 seconds through exactly 180 seconds, or Due has lasted more than 60 seconds without progress while movement age remains no more than 180 seconds. Due elapsed time is a degradation floor, so movement age beyond 180 seconds still escalates a stop-confirmed train to Uncertain. | No | Frozen time plus held evidence, such as **Holding near 14 St · last moved 2 min ago**, in a separate warning or secondary area. | Advancing countdown, a next-three slot, Due beyond its limit, Holding when movement age is beyond 180 seconds, or silent deletion. |
-| Confirmed-pattern Uncertain | No movement beyond 180 seconds, identity churn, implausible ETA jump, or degraded feed, while exact displayed stop service and track remain confirmed. | No | No exact minute; de-ranked secondary copy **Arrival uncertain**. | Primary placement, advancing/frozen exact minute on the Uncertain row, or Uncertain used to conceal stop-pattern or track uncertainty. |
+| Confirmed-pattern Uncertain | In a Current accepted feed, no movement beyond 180 seconds, identity churn, or implausible ETA jump, while one coherent train context and exact displayed stop service and track remain confirmed. | No | No exact minute; de-ranked secondary copy **Arrival uncertain**. | Primary placement, advancing/frozen exact minute on the Uncertain row, Uncertain created solely from feed-level degradation, or Uncertain used to conceal stop-pattern or track uncertainty. |
 | Scheduled | Relevant live feed is genuinely unavailable; eligible schedule exists; no current veto applies. | No | Clearly separated fallback clock time, such as **Scheduled 10:42 · live data unavailable**. | Countdown, Live or Expected label, mixing with live next-three, or fallback that overrides a current veto. |
 
 ## Movement-age boundary cases
@@ -105,15 +107,15 @@ Do not keep a frozen exact minute on the Uncertain row, place it in the primary 
 
 **Setup**
 
-Repeat M4, but make either the displayed exact directional stop materially unresolved in the stopping pattern or the track/path evidence untrustworthy, including a qualifying non-terminal actual-versus-scheduled-track conflict.
+Repeat M4 in two runs. In run A, current evidence resolves that the exact displayed stop is absent or a non-terminal actual-versus-scheduled-track conflict invalidates the path. In run B, provide independent current high-impact change evidence but leave station, segment, exact-stop, train, or path scope materially unresolved.
 
 **Expected result**
 
-Suppress the entire affected train row. Show only the narrowest supported service-change or track consequence beside the suppression state.
+In run A, suppress the affected row and show the narrowest supported resolved service-change or track consequence. In run B, withhold only the affected scope as Task 6 **arrival claim unavailable**, preserve the official message in details, and do not label it resolved suppression.
 
 **Prohibited result**
 
-Do not show **Arrival uncertain**, a lower-confidence or frozen countdown, a Scheduled replacement, or dependent platform guidance. Stopping-pattern or track uncertainty is never merely Uncertain.
+Do not show **Arrival uncertain**, a lower-confidence or frozen countdown, a Scheduled replacement, or dependent platform guidance. Do not call materially unresolved high-impact scope a resolved bypass or resolved suppression. Stopping-pattern or track uncertainty is never merely Uncertain.
 
 ## Due and no-progress boundary cases
 
@@ -191,15 +193,15 @@ Do not reset the timer, manufacture fresh movement, or extend Due because the pr
 
 **Setup**
 
-Run the same Current-feed fixture twice with uninterrupted Due/no-progress elapsed time of exactly 91 seconds and train movement age of exactly 181 seconds. In run A, keep one coherent train context, the displayed exact directional stop in its coherent remaining pattern, and trustworthy track/path evidence. In run B, make either the exact displayed stop pattern or track/path materially uncertain.
+Run the same Current-feed fixture three times with uninterrupted Due/no-progress elapsed time of exactly 91 seconds and train movement age of exactly 181 seconds. In run A, keep one coherent train context, the displayed exact directional stop in its coherent remaining pattern, and trustworthy track/path evidence. In run B, resolve the exact stop as absent or the path as invalid. In run C, provide independent current high-impact change evidence but leave material stop/path scope unresolved.
 
 **Expected result**
 
-In run A, the Due floor already prohibits Due or Live, and movement age beyond 180 seconds is stricter than Holding. Show secondary **Uncertain** with **Arrival uncertain** and no exact minute. In run B, suppress the entire affected row and show only the narrowest supported service-change or track consequence.
+In run A, the Due floor already prohibits Due or Live, and movement age beyond 180 seconds is stricter than Holding. Show secondary **Uncertain** with **Arrival uncertain** and no exact minute. In run B, suppress the affected row and show only the narrowest supported resolved service-change or track consequence. In run C, withhold the affected scope as Task 6 **arrival claim unavailable** with the official message in details.
 
 **Prohibited result**
 
-In neither run may the train remain Due, Live, Holding, or primary. Do not let Due elapsed time of no more than 120 seconds override movement age of more than 180 seconds. Do not use Uncertain to conceal an unresolved exact stop pattern or track/path.
+In no run may the train remain Due, Live, Holding, or primary. Do not let Due elapsed time of no more than 120 seconds override movement age of more than 180 seconds. Do not use Uncertain to conceal an unresolved exact stop pattern or track/path, and do not label materially unresolved high-impact scope as resolved suppression.
 
 ## Acceptance Scenario 13 — Fresh feed, 100 seconds without movement
 
@@ -291,6 +293,34 @@ Keep the route/feed group Current. Change only the old-movement train to Holding
 
 Do not use movement age as feed age, freeze unrelated trains, or use fresh feed age to keep the old-movement train Live.
 
+### Case F2 — Degraded feed controls preserved presentation
+
+**Setup**
+
+Begin with a coherent live board, then make the route/feed-group snapshot Degraded at an approved feed-age boundary while retaining last coherent train information. Do not add independently accepted Current-feed train evidence after degradation. Keep an unrelated route/feed group Current.
+
+**Expected result**
+
+Apply the feed-health result to the affected scope: freeze each preserved countdown at its last coherent displayed value, show **Live data updating**, and require two fresh coherent feed snapshots before exact countdown recovery. Do not create individual **Arrival uncertain** rows merely because the feed is Degraded. Keep the unrelated Current group independently eligible.
+
+**Prohibited result**
+
+Do not continue or decrement a countdown, relabel the affected feed Current, convert each preserved train to Uncertain, show **Arrival uncertain** as a substitute for **Live data updating**, or affect the healthy group.
+
+### Case F3 — Unresolved high-impact stop scope is unavailable, not suppressed as resolved
+
+**Setup**
+
+Keep feed and train timing evidence otherwise Current and coherent. Provide independent current high-impact reroute or bypass evidence whose route and direction are supported but whose station, segment, exact-stop, train, or path scope is materially unresolved. Include a positive prediction within that unresolved scope and independently coherent service outside it.
+
+**Expected result**
+
+Withhold the affected positive prediction as the Task 6 **arrival claim unavailable** outcome for only the materially unresolved scope. Show **Service change—arrival information is unavailable for this service.** beside that state, preserve the original official message in details, and keep unrelated service eligible.
+
+**Prohibited result**
+
+Do not show Live, Holding, Uncertain, Scheduled, or dependent guidance; do not call the outcome a resolved bypass or resolved hard suppression; do not assert which stop is skipped; and do not widen the unavailable scope.
+
 ## Required scenario evidence
 
 | Scenario or boundary | Required actual-result evidence | Status |
@@ -298,7 +328,7 @@ Do not use movement age as feed age, freeze unrelated trains, or use fresh feed 
 | Live, Expected, Holding, Uncertain, Scheduled | Evidence inputs, primary eligibility, board area, precision, exact rider treatment, and prohibited treatments for every state | Pending |
 | Exactly 90 / just over 90 seconds | Live at exactly 90; frozen non-primary Holding immediately above 90 | Pending |
 | Exactly 180 / just over 180 seconds | Holding at exactly 180; confirmed-pattern Uncertain without an exact minute immediately above 180 | Pending |
-| Stop-pattern or track uncertainty | Entire affected row suppressed; no Arrival uncertain treatment survives | Pending |
+| Stop-pattern or track uncertainty | Resolved ineligibility suppresses; materially unresolved current high-impact scope is arrival claim unavailable; no Arrival uncertain treatment survives | Pending |
 | Due exactly 60 / just over 60 seconds | Due allowed through exactly 60 only with movement age no more than 90 seconds; immediately above 60, the tested movement age no more than 180 seconds produces Holding and an age beyond 180 would require Uncertain | Pending |
 | No progress exactly 120 / just over 120 seconds | At exactly 120, movement age no more than 180 seconds produces secondary Holding and an age beyond 180 produces secondary Uncertain; above 120 no exact primary event survives; no valid train is silently deleted | Pending |
 | Overlapping Due and movement clocks | At 91 seconds Due elapsed and 181 seconds movement age, confirmed stop/track evidence produces secondary Uncertain without an exact minute; invalid stop/track evidence suppresses the row | Pending |
@@ -307,5 +337,7 @@ Do not use movement age as feed age, freeze unrelated trains, or use fresh feed 
 | Long valid origin-terminal hold | Qualifying assigned origin train remains Expected without invented movement or deletion | Pending |
 | Unusual dwell | Greater-value comparison uses no invented calibration; equality does not flag; exceedance flags but never deletes by itself | Pending |
 | Feed/movement separation | Current feed remains Current while only the old-movement train changes state | Pending |
+| Degraded-feed presentation | Frozen last-coherent values and **Live data updating** control; no feed-created Uncertain row; unrelated Current group remains eligible | Pending |
+| Unresolved high-impact scope | Affected claim is unavailable rather than mislabeled as resolved suppression; official message and unrelated service are preserved | Pending |
 
 Any failed prohibited-result check remains in the evidence record and must link its correction and rerun. No case becomes Approved merely because this file specifies the expected result.

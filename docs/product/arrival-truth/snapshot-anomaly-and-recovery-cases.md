@@ -17,6 +17,8 @@ These cases define acceptance evidence for the [route-level feed health policy](
 
 Every case is **Pending** until its setup is exercised against a fixed reviewed product version, the observed result is recorded, and the Truth Gate accepts the evidence. An expected result written here is not a passing result.
 
+For every non-feed-age case that uses “first representable instant,” the fixed evidence record must declare authoritative time precision `p` for both sides of the pair; the just-over fixture is exactly `boundary + p`. Feed snapshot age uses the whole-second input governed by the feed-health policy. Entity-drop cases use fixed integer entity counts, not an abstract percentage precision.
+
 ## Freshness boundary cases
 
 ### Case F1 — Exactly 90 seconds
@@ -61,11 +63,11 @@ Classify the group as **Degraded**. Preserve the last coherent state with frozen
 
 Do not classify exactly 180 seconds as Unavailable, advance preserved countdowns, or announce cancellations from absence.
 
-### Case F4 — More than 180 seconds
+### Case F4 — Just over 180 seconds
 
 **Setup**
 
-For one route/feed group, provide a latest complete coherent snapshot whose authoritative age is any value strictly greater than 180 seconds.
+For one route/feed group, provide a latest complete coherent snapshot whose authoritative whole-second age is exactly 181 seconds, the immediate representable age above 180 seconds under the feed-health policy.
 
 **Expected state**
 
@@ -105,19 +107,19 @@ Do not let apparent timestamp recency make the update Current, interpret missing
 
 ## Related evidence-age cases
 
-### Case F7 — Alert context at and beyond ten minutes
+### Case F7 — Alert context at and just beyond ten minutes
 
 **Setup**
 
-Test the same affected route and station twice. First, provide a coherent alert snapshot exactly ten minutes old. Second, provide alert context more than ten minutes old while an earlier active service change remains unresolved. Keep the train feed Current in both runs.
+Test the same affected route and station twice. First, provide a coherent alert snapshot exactly ten minutes old. Second, provide alert context at the first representable positive instant beyond ten minutes while an earlier active service change remains unresolved. Keep the train feed Current in both runs.
 
 **Expected state**
 
-Treat exactly ten minutes as current alert context. Treat more than ten minutes as stale; the stale snapshot does not prove normal service or clear the unresolved risk. In the second run, fail closed for the affected positive arrival claim even though the train feed is Current.
+Treat exactly ten minutes as current alert context. Treat the first positive instant beyond ten minutes as stale; the stale snapshot does not prove normal service or clear the unresolved risk. In the second run, fail closed for the affected positive arrival claim even though the train feed is Current.
 
 **Prohibited outcome**
 
-Do not treat exactly ten minutes as stale, treat more than ten minutes as current, use stale alert absence as proof of normal service, or let fresh positive train evidence override unresolved negative risk.
+Do not treat exactly ten minutes as stale, treat the first positive instant beyond ten minutes as current, use stale alert absence as proof of normal service, or let fresh positive train evidence override unresolved negative risk.
 
 ### Case F8 — Fresh feed with old train movement
 
@@ -153,7 +155,7 @@ Do not force the healthy group into schedule fallback, freeze its countdowns, hi
 
 **Setup**
 
-Begin with a fresh coherent full snapshot establishing the normal entity population for one route/feed group. In the next apparently fresh full snapshot, exactly 40% of those entities disappear at once without reliable cancellation, completion, service-change, or other train-specific evidence.
+Begin with a fresh coherent full snapshot containing exactly 100 baseline entities for one route/feed group. In the next apparently fresh full snapshot, exactly 40 entities disappear at once without reliable cancellation, completion, service-change, or other train-specific evidence. The fixed denominator makes the observed loss exactly 40%.
 
 **Expected state**
 
@@ -165,15 +167,15 @@ Then provide one fresh coherent full snapshot with a credible internally consist
 
 Do not accept exact 40% as below the trigger, turn vanished entities into cancellation claims, restore them from static data, decrement preserved countdowns, resume after only one fresh coherent snapshot, or recover a train that fails another veto.
 
-### Case A2 — Roughly 40% or greater and contextual bulk loss
+### Case A2 — Just over 40% and contextual bulk loss
 
 **Setup**
 
-Exercise an entity drop greater than 40%, and separately a suspicious population loss just below 40% accompanied by other coherence evidence such as abnormal route population or simultaneous loss. No reliable operational explanation supports the disappearances.
+Use the same fixed baseline of exactly 100 entities. In run A, remove exactly 41 entities, the first integer count above the exact 40% fixture. In run B, remove exactly 39 entities and add other coherence evidence such as abnormal route population or simultaneous loss. No reliable operational explanation supports either loss.
 
 **Expected state**
 
-Treat 40% or greater as anomaly evidence. Also allow the contextual evidence to trigger conservative anomaly treatment below 40%; “roughly” is not a safe-harbor rule. In each run, preserve and freeze the last coherent information, show **Live data updating**, and require two fresh coherent snapshots before exact countdowns can return.
+Treat the 41-of-100 loss as anomaly evidence. Also allow the contextual evidence to trigger conservative anomaly treatment for the 39-of-100 run; “roughly” is not a safe-harbor rule. In each run, preserve and freeze the last coherent information, show **Live data updating**, and require two fresh coherent snapshots before exact countdowns can return.
 
 **Prohibited outcome**
 
@@ -260,13 +262,13 @@ Do not accumulate nonconsecutive good snapshots, count any bad snapshot, resume 
 | F1 — 90 seconds | Current classification at the inclusive boundary; remaining admission checks recorded | Pending |
 | F2 — 91 seconds | Degraded classification; frozen countdown and **Live data updating** verified | Pending |
 | F3 — 180 seconds | Degraded classification at the inclusive upper boundary; no countdown decrement | Pending |
-| F4 — More than 180 seconds | Unavailable classification; no exact countdown; unrelated group unaffected | Pending |
+| F4 — Just over 180 seconds | Exactly 181 whole seconds is Unavailable; no exact countdown; unrelated group unaffected | Pending |
 | F5 — Repeated failures | Unavailable classification with no invented numeric definition; two-snapshot recovery verified | Pending |
 | F6 — Invalid decoding | Unavailable classification; invalid update quarantined; two-snapshot recovery verified | Pending |
-| F7 — Alert ten-minute boundary | Exactly ten minutes current; more than ten stale; unresolved risk fails closed | Pending |
+| F7 — Alert ten-minute boundary | Exactly ten minutes current; first positive instant beyond ten minutes stale; unresolved risk fails closed | Pending |
 | F8 — Movement age separation | Feed remains Current; only old-movement train changes state | Pending |
 | F9 — Route isolation | Affected group degraded or unavailable; healthy unrelated group remains live | Pending |
-| Scenario 17 / A2 — Bulk drop | Exact 40% triggers anomaly; no mass-cancellation claim; two-snapshot recovery verified | Pending |
+| Scenario 17 / A2 — Bulk drop | Fixed 100-entity baseline proves 40-of-100 and 41-of-100 anomaly branches; contextual 39-of-100 loss has no safe harbor; no mass-cancellation claim; two-snapshot recovery verified | Pending |
 | Scenario 18 — Timestamp regression | Unavailable classification; exact countdowns stopped through two-snapshot recovery | Pending |
 | A4 — Suspicious emptiness | Empty snapshot rejected as cancellation or normal-service proof; two-snapshot recovery verified | Pending |
 | A5 — Malformed snapshot | Unavailable classification; malformed snapshot excluded; two-snapshot recovery verified | Pending |

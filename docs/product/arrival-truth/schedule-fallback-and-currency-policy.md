@@ -19,7 +19,7 @@ This artifact is **Draft**. Its linked evidence remains **Pending — Truth Gate
 
 ## Fallback entry gate
 
-Schedule fallback is a separate board state, not a weaker live-arrival state. It may begin only for the exact route or feed group that the feed-health policy has classified **Unavailable**. Every other route or feed group is evaluated independently.
+Schedule fallback is a separate board state, not a weaker live-arrival state. It may begin only for the exact route or feed group that the feed-health policy has classified **Unavailable** and only after the cause-based precedence below admits fallback. Every other route or feed group is evaluated independently.
 
 Fallback must not begin for any of these conditions by themselves:
 
@@ -29,11 +29,23 @@ Fallback must not begin for any of these conditions by themselves:
 - The board has fewer than three admitted Live or Expected trains.
 - Another route or feed group is Degraded or Unavailable.
 
-During the published real-time replacement period, a static trip absent from a healthy full snapshot creates no fallback candidate and no cancellation claim. Static data never repairs a missing real-time trip or stop call. A Degraded group remains in its separately governed frozen **Live data updating** treatment unless and until the feed-health policy classifies that group Unavailable and the separately reviewed product state enters fallback.
+During the published real-time replacement period, a static trip absent from a healthy full snapshot creates no fallback candidate and no cancellation claim. Static data never repairs a missing real-time trip or stop call. A Degraded group remains in its separately governed frozen **Live data updating** treatment.
+
+### Cause-based precedence between preservation and fallback
+
+One board scope cannot simultaneously present preserved real-time rows with **Live data updating** and Scheduled departures with **Live data unavailable**. Apply this decision:
+
+1. **Age-based Unavailable admits fallback.** When the authoritative age of the last complete coherent snapshot is strictly greater than 180 seconds, the existing feed-age boundary independently admits fallback. If an eligible schedule and all veto checks pass, the separated Scheduled board replaces frozen preserved rows. Exactly 180 seconds does not admit this branch.
+2. **An invalidating anomaly starts in preservation.** Timestamp regression, repeated update failures, invalid decoding, malformed or suspiciously empty content, a bulk drop, or simultaneous feed disappearance may make health Unavailable immediately even while the last complete coherent snapshot is no more than 180 seconds old. When prior coherent context exists, preserve it only as frozen context with **Live data updating** and run the two-fresh-coherent-snapshot recovery sequence. Scheduled departures are blocked during this branch.
+3. **Existing age evidence can move the anomaly branch to fallback.** If recovery has not completed and the authoritative age of that last complete coherent snapshot becomes strictly greater than 180 seconds, the already approved age boundary—not an invented sustained-outage duration—admits the age-based fallback branch. Replace the frozen context rather than showing both. A qualifying schedule still must pass source, currency, coverage, hard-suppression carryover, and current-veto checks.
+4. **Recovery takes the other exit.** If two consecutive fresh coherent snapshots arrive before the age-based fallback branch begins, feed recovery completes; reevaluate individual trains from the accepted live evidence and do not enter fallback.
+5. **No preserved context.** If the group is Unavailable and no prior complete coherent board context exists, there is nothing to preserve. Fallback may proceed immediately when the Unavailable classification, schedule eligibility, and every veto are proven.
+
+Exactly 181 whole seconds is sufficient for the age-based branch under the feed-health policy's input precision. No separate count, duration, “sustained” interval, or operator guess may be invented. An invalidating snapshot itself never supplies the age transition, clears its own anomaly, or counts as a recovery snapshot.
 
 ## Deterministic candidate selection
 
-After the relevant route or feed group is proven Unavailable, apply current negative evidence first and then select a schedule source in this order:
+After the relevant route or feed group is proven Unavailable and the cause-based precedence gate admits fallback, apply current negative evidence first and then select a schedule source in this order:
 
 1. Select the newest validated, non-superseded supplemented GTFS edition that covers the trip's operating service date, includes the proposed departure within its effective coverage and horizon, and remains departure-eligible under the currency rules below.
 2. If no supplemented edition passes every condition in step 1, evaluate regular GTFS for the same operating service date and proposed departure.
@@ -110,7 +122,7 @@ Repeated retrieval may update the truthful **Last retrieved** observation, but i
 
 For every fallback, veto, or no-estimate decision, retain:
 
-1. The exact route or feed-group scope and the evidence that classified it Unavailable.
+1. The exact route or feed-group scope, the evidence that classified it Unavailable, the controlling Unavailable cause, the last complete coherent snapshot age, and the cause-based preservation-versus-fallback decision.
 2. Proof that fallback did not arise from one missing train, a single candidate failure, or another group's health.
 3. The operating service date and proposed scheduled departure.
 4. Every evaluated supplemented currency edition's canonical schedule-content identity, wrapper observations, validation result, source-supported order, publication time when supplied, timestamp acceptance or quarantine reason, first successful retrieval, latest retrieval, effective coverage, age anchor, authoritative comparison time, age, currency state, and claim-scoped supersession disposition.

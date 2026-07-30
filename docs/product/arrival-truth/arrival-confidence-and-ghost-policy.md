@@ -41,7 +41,7 @@ Every candidate must first retain a coherent claim that it serves the displayed 
 | **Live** | Healthy feed; assigned train; movement or stop progress within 90 seconds. Every exact-stop, destination/direction, service-change, track, freshness, identity, plausibility, and Due/no-progress rule also passes; a Due episode beyond 60 seconds cannot remain Live. | **Yes.** Order chronologically with other admitted Live and Expected trains. | Rounded advancing countdown only while the Live evidence remains current and plausible. | **3 min · Live** |
 | **Expected** | Assigned physical train at origin; no movement yet; departure not materially overdue; stable across two updates. Every exact-stop, destination/direction, service-change, track, freshness, and identity gate also passes. | **Yes.** Order by the center of the evidence-supported range. | Range only; do not imply movement or substitute an exact live countdown. | **Expected in 6–8 min** |
 | **Holding** | By default, the feed is fresh but movement or stop progress is older than 90 seconds through exactly 180 seconds. The Due rule below also establishes Holding as the strongest state permitted after more than 60 seconds without progress; movement age beyond 180 seconds still escalates a stop-confirmed train to Uncertain. | **No.** Use a separate warning or secondary held-train area; it cannot displace a moving option. | Freeze the last supported time immediately. Do not decrement it, refresh it as an exact minute, or present it as Due. | **Holding near 14 St · last moved 2 min ago** |
-| **Uncertain** | No movement beyond 180 seconds, identity churn, an implausible ETA jump, or a degraded feed, while the stopping pattern remains confirmed for the displayed exact directional stop. | **No.** De-rank to the expandable secondary area. | Remove the exact minute. No countdown, range presented as precise arrival, or advancing animation remains. | **Arrival uncertain** |
+| **Uncertain** | In a Current accepted feed, no movement beyond 180 seconds, identity churn, or an implausible ETA jump, while one coherent train context and the stopping pattern remain confirmed for the displayed exact directional stop. | **No.** De-rank to the expandable secondary area. | Remove the exact minute. No countdown, range presented as precise arrival, or advancing animation remains. | **Arrival uncertain** |
 | **Scheduled** | Live feed unavailable. The separately governed schedule must be eligible, and no current service-change or track veto may invalidate the claim. | **No.** Use a clearly separated fallback board; never mix Scheduled times into or use them to fill the live next-three. | Clock time only; never a countdown. | **Scheduled 10:42 · live data unavailable** |
 
 The examples above are the approved specification's default rider treatments. Route, destination, direction, and any required localized consequence remain present under their owning contracts.
@@ -50,20 +50,24 @@ Expected is a specific origin-terminal state, not a general downgrade for a trai
 
 Identity churn does not authorize an unsupported merge, duplicate, or primary row. Uncertain treatment is available only when a single rider-visible train context and its exact displayed stop service remain confirmed without contradicting the one-to-one continuity policy. Ambiguous one-to-many, many-to-one, duplicate, or otherwise incoherent candidates remain quarantined or suppressed under the time and admission contracts.
 
-When a route/feed group is Degraded, the route-level health policy still controls preservation, frozen context, **Live data updating**, and the two-snapshot recovery rule. If an individual train is presented as Uncertain from that evidence, its exact minute is removed and it remains secondary. This policy does not relabel a Degraded feed as Current.
+When a route/feed group is Degraded, or an invalidating feed anomaly is in frozen recovery presentation, the route-level health policy controls the entire affected feed scope: preserve only the last coherent information, freeze displayed countdown values, and show **Live data updating**. Feed-level degradation is not by itself a train-level Uncertain state and does not authorize an **Arrival uncertain** row. An individual train may enter Uncertain only from independently accepted train evidence in a Current feed, with one coherent train context and confirmed exact-stop and track service. This policy does not relabel a Degraded or anomalous feed as Current.
 
 ## Uncertain never weakens a stop or track veto
 
 **Uncertain** means the arrival time or train continuity is uncertain while service at the displayed stop remains confirmed. It never means that the product is unsure whether the train stops there.
 
-Suppress the entire affected train row when any of the following is missing, contradictory, or materially unresolved:
+Use resolved suppression when current evidence establishes that the exact stop or trustworthy path fails. Use the Task 6 **arrival claim unavailable** outcome—not resolved suppression—when independent current high-impact evidence exists but material route, direction, station, segment, exact-stop, train, or path scope remains unresolved.
+
+Suppress the entire affected train row when any of the following is missing or contradictory in a way that resolves the claim as ineligible:
 
 - the displayed exact directional stop in the train's coherent remaining-stop sequence;
 - the stopping pattern, actual destination, or normalized rider-facing direction;
-- the absence of a bypass, suspension, closure, planned-pattern exclusion, or unresolved reroute; or
+- the absence of a resolved bypass, suspension, closure, planned-pattern exclusion, or other resolved stop-service veto; or
 - trustworthy track/path evidence, including during a non-terminal actual-versus-scheduled-track conflict.
 
-Do not show **Arrival uncertain**, a lower-confidence countdown, a Scheduled replacement, or dependent platform guidance for a suppressed claim. Use the narrowest supported service-change or track consequence beside the suppression state. Normal terminal track variation is not a conflict by itself; the reroute and track-conflict playbook owns that distinction.
+When current high-impact bypass, reroute, short-turn, suspension, closure, or invalidating track/path evidence leaves material scope unresolved, withhold the affected row as **arrival claim unavailable** for only that scope, preserve the official message in details, and keep unrelated service eligible. Do not assert a specific bypass or describe this as resolved hard suppression.
+
+Do not show **Arrival uncertain**, a lower-confidence countdown, a Scheduled replacement, or dependent platform guidance for either a suppressed or unavailable claim. Use the narrowest supported service-change or track consequence beside the resolved suppression state, or the Task 6 unavailable explanation beside materially unresolved scope. Normal terminal track variation is not a conflict by itself; the reroute and track-conflict playbook owns that distinction.
 
 ## Movement-age lifecycle
 

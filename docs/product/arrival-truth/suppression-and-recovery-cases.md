@@ -31,6 +31,8 @@ Unless a case says otherwise:
 
 Capture every input snapshot and its completeness decision, authoritative observation time, entity presence, identity and stop sequence, absence count and elapsed time, service and track evidence, internal disposition, visible board result, precision, primary eligibility, and recovery-update count. Confirm that no disappearance-only fixture produces cancellation language and that any retained quality record contains no personal or linkable rider data.
 
+For the just-over-60 case, the fixed evidence record must declare authoritative timestamp precision `p` for both boundary fixtures. S4 is evaluated at exactly `T0 + 60 seconds + p`; S3 uses the same precision at exactly `T0 + 60 seconds`. Do not round or change clock resolution between runs.
+
 ## Absence and grace cases
 
 ### Scenario 15 — One healthy complete-snapshot absence
@@ -56,6 +58,14 @@ Capture every input snapshot and its completeness decision, authoritative observ
 **Expected:** Hard-suppress at exactly 60 seconds from the elapsed test. Record one countable absence through the boundary, the controlling elapsed-time trigger, and only the permitted non-personal quality record.
 
 **Prohibited:** Introducing a second countable absence before the boundary, attributing this fixture to the count-two trigger, waiting until 61 seconds, keeping internal grace active as the controlling disposition, continuing any public arrival treatment, or inferring cancellation.
+
+### Case S4 — Just over 60 seconds after first absence
+
+**Setup:** Repeat S3 with absence count still one and no qualifying recovery sequence, but evaluate at the first representable positive instant after `T0 + 60 seconds`.
+
+**Expected:** Keep the candidate hard-suppressed from the elapsed-time trigger. Preserve only the permitted non-personal quality record; the public row, exact countdown, primary eligibility, and cancellation claim remain absent.
+
+**Prohibited:** Reopen grace after the boundary, require a second absence, restore a weaker or static row, round the observation back to 60 seconds to change the decision, or infer cancellation.
 
 ### Scenario 16 — Second consecutive healthy complete-snapshot absence
 
@@ -196,7 +206,7 @@ When high-impact bypass or reroute evidence leaves material scope unresolved, us
 | Case | Required actual-result evidence | Status |
 |---|---|---|
 | Scenario 15 | First healthy complete absence immediately removes Live, exact countdown, and primary slot; internal grace only; no cancellation claim | Pending |
-| S2 / S3 — 59 and exactly 60 seconds | 59 seconds remains internal grace with no public row; with absence count still one, exactly 60 seconds hard-suppresses from the controlling elapsed trigger | Pending |
+| S2 / S3 / S4 — 59, exactly 60, and just over 60 seconds | 59 seconds remains internal grace with no public row; with absence count still one, exactly 60 seconds hard-suppresses and the first positive instant above 60 remains suppressed from the controlling elapsed trigger | Pending |
 | Scenario 16 | Second healthy complete absence hard-suppresses before 60 seconds; no cancellation claim | Pending |
 | S5 — Incomplete update | Incomplete update counts as neither absence nor recovery; elapsed clock and stricter feed-health behavior verified | Pending |
 | S6 — Target removed | Exact target claim hard-suppressed immediately; no static reconstruction | Pending |

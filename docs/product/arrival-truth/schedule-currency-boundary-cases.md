@@ -17,6 +17,8 @@ These cases define acceptance evidence for the [schedule fallback and currency p
 
 Every case is **Pending** until its setup is exercised against a fixed reviewed product version, the actual result and prohibited-result checks are recorded, and the Truth Gate accepts the evidence. An expected result written here is not a passing result.
 
+For schedule timestamps and currency ages, every case that uses “first representable instant” must declare authoritative source/evaluation precision `p` for both sides of the pair; the just-over fixture is exactly `boundary + p`. Feed age remains the separate whole-second input governed by the feed-health policy, so its first age above 180 is exactly 181 seconds. Do not round, truncate, or change precision between paired runs.
+
 ## Fallback entry and source-order cases
 
 ### Case S1 — Healthy feed missing one train
@@ -37,7 +39,7 @@ Do not show the missing trip as Scheduled, Live, Expected, cancelled, a clock ti
 
 **Setup**
 
-Provide evidence that the exact relevant route/feed group is genuinely **Unavailable** under the feed-health policy. Provide a validated, non-superseded supplemented edition that is no more than 2 hours old, covers the trip's operating service date and departure within its effective horizon, and has no applicable veto. Keep another route/feed group healthy.
+Use the age-based fallback branch: provide a last complete coherent snapshot for the exact relevant route/feed group whose authoritative whole-second age is exactly 181 seconds, with no newer accepted snapshot. This independently makes the group **Unavailable** and admits fallback under the cause-based precedence rule. Provide a validated, non-superseded supplemented edition that is no more than 2 hours old, covers the trip's operating service date and departure within its effective horizon, and has no applicable veto. Keep another route/feed group healthy.
 
 **Expected state**
 
@@ -45,7 +47,21 @@ Select the supplemented edition before regular GTFS. In a separate fallback boar
 
 **Prohibited outcome**
 
-Do not show a countdown, **Live**, **Expected**, or **on time**; mix the schedule into the live next-three board; select regular GTFS first; imply normal service; or force the healthy group into fallback.
+Do not show a countdown, **Live**, **Expected**, or **on time**; mix the schedule into the live next-three board; preserve frozen live rows beside the fallback; select regular GTFS first; imply normal service; or force the healthy group into fallback.
+
+### Case S2 — Invalidating anomaly preserves first, then the age boundary can admit fallback
+
+**Setup**
+
+Begin with a complete coherent live snapshot and accepted board context. Before that snapshot reaches 180 whole seconds of authoritative age, provide, in separate runs, a timestamp-regressed update, invalid decoding or malformed content, and a suspicious bulk-drop or empty-snapshot anomaly. Supply an otherwise eligible schedule. For each run, observe the board immediately, at exactly 180 seconds of age for the last complete coherent snapshot, and at exactly 181 seconds when two fresh coherent recovery snapshots have not arrived.
+
+**Expected state**
+
+Immediately and through exactly 180 seconds, use only frozen last-coherent context with **Live data updating** and block Scheduled departures. The invalid update counts as neither recovery nor age-transition evidence. If two consecutive fresh coherent snapshots arrive first, recover live evaluation and do not enter fallback. Otherwise, at the first instant strictly beyond 180 seconds, the accepted last-coherent snapshot age independently admits the age-based branch; replace the frozen context with the separated fallback board and apply every schedule eligibility and veto check.
+
+**Prohibited outcome**
+
+Do not show preserved and Scheduled rows together; enter fallback immediately from the invalidating update while the last coherent snapshot is no more than 180 seconds old; treat exactly 180 seconds as age-based fallback; invent another sustained-outage duration or failure count; count the invalid update as recovery; or let the schedule override a veto.
 
 ### Case S3 — Supplement unavailable; regular GTFS is next
 
@@ -348,6 +364,7 @@ Do not restore the claim from static data; count feed unavailability, alert clea
 |---|---|---|
 | S1 — Healthy feed missing one train | No fallback entry, static row, cancellation, or countdown | Pending |
 | Scenario 19 | Affected group proven Unavailable; supplemented schedule selected; full non-live presentation; healthy group isolated | Pending |
+| S2 — Preservation/fallback precedence | Invalidating anomaly preserves frozen context through exactly 180 seconds; two coherent snapshots recover live, or first instant above 180 admits separated fallback; no concurrent modes or invented duration | Pending |
 | S3 — Regular GTFS next | Supplement ineligibility recorded; eligible regular schedule selected without live treatment | Pending |
 | S4 — No service-date coverage | Both sources rejected for the service date; no estimate or invented service | Pending |
 | S5 — Outside supplement horizon/coverage | Supplement Topology only; eligible regular GTFS evaluated next | Pending |
