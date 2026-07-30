@@ -21,7 +21,7 @@ The governing rule is absolute: negative evidence is applied before positive pre
 
 | Hard veto | Evidence condition and scope | Claims it defeats | Required disposition and rider consequence | Row-specific release prerequisite |
 |---|---|---|---|---|
-| Bypass | Current resolved, scoped structured evidence and agreeing official text establish that the train or affected service will skip the exact station and direction. A generic **affected** marker alone is not enough to assert a bypass. | Live prediction, static schedule, route identity, and any other claim that the train will serve the exact stop. | Suppress the train only at the resolved exact stop and direction. Use the supported skipped-stop explanation there. Never show the train at a bypassed stop. | The resolved bypass no longer applies and current coherent evidence supports service at the exact stop; then apply the catalog-wide release gate below. |
+| Bypass | Current resolved, scoped structured evidence and agreeing official text establish that the train or affected service will skip the exact station and direction. A generic **Affected** marker alone is not enough to assert a bypass. | Live prediction, static schedule, route identity, and any other claim that the train will serve the exact stop. | Suppress the train only at the resolved exact stop and direction. Use the supported skipped-stop explanation there. Never show the train at a bypassed stop. | The resolved bypass no longer applies and current coherent evidence supports service at the exact stop; then apply the catalog-wide release gate below. |
 | Suspension | An active partial or full suspension removes the exact station, direction, or segment from usable service. | Any live or scheduled arrival through the suspended scope. | Remove affected arrivals. Show the supported suspension explanation and preserve unrelated routes or segments. | The suspension no longer applies in the affected scope and current coherent evidence supports service there; then apply the catalog-wide release gate below. |
 | Missing live stop | The exact directional stop is absent from the train's ordered remaining-stop sequence. | Static or supplemented schedule inclusion, normal route pattern, route identity, and predicted service inferred for that stop. | Suppress. Never fill the missing stop from static data. | A fresh coherent accepted live sequence contains the exact directional stop; then apply the catalog-wide release gate below. |
 | Planned-pattern exclusion | The effective supplemented pattern excludes the stop, or supplemented pattern and live data conflict without a resolved operational change. | A conflicting live prediction and regular static schedule inclusion. | Suppress the excluded target stop; if the operational change is unresolved, suppress until resolved. | The exclusion is no longer effective, or coherent live and supporting change evidence resolve the operational path; then apply the catalog-wide release gate below. |
@@ -41,13 +41,15 @@ An ended alert, cleared adverse condition, static schedule, or one coherent upda
 
 ## Fail-closed evidence that withholds a claim
 
-These conditions do not invent a more specific operational fact. They prevent a positive arrival while a material conflict remains unresolved. When the evidence cannot establish a resolved hard veto, use **arrival claim unavailable** for only the materially unresolved scope rather than resolved suppression.
+These conditions do not invent a more specific operational fact. They prevent a positive arrival while a material conflict remains unresolved. When independent current high-impact evidence cannot establish a resolved hard veto but materially leaves a relevant route, direction, segment, exact-stop, or train scope unresolved, use **arrival claim unavailable** for only that scope rather than resolved suppression.
+
+Generic **Affected** metadata alone can create neither a resolved bypass or suppression nor **arrival claim unavailable**. Unavailability requires independent current high-impact evidence of a possible bypass, reroute, or other governed high-impact change plus material scope uncertainty. Missing station, direction, or other scope metadata remains neither proof of normal service nor sufficient high-impact evidence by itself.
 
 | Condition | Fail-closed rule |
 |---|---|
 | Stale, malformed, incomplete, anomalously empty, or time-regressed evidence | Reject or quarantine it before train evaluation. It cannot support a live exact countdown or clear a veto. |
-| Alert describes a bypass or reroute without enough station detail for a reliable stop pattern | Make only the materially unresolved route-direction, segment, exact-stop, or train **arrival claim unavailable** and show the original official message. Do not assert a resolved bypass, use skipped-stop copy, or label the decision resolved suppression. Missing station or direction metadata never proves an unaffected stop. |
-| Alert scope is contradictory | Quarantine the alert record for quality review while preserving any independently supported resolved veto or arrival-claim unavailability. If the contradiction prevents safe scope mapping, make only the materially unresolved claim unavailable and show the original official message. Do not turn contradiction into proof of normal service. |
+| Independent current high-impact evidence describes a bypass or reroute but lacks enough station, direction, segment, exact-stop, train, or path detail for a reliable stop pattern | Make only the materially unresolved scope **arrival claim unavailable** and show the original official message. Do not assert a resolved bypass, use skipped-stop copy, or label the decision resolved suppression. Missing metadata alone neither proves an unaffected stop nor supplies the high-impact evidence required for unavailability. |
+| Alert scope is contradictory | Quarantine the alert record for quality review while preserving any independently supported resolved veto or arrival-claim unavailability. Only when independent current high-impact evidence remains and the contradiction prevents safe scope mapping may the materially unresolved claim become unavailable with the original official message. Do not turn contradiction into proof of normal service or treat contradiction alone as sufficient high-impact evidence. |
 | Live data and effective planned pattern disagree without resolved supporting change evidence | Preserve planned-pattern exclusion and suppress the affected stop until the operational path is resolved. |
 | Static trip is absent from a healthy full real-time snapshot during the replacement period | Do not restore or display the static trip. Do not confidently call it cancelled without a reliable match. |
 
@@ -55,7 +57,7 @@ These conditions do not invent a more specific operational fact. They prevent a 
 
 - A delay-only alert does not suppress a train whose stopping pattern and all arrival conditions remain valid; it changes status or explanation.
 - Alert text may explain operational context, but it does not establish movement and can never revive a stale, suppressed, or unavailable train.
-- A missing alert, missing station metadata, missing direction metadata, or generic **affected** metadata is not proof that service is normal. It also is not, by itself, enough to assert a specific bypass.
+- A missing alert, missing station or direction metadata, or generic **Affected** metadata is neither proof that service is normal nor, by itself, independent current high-impact evidence. Alone it authorizes neither a specific bypass or resolved suppression nor **arrival claim unavailable**.
 - Supplemented or regular static schedule inclusion is positive planning evidence, not authority to clear any hard veto.
 
 ## Veto review record
@@ -65,7 +67,7 @@ For every suppressed, unavailable, or quarantined claim, retain:
 1. Source type, source timestamp, and effective period.
 2. Exact route, station, direction, trip, or segment scope.
 3. The resolved hard veto or materially unresolved unavailability condition.
-4. The positive prediction the veto defeated.
+4. The positive prediction defeated or claim withheld by the recorded disposition.
 5. The board disposition and reason for suppression or unavailability, with internal quarantine recorded separately.
 6. The row-specific release prerequisite, both recovery updates, proof of all five conditions, applicable coherent-path evidence, and every Live gate evaluated before readmission.
 
