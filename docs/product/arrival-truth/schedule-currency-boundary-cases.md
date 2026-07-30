@@ -175,19 +175,24 @@ Use the first successful retrieval as the edition's age anchor. Retain subsequen
 
 Do not invent a publication time, use the latest identical retrieval as the anchor, or treat validation time, device time, phone clock, or file modification time as source publication time without approved evidence.
 
-### Case S10B — Publication timestamp impermissibly future
+### Case S10B — Any future publication timestamp
 
 **Setup**
 
-Provide changed canonical schedule content with source-supported edition chronology and a supplied publication timestamp. Against authoritative comparison time, prove that the timestamp is future beyond the approved small skew allowance. Supply a later successful retrieval and an eligible regular-GTFS departure. Do not assign a numeric value to the skew allowance.
+Run two independent fixtures with changed canonical schedule content, source-supported edition chronology, a supplied publication timestamp, and a later successful retrieval:
+
+1. In run A, set publication time at the first representable positive instant after authoritative comparison time. Treat it as future even if that offset might fall within the uncalibrated small skew allowance. Provide an eligible regular-GTFS departure.
+2. In run B, set publication time demonstrably future beyond the small skew allowance and provide no eligible regular-GTFS departure.
+
+Do not assign a numeric value to the skew allowance in either run.
 
 **Expected state**
 
-Reject the negative age and quarantine the supplemented edition from departure eligibility without assigning Current, Stale reference, or Topology only. Do not substitute retrieval time for the supplied unusable timestamp. Continue to regular GTFS as the next candidate.
+In both runs, calculate a negative raw age, quarantine the supplemented edition from departure eligibility, and assign no Current, Stale reference, or Topology only state. Do not substitute latest retrieval or first retrieval for the supplied unusable timestamp. In run A, select eligible regular GTFS as the next candidate. In run B, show no estimate.
 
 **Prohibited outcome**
 
-Do not use the phone or device clock, invent a skew threshold, classify negative age Current, reset the anchor to latest retrieval, show the supplemented departure, or treat the bad timestamp as genuinely unavailable.
+Do not use the phone or device clock; invent a skew threshold; accept run A because its offset may be within the allowance; classify either negative age Current; normalize or clamp age to zero; reset the anchor to latest or first retrieval; show either supplemented departure; or treat the supplied future timestamp as genuinely unavailable.
 
 ### Case S10C — Publication timestamp regressed or contradictory
 
@@ -204,6 +209,20 @@ Quarantine the purported supplemented edition from departure eligibility and rec
 Do not classify the edition Current, silently repair or ignore the regression, use retrieval order as edition chronology, show its departure, roll back a superseded overlapping edition, or invent publication time, validity, or service.
 
 ## Exact currency-boundary cases
+
+### Case S10D — Publication time exactly equals comparison time
+
+**Setup**
+
+Provide a source-supported, non-regressed, non-contradictory publication timestamp exactly equal to authoritative comparison time. The validated, non-superseded supplemented edition covers the proposed operating service date and departure and passes every other gate.
+
+**Expected state**
+
+Calculate raw age exactly zero and classify the edition **Current schedule**. Allow its scheduled clock time to proceed through current veto checks.
+
+**Prohibited outcome**
+
+Do not quarantine exact age zero as future, treat it as negative, apply an invented skew adjustment, classify it Stale reference or Topology only, or bypass another eligibility or veto gate.
 
 ### Case S11 — Exactly 2 hours
 
@@ -338,8 +357,9 @@ Do not restore the claim from static data; count feed unavailability, alert clea
 | Scenario 49 | Canonically unchanged content with changed wrappers preserves one identity and original age anchor; currency does not reset | Pending |
 | S9 — Failed edition | Failed edition excluded; retained validated copy persists and continues aging | Pending |
 | S10 — No publication time | First successful retrieval anchors age; no invented timestamp | Pending |
-| S10B — Future timestamp | Negative age rejected; supplement quarantined; regular GTFS next; no numeric skew invented | Pending |
+| S10B — Future timestamp pair | First positive future instant and beyond-allowance future both quarantined with no currency state; regular GTFS or no estimate; no numeric skew invented | Pending |
 | S10C — Regressed/contradictory timestamp | Supplement quarantined; regular GTFS or no estimate selected without retrieval substitution | Pending |
+| S10D — Exact age zero | Publication equal to authoritative comparison is Current when every other gate passes | Pending |
 | S11 / S12 — 2-hour pair | Exactly 2 hours Current; first positive duration beyond 2 hours Stale; no gap or overlap | Pending |
 | Scenario 44A | 3-hour edition visibly Stale reference with exact warning and no live treatment | Pending |
 | S14 / Scenario 44B — 24-hour pair | Exactly 24 hours Stale; first positive duration beyond 24 hours Topology only with no departure | Pending |
