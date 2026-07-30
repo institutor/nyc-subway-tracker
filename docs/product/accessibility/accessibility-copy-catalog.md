@@ -2,9 +2,9 @@
 
 | Governance field | Value |
 |---|---|
-| Source sections | Approved specification §§19–20, 21.9–21.10, 29.1, 31.5, 31.8, and 33.3; accessibility and platform-guidance plan `Product artifact map`, Task 3 `Product artifacts`, `Dependencies`, `Produces for later tasks`, `Ordered steps`, and `Evidence and acceptance checks`, and Task 4 `Product artifacts`, `Dependencies`, `Produces for later tasks`, `Ordered steps`, and `Evidence and acceptance checks` |
+| Source sections | Approved specification §§19–20, 21 case 6, 21.9–21.10, 29.1, 31.5, 31.6 scenario 39, 31.8, and 33.3; accessibility and platform-guidance plan `Product artifact map`, Task 3 `Product artifacts`, `Dependencies`, `Produces for later tasks`, `Ordered steps`, and `Evidence and acceptance checks`, Task 4 `Product artifacts`, `Dependencies`, `Produces for later tasks`, `Ordered steps`, and `Evidence and acceptance checks`, and Task 5 `Product artifacts`, `Dependencies`, `Produces for later tasks`, `Ordered steps`, and `Evidence and acceptance checks` |
 | Owner | Content Lead |
-| Required reviewers | Product, Accessibility, Data Quality, Content |
+| Required reviewers | Product, Accessibility, Data Quality, Content, Operations |
 | Status | Draft |
 | Last validation date | 2026-07-30 |
 | Supersedes | None |
@@ -13,11 +13,11 @@
 
 ## Purpose and authority
 
-This catalog owns the exact Task 3 rider-facing accessibility messages, the exact Task 4 equipment-status messages and patterns, and their evidence boundaries. It synchronizes copy with the [Accessible Route Only state matrix](accessible-route-only-state-matrix.md), [complete accessible-path contract](complete-path-contract.md), [path-edge review checklist](path-edge-review-checklist.md), [station-direction coverage register](station-direction-coverage-register.md), [station-direction review guide](station-direction-review-guide.md), [equipment status policy](equipment-status-policy.md), and [equipment-status acceptance table](equipment-status-acceptance-table.md).
+This catalog owns the exact Task 3 rider-facing accessibility messages, Task 4 equipment-status messages and patterns, Task 5 impact labels and warning patterns, and their evidence boundaries. It synchronizes copy with the [Accessible Route Only state matrix](accessible-route-only-state-matrix.md), [complete accessible-path contract](complete-path-contract.md), [path-edge review checklist](path-edge-review-checklist.md), [station-direction coverage register](station-direction-coverage-register.md), [station-direction review guide](station-direction-review-guide.md), [equipment status policy](equipment-status-policy.md), [equipment-status acceptance table](equipment-status-acceptance-table.md), [path-impact and reroute playbook](path-impact-and-reroute-playbook.md), and [underway-warning state matrix](underway-warning-state-matrix.md).
 
 The [approved product specification](../../superpowers/specs/2026-07-30-nyc-subway-train-time-tracker-design.md) controls every conflict. Shared terms retain the meanings in the [approved transit product glossary](../contracts/transit-product-glossary.md), the [approved rider language rules](../contracts/rider-language-rules.md) control evidence and certainty, and all decisions follow the [product artifact review and approval policy](../review-and-approval-policy.md).
 
-This artifact is **Draft**. It contains no real station, entrance, route, direction, platform, path, equipment, outage, restoration, journey, observed copy result, approval, reviewer, production-cadence, or threshold-calibration evidence. The Task 3 copy fixtures are linked to 16 abstract scenarios and the Task 4 copy fixtures to 13 synthetic scenarios; all are **Not run — Pending**.
+This artifact is **Draft**. It contains no real station, entrance, route, direction, platform, path, equipment, outage, restoration, journey, decision point, alternative, warning, notification, observed visible or assistive result, approval, reviewer, production-cadence, or threshold-calibration evidence. The Task 3 copy fixtures are linked to 16 abstract scenarios, the Task 4 copy fixtures to 13 synthetic scenarios, and the Task 5 copy fixtures to 14 synthetic scenarios; all are **Not run — Pending**.
 
 The authoritative release decision remains:
 
@@ -25,11 +25,11 @@ The authoritative release decision remains:
 
 Public arrival boards remain blocked.
 
-Tasks 3 and 4 do not approve rider-facing accessibility copy for release, pass Gate 0, authorize an accessible-now claim, or make the Release 1 accessibility decision.
+Tasks 3 through 5 do not approve rider-facing accessibility copy for release, pass Gate 0, authorize an accessible-now claim, prove a warning or notification, or make the Release 1 accessibility decision.
 
 ## Governance provenance reconciliation
 
-The [artifact index](../artifact-index.md) cites specification §§19–20 for this catalog. Task 3 additionally applies acceptance case §21.10, accessibility scenarios §31.5, completeness risk §33.3, and the plan's full Task 3 provenance. Task 4 additionally applies acceptance case §21.9, accessibility target §29.1, cross-feature scenario §31.8, and the plan's full Task 4 provenance. Product Governance Lead reconciliation of the narrower index citation and this metadata is **Pending** before this artifact may advance from **Draft**. This task does not edit the index or treat the mismatch as approved.
+The [artifact index](../artifact-index.md) cites specification §§19–20 and reviewers Product, Accessibility, Data Quality, and Content for this catalog. Task 3 additionally applies acceptance case §21.10, accessibility scenarios §31.5, completeness risk §33.3, and the plan's full Task 3 provenance. Task 4 additionally applies acceptance case §21.9, accessibility target §29.1, cross-feature scenario §31.8, and the plan's full Task 4 provenance. Task 5 additionally applies accessibility case 6 in §21, scenario 39 in §31.6, §§20.2–20.6, and the plan's full Task 5 provenance. Operations is mandatory for Task 5 operational warnings under the review policy. Product Governance Lead reconciliation of the narrower index citation and reviewer set is **Pending** before this artifact may advance from **Draft**. This task does not edit the index or treat either mismatch as approved.
 
 ## Copy-use contract
 
@@ -123,7 +123,7 @@ Equivalent synonyms, abbreviations, icons, audio tones, notifications, summaries
 
 ## Presentation and assistive equivalence
 
-For every exact Task 3 phrase and Task 4 equipment message or pattern:
+For every exact Task 3 phrase, Task 4 equipment message or pattern, and Task 5 impact label or warning pattern:
 
 - show the complete phrase without truncating the evidence qualifier;
 - announce the complete phrase in the same interaction context;
@@ -200,29 +200,70 @@ The assistive message uses the same complete label and value. The estimate remai
 - Do not combine A11Y-T4-01 with Working, Available, accessible, all clear, or equivalent positive wording.
 - Do not let one machine's restoration, no-outage result, planned outage, freshness, or estimate describe another machine or the complete path.
 
-## Pending Task 5 copy — do not populate in Task 3
+## Exact Task 5 impact and warning copy
 
-**Status: Pending — Task 5**
+**Status: Draft — approval evidence Pending; 14 fixtures Not run — Pending**
 
-Task 5 owns all exact wording and presentation rules for:
+The [path-impact and reroute playbook](path-impact-and-reroute-playbook.md) supplies the exact impact and first verified alternative. The [underway-warning state matrix](underway-warning-state-matrix.md) supplies decision-point, priority, persistence, Offline, reconnect, and resolution state. This catalog supplies exact visible and assistive wording. Copy cannot create an impact, make a path complete, make an alternative verified, infer a rider position, clear a warning, authorize a push, or turn one-machine restoration into path restoration.
 
-- Blocking, Reroutable within station, and Unrelated outage impact;
-- exact failed-connection descriptions;
-- alternative ordering and action;
-- warnings before the last accessible decision point;
-- changes while a rider is underway;
-- redundant-chain continuation;
-- required-chain failure; and
-- restoration or Unknown-state journey consequences.
+### Exact impact labels
 
-No Task 5 outage-impact, reroute, alternative-action, underway-warning, decision-point, or restoration-warning wording is approved here. A11Y-T3-03 remains the only Task 3 phrase for a disclosed official alternative that lacks complete accessibility review.
+| Catalog ID | Exact visible copy | Exact assistive copy | Authorized trigger | Required consequence |
+|---|---|---|---|---|
+| A11Y-T5-01 | **Blocking** | **Blocking** | The exact selected path requires an adverse or Unknown connection and no complete, current, verified same-complex chain serves the exact journey scope. | Invalidate the complete selected route and apply the exact alternative order and warning lifecycle. |
+| A11Y-T5-02 | **Reroutable within station** | **Reroutable within station** | The selected path requires an adverse or Unknown connection, while another independently complete, current, verified same-complex chain serves the exact journey scope. | Keep the original chain invalid and require explicit rider selection of the verified alternative. |
+| A11Y-T5-03 | **Unrelated** | **Unrelated** | The exact machine or connection is not required by the selected origin, transfer, or destination chain. | Preserve the selected path; keep the equipment state scoped to its own connection. |
 
-| Pending catalog area | Owner | Task 3 state |
-|---|---|---|
-| Path-impact class wording | Task 5 path-impact artifacts and Content review | **Pending — no copy recorded** |
-| Reroute and verified-alternative action | Task 5 path-impact artifacts and Content review | **Pending — no copy recorded** |
-| Underway and last-decision-point warnings | Task 5 warning artifacts and Content review | **Pending — no copy recorded** |
-| Redundant-chain, required-chain, Unknown, and restoration journey copy | Task 5 warning artifacts and Content review | **Pending — no copy recorded** |
+These labels are exact governed impact names. They do not replace the required plain-language connection, path consequence, freshness, and safe action. Never expose an internal score, confidence value, or machine identifier as rider copy.
+
+### Exact warning patterns
+
+Braced fields are required evidence-backed substitutions. The braces do not appear to riders. Visible and assistive output use the same complete rendered sentence, field values, order, punctuation, scope, and certainty.
+
+| Catalog ID | Exact visible and assistive pattern | Authorized trigger | Field and consequence rules |
+|---|---|---|---|
+| A11Y-T5-04 | **{Exact connection}: {exact accepted adverse equipment state}. Your selected step-free path is unavailable; choose {first verified alternative}.** | A confirmed adverse required connection invalidates the selected path and a first verified alternative exists, including a redundant same-complex path. | The state must be exact Task 4 adverse copy. The alternative is the first eligible result from the exact tier order and remains unselected until the rider acts. |
+| A11Y-T5-05 | **Current status for {exact required connection} is Unknown. Your selected step-free path cannot be verified right now; choose {first verified alternative}.** | A required machine is exact **Unknown** and a first verified alternative exists. | Never replace **Unknown** with out, failed, broken, restored, Working, or Available. |
+| A11Y-T5-06 | **{Exact connection}: {exact accepted equipment state}. {Exact selected-path consequence} No verified alternative is available for {exact affected journey scope}. No verified step-free subway route is available right now.** | The selected route is Blocking and no safe verified alternative remains. | The equipment state is an exact Task 4 state. The selected-path consequence is either **Your selected step-free path is unavailable.** for accepted adverse evidence or **Your selected step-free path cannot be verified right now.** for Unknown. The final sentence is exact A11Y-T3-01. |
+| A11Y-T5-07 | **Restoration was reported for {exact equipment}. Your complete step-free path is still being rechecked; keep following {exact current verified safe action or warning}.** | Task 4 accepts an explicit, coherent, **Current** official restoration report for one exact machine, but fresh complete-path reevaluation has not passed. | Use only for the explicit-report branch. Do not say the machine operates, path restored, Accessible now, all elevators restored, Working, or Available. The retained action or warning must still be current and verified. |
+| A11Y-T5-08 | **Your last accessible decision point cannot be confirmed. {Exact connection}: {exact accepted equipment state}. {Exact selected-path consequence} Review {first verified safe action} now.** | The selected path is invalid and the decision point is Unknown or may already have passed, while a safe verified action exists. | Do not invent position, platform, train, reachable station, point, or deadline. If no verified action exists, use A11Y-T5-06 instead. |
+| A11Y-T5-09 | **The prior outage is no longer reported for {exact equipment}. Your complete step-free path is still being rechecked; keep following {exact current verified safe action or warning}.** | Task 4 accepts restoration through two consecutive, coherent, **Current** snapshots that omit the prior outage, are at least one authoritative minute apart, have coherent surrounding population, and both join to current reviewed inventory, but fresh complete-path reevaluation has not passed. | Use only for the qualifying two-omission branch. State accepted absence only; do not say restoration was reported, the machine operates, path restored, Accessible now, all elevators restored, Working, or Available. The retained action or warning must still be current and verified. |
+
+The exact connection field names the accepted connection role and journey scope in plain language. The exact accepted state comes only from Task 4. The first verified alternative or safe action comes only from the playbook's first eligible tier. A field may not be filled from an official suggestion, nearby proximity, equipment presence, previous journey, cached current value, estimated return, or another machine.
+
+### Approved example pattern
+
+The approved visible and assistive example is:
+
+**The street-to-mezzanine elevator at your 74 St entrance is out. Your usual step-free route is unavailable; use 61 St–Woodside instead.**
+
+This sentence is a copy pattern example, not evidence that the named elevator is out, that either station has any current accessibility state, that the alternative is verified, or that a push can be sent. Production wording must use accepted exact connection, state, path-impact, and first-verified-alternative evidence. The phrase **is out** in this example cannot replace exact Task 4 equipment state copy on an operational surface.
+
+### Required composition and priority
+
+Every warning answers:
+
+1. What accepted fact changed?
+2. Which exact part of the selected journey is affected?
+3. What can the rider safely do?
+
+Use the applicable impact label with one complete warning pattern. Also show and announce Task 4 relative freshness for the affected route-critical state. When a known last accessible decision point exists, name it in separately reviewed context before the safe action. When it is Unknown, use A11Y-T5-08 or, with no verified action, A11Y-T5-06.
+
+The warning and action appear first visually and in assistive reading order. Do not rely on color, icon, map position, animation, haptics, or tone. Do not announce lower-priority refresh content before the warning.
+
+### Reuse of exact Task 3 and Task 4 copy
+
+- Use exact **Accessibility not confirmed** only for a disclosed official alternative that lacks complete review; it remains excluded from Accessible Route Only.
+- Preserve exact **Out of service—status being rechecked** while a prior adverse outage lacks qualifying restoration.
+- Preserve exact **No verified step-free subway route is available right now.** when no eligible subway route remains.
+- Preserve exact **Unknown** without calling it an outage.
+- Machine freshness uses exact **Checked _accepted relative age_ ago** or the governed **Checked time unavailable** fallback.
+
+Acknowledgement, dismissal, time passage, navigation, foregrounding, Offline, reconnect, manual progress, lower-priority recovery, unrelated refresh, planned end, estimate, or one-machine restoration never authorizes weaker or cleared copy.
+
+### Scenario-39 handoff copy boundary
+
+Task 5 may supply the exact accessibility impact, connection, path consequence, freshness, and first verified alternative to the Commute workstream. It does not own or approve push eligibility, commute-window relevance, permission, timing, persistence thresholds, deduplication, escalation, recovery notification, delivery, or pilot behavior. None of the patterns above means that a notification was created, sent, delivered, announced, reviewed, or approved.
 
 ## Task 3 fixture traceability
 
@@ -267,6 +308,27 @@ The detailed synthetic inputs and required execution records are in the [equipme
 | EQ-12 | Qualifying restoration clears the adverse state for the exact matched machine only; no all-equipment or complete-path claim. | **Not run — Pending** |
 | EQ-13 | A healthy accepted Current non-empty complete same-scope snapshot with valid other-ID outages and no target-ID outage may use A11Y-T4-01 for that exact target only when current inventory covers it, no prior target outage awaits restoration, and no veto applies. | **Not run — Pending** |
 
+## Task 5 fixture traceability
+
+The detailed synthetic impact records IMP-01 through IMP-07 are in the [path-impact and reroute playbook](path-impact-and-reroute-playbook.md). IMP-08 through IMP-14 are in the [underway-warning state matrix](underway-warning-state-matrix.md). This catalog records the expected copy consequence without converting it into an observed result.
+
+| Fixture | Copy consequence under review | Current state |
+|---|---|---|
+| IMP-01 | Use A11Y-T5-03 for the exact unrelated connection; preserve the selected path and avoid complex-wide overstatement. | **Not run — Pending** |
+| IMP-02 | Use A11Y-T5-02 and A11Y-T5-04 with the first verified same-complex path; require explicit selection. | **Not run — Pending** |
+| IMP-03 | Use A11Y-T5-01 and the applicable verified-action or no-alternative pattern; invalidate the selected route. | **Not run — Pending** |
+| IMP-04 | Scope impact wording to the exact wheelchair or Avoid stairs path; never describe an escalator as an elevator substitute. | **Not run — Pending** |
+| IMP-05 | Copy exposes only the first verified tier-1 action initially; no later-tier or bus wording overtakes it. | **Not run — Pending** |
+| IMP-06 | Use exact A11Y-T3-03 **Accessibility not confirmed** and do not direct the rider to the official alternative. | **Not run — Pending** |
+| IMP-07 | Use verified-action wording only for the fully passing ride-past-and-return branch; no positive wording for the Unknown-edge branch. | **Not run — Pending** |
+| IMP-08 | Before departure, use A11Y-T5-01 plus the exact connection, path consequence, freshness, and first verified action. | **Not run — Pending** |
+| IMP-09 | Underway, present identical visible and assistive warning before the known last accessible decision point. | **Not run — Pending** |
+| IMP-10 | Use A11Y-T5-08 immediately; invent no rider position or decision point. | **Not run — Pending** |
+| IMP-11 | Use A11Y-T5-06 and preserve exact A11Y-T3-01; provide no inaccessible, unverified, or automatic bus action. | **Not run — Pending** |
+| IMP-12 | Use A11Y-T5-05; preserve exact **Unknown** and never call the machine out, failed, or broken. | **Not run — Pending** |
+| IMP-13 | Use A11Y-T5-07 only for accepted explicit-report evidence and A11Y-T5-09 only for accepted two-omission evidence while the complete path is rechecked; neither one-machine branch proves operation or path restoration. | **Not run — Pending** |
+| IMP-14 | Preserve warning wording across every listed lifecycle transition; reconnect warning reads first and the Commute handoff claims no push. | **Not run — Pending** |
+
 ## Ownership and downstream use
 
 | Copy decision | Authoritative owner | Catalog boundary |
@@ -275,7 +337,10 @@ The detailed synthetic inputs and required execution records are in the [equipme
 | Hard-constraint and route-state trigger | Accessible Route Only state matrix | Consume its decision; copy cannot change it. |
 | Exact equipment state phrases, freshness and estimated-return patterns, and response-state presentation | This catalog, subject to the equipment status policy and mandatory review | Own A11Y-T4-01 through A11Y-T4-05 and the two cataloged patterns; Draft approval evidence and all 13 fixture results remain **Pending**. |
 | Equipment freshness, anomaly, inventory, empty-response, and restoration trigger | Equipment status policy | Consume its exact-machine decision; copy cannot make evidence valid or clear an adverse state. |
-| Outage impact, reroute, and underway warning copy | Task 5 impact and warning artifacts plus catalog update | **Pending**; do not infer or preapprove. |
+| Exact impact labels, warning patterns, decision-point treatment, and retained warning copy | This catalog, subject to the Task 5 impact and warning artifacts and mandatory review | Own A11Y-T5-01 through A11Y-T5-09 and the approved example pattern; Draft approval and all 14 fixture results remain **Pending**. |
+| Impact class, alternative order, and first verified action | Path-impact and reroute playbook | Consume its decision; copy cannot classify an impact or verify an action. |
+| Decision point, priority, persistence, Offline, reconnect, and resolution | Underway-warning state matrix consuming Nearby/offline | Consume its state; copy cannot clear or reorder a warning. |
+| Commute push behavior | Commute workstream | Task 5 supplies an accessibility-impact handoff only; every push decision remains Pending. |
 | Release approval | Release governance | This Draft supplies no approval or observed evidence. |
 
 ## Review completion checklist
@@ -301,9 +366,21 @@ The detailed synthetic inputs and required execution records are in the [equipme
 - [ ] Every route-critical status uses **Checked _accepted relative age_ ago** from accepted authoritative time without false precision, or **Checked time unavailable** with an Unavailable and Unknown decision.
 - [ ] Estimated return is explicitly labeled with **Estimated return: _official estimate_** and never presented as a reopening countdown.
 - [ ] Task 4 visible and assistive equipment outputs carry equivalent machine scope, age, state, and certainty without color-only treatment.
-- [ ] Task 5 impact and underway-warning sections remain clearly **Pending** with no invented wording.
+- [ ] A11Y-T5-01 through A11Y-T5-03 appear only for their exact mutually exclusive path-impact decisions.
+- [ ] A11Y-T5-04 uses an accepted adverse state and the first verified alternative without auto-selection.
+- [ ] A11Y-T5-05 preserves exact **Unknown** and never calls the machine out, failed, broken, restored, Working, or Available.
+- [ ] A11Y-T5-06 preserves exact A11Y-T3-01 and supplies no inaccessible, unverified, or automatic bus action.
+- [ ] A11Y-T5-07 appears only for an accepted explicit, coherent, Current official restoration report and treats it as a continuing complete-path recheck, never machine operation or path restoration.
+- [ ] A11Y-T5-08 warns immediately without inventing rider position or a decision point.
+- [ ] A11Y-T5-09 appears only for accepted qualifying two-omission evidence, states only that the prior outage is no longer reported, and never says restoration was reported or implies machine operation or path restoration.
+- [ ] Every rendered Task 5 field comes from accepted exact connection, equipment-state, path-impact, decision-point, freshness, and first-verified-action evidence.
+- [ ] The named-station example remains an example only and never becomes evidence about either station.
+- [ ] Task 5 warnings answer what changed, which exact journey part is affected, and what the rider can safely do.
+- [ ] Warning and action appear first visually and assistively and persist under the warning matrix.
+- [ ] Scenario-39 handoff copy claims no push eligibility, creation, delivery, or approval.
 - [ ] All 16 Task 3 fixtures remain **Not run — Pending** until fixed evidence is recorded.
 - [ ] All 13 Task 4 fixtures remain **Not run — Pending** until fixed reviewed build, artifact, output, reviewer, date, and durable evidence records exist.
-- [ ] No real accessibility, equipment, outage, restoration, observed result, production cadence, threshold calibration, approval, Gate 0 passage, or release evidence is claimed.
+- [ ] All 14 Task 5 fixtures remain **Not run — Pending** until fixed reviewed product and artifact versions, outputs, reviewers, dates, durable evidence, corrections, and reruns exist.
+- [ ] No real accessibility, equipment, outage, restoration, path impact, decision point, warning, notification, observed result, production cadence, threshold calibration, approval, Gate 0 passage, or release evidence is claimed.
 
-Every unchecked required item blocks copy approval. Content review cannot approve a phrase unless Product, Accessibility, and Data Quality approve the same fixed evidence scope and every blocking scenario passes.
+Every unchecked required item blocks copy approval. Content review cannot approve Task 5 operational warning copy unless Product, Accessibility, Data Quality, and Operations approve the same fixed evidence scope and every blocking scenario passes.
