@@ -2,16 +2,18 @@
 
 | Governance field | Value |
 |---|---|
-| Source sections | Approved specification §§3.1–3.3, 31, 34; all `Product artifact map` and `Artifacts` sections in the four workstream plans; Task 0.1 brief |
+| Source sections | Approved specification §§2.4, 3.1–3.3, 14.5, 16.3–16.4, 19, 23, 31, 34; master delivery plan Task 0.2 `Artifacts` and `Steps`; all `Product artifact map` and `Artifacts` sections in the four workstream plans; Task 0.1 brief |
 | Owner | Product Governance Lead |
 | Required reviewers | Product, Accessibility, Data Quality, Content, Privacy, Operations |
 | Status | Draft |
 | Last validation date | 2026-07-30 |
 | Supersedes | None |
+| Approval evidence | Pending |
+| Scenario results | Pending |
 
 ## How to read this index
 
-This index catalogs every unique planned path from the four workstream inventories. An artifact listed as **Draft** may still be planned rather than written; the date validates its inventory metadata against the named plan, not the artifact's future content.
+This index catalogs every unique planned path from the four workstream inventories and the cross-domain rider-language contract created by master delivery Task 0.2. An artifact listed as **Draft** may still be planned rather than written; the date validates its inventory metadata against the named plan, not the artifact's future content.
 
 Reviewer codes are **P** Product, **A** Accessibility, **D** Data Quality, **C** Content, **R** Privacy, and **O** Operations. **A: Pending; S: Pending** means approval evidence and scenario-result evidence have not yet been produced. **None** in the supersession column means no superseded document is identified.
 
@@ -33,7 +35,8 @@ Source inventory: `docs/superpowers/plans/2026-07-30-arrival-truth-and-service-c
 | Artifact | Single purpose and authority boundary | Source sections | Owner | Required reviewers | State | Validated | Supersedes | Evidence |
 |---|---|---|---|---|---|---|---|---|
 | `docs/product/arrival-truth/core-arrival-contract.md` | Own the arrival-board eligibility invariant and conservative guarantee. | Arrival plan Task 1 `Artifacts`; spec §§3–4, 34 | Product Truth Lead | P, D | Draft | 2026-07-30 | None | A: Pending; S: Pending |
-| `docs/product/contracts/transit-product-glossary.md` | Own shared transit-product term definitions. | Arrival plan Task 1 `Artifacts`; spec §§2.4, 4, 34 | Product Governance Lead | P, A, D, C, R, O | Draft | 2026-07-30 | None | A: Pending; S: Pending |
+| `docs/product/contracts/transit-product-glossary.md` | Own shared transit-product term definitions. | Master delivery plan Task 0.2 `Artifacts` and `Steps`; arrival plan Task 1 `Artifacts`; spec §§2.4–5, 14.5, 16.3–16.4, 19, 23, 25.7, 34 | Product Governance Lead | P, A, D, C, R, O | Draft | 2026-07-30 | None | A: Pending; S: Pending |
+| `docs/product/contracts/rider-language-rules.md` | Own cross-domain rider-facing direction, certainty, accessibility, guidance, and route-recognition language. | Master delivery plan Task 0.2 `Artifacts` and `Steps`; spec §§2.4, 3, 14.5, 16.3–16.4, 19, 23, 34 | Content Lead | P, A, D, C, O | Draft | 2026-07-30 | None | A: Pending; S: Pending |
 | `docs/product/arrival-truth/source-role-and-precedence-matrix.md` | Own source roles and conflict precedence. | Arrival plan Task 2 `Artifacts`; spec §6 | Product Truth Lead | P, D | Draft | 2026-07-30 | None | A: Pending; S: Pending |
 | `docs/product/arrival-truth/evidence-veto-catalog.md` | Own the catalog of negative evidence that vetoes a prediction. | Arrival plan Task 2 `Artifacts`; spec §§3.2–3.3, 6, 8 | Product Truth Lead | P, D | Draft | 2026-07-30 | None | A: Pending; S: Pending |
 | `docs/product/arrival-truth/source-evidence-register.md` | Record approved source evidence, role, and review currency. | Arrival plan Task 2 `Artifacts`; spec §§6, 12 | Data Quality Lead | P, D, O | Draft | 2026-07-30 | None | A: Pending; S: Pending |
@@ -120,7 +123,7 @@ Source inventory: `docs/superpowers/plans/2026-07-30-commute-alerts-and-launch-q
 |---|---|---|---|---|---|---|---|---|
 | `docs/product/commute/commute-window-contract.md` | Own the commute-window product promise and behavior. | Commute/launch plan Task 1 `Artifacts`; spec §§25.1–25.2, 34 | Commute Product Lead | P, A, D, C, R, O | Draft | 2026-07-30 | None | A: Pending; S: Pending |
 | `docs/product/commute/commute-window-field-dictionary.md` | Own commute-window field meanings and allowed values. | Commute/launch plan Task 1 `Artifacts`; spec §25.1 | Commute Product Lead | P, A, D, C, R, O | Draft | 2026-07-30 | None | A: Pending; S: Pending |
-| `docs/product/decisions/subway-product-decisions.md` | Record cross-domain subway product decisions not owned by a narrower artifact. | Commute/launch plan Task 1 `Artifacts`; spec §34 | Product Governance Lead | P, A, D, C, R, O | Draft | 2026-07-30 | None | A: Pending; S: Pending |
+| `docs/product/decisions/subway-product-decisions.md` | Record cross-domain subway product decisions not owned by a narrower artifact. | Master delivery plan Task 0.2 `Artifacts` and `Steps`; commute/launch plan Task 1 `Artifacts`; spec §34 | Product Governance Lead | P, A, D, C, R, O | Draft | 2026-07-30 | None | A: Pending; S: Pending |
 | `docs/product/commute/notification-eligibility-contract.md` | Own disruption-only, segment-aware notification eligibility. | Commute/launch plan Task 2 `Artifacts`; spec §25.3 | Commute Product Lead | P, A, D, C, O | Draft | 2026-07-30 | None | A: Pending; S: Pending |
 | `docs/product/commute/notification-suppression-matrix.md` | Apply mandatory notification suppression outcomes. | Commute/launch plan Task 2 `Artifacts`; spec §§25.3, 31.6 | Commute Product Lead | P, A, D, C, O | Draft | 2026-07-30 | None | A: Pending; S: Pending |
 | `docs/product/commute/disruption-relevance-examples.md` | Prove whether disruptions affect a saved commute segment. | Commute/launch plan Task 2 `Artifacts`; spec §§25.3, 31.6 | Release Quality Lead | P, A, D, C, O | Draft | 2026-07-30 | None | A: Pending; S: Pending |
@@ -160,4 +163,5 @@ Source inventory: `docs/superpowers/plans/2026-07-30-commute-alerts-and-launch-q
 | Nearby station and offline experience | 16 |
 | Accessibility and platform guidance | 18 |
 | Smart commute alerts and launch quality | 33 |
-| **Total** | **98** |
+| Master delivery cross-domain language | 1 |
+| **Total** | **99** |
