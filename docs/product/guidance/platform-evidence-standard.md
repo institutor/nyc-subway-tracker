@@ -200,3 +200,32 @@ The 13 synthetic fixtures in the [companion matrix](platform-state-and-certainty
 - [ ] All real evidence, results, decisions, and approvals remain honestly Pending or absent.
 
 Every unchecked required item blocks evidence completeness. This Draft and its documentation commit are not working-product evidence.
+
+## Task 10 append-only coverage handoff and provenance
+
+Task 10 changes none of the Task 7 rules or 30-field record definitions above. It applies approved specification §§23.7, 29.4, 30.2, 32.3–32.4, and 33.2; the accessibility and platform-guidance plan `Product artifact map` and full Task 10 `Product artifacts`, `Dependencies`, `Produces for later tasks`, `Ordered steps`, and `Evidence and acceptance checks`; accepted Task 7 commit `3d39129a58b497c92d0125569edebd894c47a71d` with this file's accepted pre-append blob `5aa640263da812458a6005de6e691801d24374f5`; accepted Task 8 commit `0fcb00265a23ea859681dfef7b6edad213c674df`; and accepted Task 9 commit `8e27ae2bd3b69c3946a9aba41adf7c76f36e00a5`.
+
+The [platform guidance coverage register](platform-coverage-register.md) now owns the station-by-station eligibility row, review priority, coverage reverification, feedback taxonomy, and Release 2 evidence package. The product artifact index cites §§23.7, 29.4, and 32.3 for that register but omits applying §§30.2, 32.4, and 33.2. Product Governance Lead reconciliation remains **Pending**; this task does not edit the index or invent approval.
+
+### Required coverage handoff
+
+Before this Task 7 record can support coverage eligibility, the same exact scope must also carry:
+
+| Coverage handoff | Required binding |
+|---|---|
+| Coverage row and version | Exact immutable Task 10 row ID and version linked to this exact Task 7 record and version |
+| Objective and target scope | One exact objective, one exact exit, corner, transfer, elevator, or boarding target, and one supported zone/benefit relationship |
+| Supported and unsupported scope | Exhaustive route, direction, pattern, destination, platform, orientation, objective, target, exit, transfer, accessibility, and stopping scope |
+| Priority evidence | Exact governed category plus immutable source, window, currency, coverage, selection method, and review; priority never changes evidence sufficiency |
+| Eligibility and reverification | One current governed disposition, every trigger evaluated, no open trigger, and no inherited or bulk-enabled scope |
+| Correction link | Every immutable feedback, adverse-evidence, prior-version, correction, closure, and rerun record, or reviewed None |
+| Same-version decisions | Named Product, Accessibility, Data Quality, Content, and Operations decisions, dates, and durable evidence for the identical Task 7 and Task 10 versions |
+| Release-package scope | Fixed package version, exact inclusion or exclusion, exact scope, fixed reason, and downstream lifecycle value exactly **Pending — Task 12 not yet decided** |
+
+Coverage eligibility requires every Task 7 field above and all 38 Task 10 fields to pass. Field 38 is structurally complete when its package version, inclusion or exclusion, exact scope, and reason are fixed and its downstream lifecycle value is exactly **Pending — Task 12 not yet decided**. That exact value is the sole exception to the general unresolved-content rule; it grants no release authorization, and any other Pending or unresolved field 38 value fails. Until the governing artifacts are Approved, all five same-version decisions exist, reverification is Current, and no trigger remains open, the coverage row is ineligible and positioning is **Unavailable**. An eligible row only permits the companion matrix to begin its independent runtime evaluation while Task 12 remains Pending; it does not create **Platform confirmed**, **Verified**, **Accessible now**, current service, scenario passage, or release authorization.
+
+Feedback is never verification. A material **Wrong zone** or **Changed station geometry** report makes the exact affected coverage row **Reverification required / ineligible** and the positioning claim **Unavailable** immediately. **Unclear instruction** remains a separate content issue when geometry is unchanged, but materially misleading wording is suppressed until correction review closes it. A multi-issue report becomes linked category records; no feedback record supplies a field check, verification date, orientation, actual-track evidence, or reviewer approval.
+
+A transient reroute, platform ambiguity, or track conflict can suppress current guidance without rewriting the durable Task 7 record. Rewrite or supersede the structural record only when accepted evidence establishes a durable relationship change. Preserve unaffected rows, every prior version and decision, the trigger, adverse evidence, correction, and rerun.
+
+Current real Task 10 coverage rows, eligible rows, field checks, verification dates, named verifiers, same-version approvals, outputs, feedback records, and Release 2 inclusions are all **0**, **None**, or **Pending**. The authoritative **NO-GO — GATE 0 NOT PASSED**, public-arrival-board block, separate accessibility no-go, and Task 12 Steps 5–13 **Pending** posture remain unchanged.

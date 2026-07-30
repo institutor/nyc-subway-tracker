@@ -655,3 +655,31 @@ No fixture passes because this matrix states an expected outcome. No documentati
 - [ ] The current no-go and blocked public-board decision remain explicit.
 
 Every unchecked required item blocks review completion and Release 2 consideration.
+
+## Task 10 append-only coverage gate and provenance
+
+Task 10 changes none of the Task 7 axes, states, decision conditions, two-update rules, recovery rules, conflict copy, actual-track horizon, direction-reversal rules, or PG01–PG13 fixture definitions and statuses above. It applies approved specification §§23.7, 29.4, 30.2, 32.3–32.4, and 33.2; the accessibility and platform-guidance plan `Product artifact map` and full Task 10 `Product artifacts`, `Dependencies`, `Produces for later tasks`, `Ordered steps`, and `Evidence and acceptance checks`; accepted Task 7 commit `3d39129a58b497c92d0125569edebd894c47a71d` with this file's accepted pre-append blob `cc937eb46b0493236dd2be67589f147049dbee26`; accepted Task 8 commit `0fcb00265a23ea859681dfef7b6edad213c674df`; and accepted Task 9 commit `8e27ae2bd3b69c3946a9aba41adf7c76f36e00a5`.
+
+The [platform guidance coverage register](platform-coverage-register.md) owns the atomic 38-field coverage row, eligibility disposition, priority, reverification, feedback, and Release 2 package. Its product artifact index citation omits applying §§30.2, 32.4, and 33.2; Product Governance Lead reconciliation remains **Pending**. This task does not edit the index or invent approval.
+
+### Coverage is the first positioning gate
+
+For Task 10 and every later rollout, apply this gate before step 1 of the existing [Decision order](#decision-order):
+
+1. Does one exact **Eligible for runtime evaluation** coverage row match the current complex, constituent, route, service-pattern variation, normalized direction, destination, directional platform and orientation, objective, exact target, and Front/Middle/Back relationship?
+2. If no, positioning is **Unavailable** and the visible and assistive positioning claim is omitted. Preserve independently valid arrival and platform context.
+3. If yes, proceed through every existing arrival, hard-conflict, platform-state, positioning-certainty, horizon, direction, reroute, accessibility, and presentation rule above without weakening one.
+
+| Coverage and runtime condition | Positioning consequence | Prohibited inference |
+|---|---|---|
+| Exact eligible row and every current runtime rule passes for **Verified** | The existing matrix may produce **Verified** for the exact scope only. | Coverage eligibility itself is Verified, current, or displayed. |
+| Exact eligible row and only the existing **Expected** runtime conditions pass | The existing matrix may produce **Expected** for the exact scope only. | Eligibility upgrades Expected to Verified. |
+| Exact eligible row but runtime platform, service, orientation, stopping, path, accessibility, or conflict evidence is ambiguous, missing, stale, contradictory, or vetoed | Positioning is **Unavailable** or the affected arrival and dependent guidance are suppressed under the existing harder rule. | Use the coverage row to repair runtime truth. |
+| Current platform is **Platform confirmed** but no exact eligible coverage row exists | Preserve platform confirmation; positioning is **Unavailable** and omitted. | Infer positioning from two track updates. |
+| Editorial evidence exists but the coverage row is Pending, Rejected, under reverification, superseded, differently scoped, or absent | Positioning is **Unavailable** and omitted. | Lower-certainty zone, inherited row, summary coverage, or bulk enablement. |
+
+Coverage eligibility is not **Platform confirmed**, **Verified**, **Accessible now**, current service, a passing fixture, or release authorization. An eligible row plus runtime ambiguity omits positioning. Runtime track evidence plus no eligible row also omits positioning.
+
+A transient runtime reroute, station ambiguity, or track conflict suppresses display without changing an otherwise current structural coverage row unless accepted evidence establishes a durable geometry, path, orientation, stopping, objective, or target change. A durable change triggers exact-scope reverification. During an unresolved invalidating conflict, preserve the existing exact station context and suppression explanation, suppress the affected arrival and every dependent claim, and preserve unrelated service.
+
+All real coverage rows, eligible rows, priority complexes, visible and assistive outputs, reviewer decisions, approvals, coverage results, and release evidence remain **0**, **None**, or **Pending**. The 13 PG fixture families and every explicit branch above remain **Not run — Pending**. The authoritative **NO-GO — GATE 0 NOT PASSED**, public-arrival-board block, separate accessibility no-go, and Task 12 Steps 5–13 **Pending** posture remain unchanged.
