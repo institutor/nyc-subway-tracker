@@ -2,10 +2,13 @@
 
 ## Product, data logic, and rider experience specification
 
-**Status:** Product design  
-**Date:** July 30, 2026  
-**Launch scope:** NYC Subway first  
-**Product posture:** Trust-first station board  
+**Status:** Product design
+
+**Date:** July 30, 2026
+
+**Mode scope:** NYC Subway first
+
+**Product posture:** Trust-first station board
 
 ---
 
@@ -15,7 +18,7 @@ The product promise is:
 
 > Show riders the next trains they can actually board—not merely trains that were scheduled.
 
-The app opens to nearby subway stations and immediately shows up to three trustworthy arrivals in each useful direction. It treats a predicted arrival as a claim that must be supported by current movement, stopping-pattern, direction, service-change, and feed-health evidence. If that evidence conflicts or becomes stale, the app removes exact countdowns and explains why.
+The app opens to nearby subway stations and immediately shows up to three trustworthy arrivals in every passenger-serving direction. It treats a predicted arrival as a claim that must be supported by current movement, stopping-pattern, direction, service-change, and feed-health evidence. If that evidence conflicts or becomes stale, the app removes exact countdowns and explains why.
 
 This is not a generic map with countdowns added. It is a rider decision tool optimized for the ten seconds before entering a station:
 
@@ -51,9 +54,9 @@ The subway launches as a complete standalone experience. LIRR and Metro-North ar
 - **Occasional rider or visitor:** Needs plain-language directions, destinations, and transfer guidance rather than local shorthand.
 - **Low-connectivity rider:** Needs the trip to remain understandable after entering the subway.
 
-### 2.3 Launch scope
+### 2.3 Subway product scope
 
-Included:
+Included in this product specification:
 
 - NYC Subway routes and shuttles.
 - Nearby station boards and station details.
@@ -63,7 +66,7 @@ Included:
 - Verified front/middle/back platform guidance.
 - Smart commute windows and disruption-only notifications.
 
-Deferred:
+Deferred from the subway product:
 
 - LIRR and Metro-North.
 - Subway car-level crowding until supported by a trustworthy source.
@@ -127,6 +130,8 @@ The named place riders recognize, such as Times Sq–42 St. A complex can contai
 ### 4.2 Directional stop and platform
 
 The specific route-facing boarding location. Direction is not inferred solely from a station name. The same complex can be accessible for one line or direction and inaccessible for another.
+
+Normalize directional stop identifiers and alert-direction values into one rider-facing direction model before comparing them. Raw north/south suffixes or numeric direction codes are source conventions; they are not automatically equivalent to Uptown, Downtown, Manhattan-bound, or another rider label.
 
 ### 4.3 Train instance
 
@@ -243,7 +248,7 @@ Station- and direction-specific metadata is used when present, but it is optiona
 
 ### 6.5 Elevator and escalator status
 
-Equipment inventory establishes what each machine connects and whether it belongs to an ADA path. Current-outage data changes the availability of that exact path edge. An empty, failed, incomplete, or stale outage response is **Unknown**, not “all working.”
+Equipment inventory establishes what each machine connects and whether it belongs to an ADA path. Current-outage data changes the availability of that exact path edge. A current, accepted outage snapshot with no matching record means **No official outage reported**; a raw empty body, failed retrieval, anomalous truncation, incomplete response, or stale snapshot is **Unknown**, not “all working.”
 
 ---
 
@@ -273,15 +278,16 @@ If fewer than three arrivals qualify, show fewer than three and explain the gap:
 
 ### 7.3 Sorting
 
-Arrival ordering uses evidence-adjusted boardability:
+Admission and ordering are separate decisions:
 
-1. Live and moving.
-2. Assigned and expected to depart.
-3. Live but holding, displayed separately.
-4. Uncertain, displayed only in an expandable secondary area.
-5. Scheduled, used only in a clearly separated fallback state.
+1. Admit Live and Expected trains to the primary candidate set.
+2. Sort that set chronologically by the best current arrival estimate. For an Expected range, use its central estimate.
+3. When two arrival ranges overlap, place the Live train first.
+4. Display Holding trains separately so they do not consume a next-three slot.
+5. Display ETA-uncertain trains whose stopping pattern remains confirmed only in an expandable secondary area.
+6. Use Scheduled trains only in a clearly separated fallback state.
 
-Predicted times alone never outrank confidence.
+Do not globally rank every Live train ahead of an earlier Expected train. Confidence determines admission and labeling; time orders the admitted primary candidates.
 
 ---
 
@@ -345,12 +351,12 @@ Health is evaluated per real-time route/feed group. A failure affecting one grou
 
 These thresholds are starting product policy and must be tuned against observed route and terminal behavior:
 
-- **Current:** Feed and train evidence no older than 90 seconds.
-- **Degraded:** 91–180 seconds.
-- **Unavailable:** More than 180 seconds, repeated failed updates, invalid decoding, or timestamp regression.
+- **Current feed:** The latest complete feed snapshot is no older than 90 seconds.
+- **Degraded feed:** The latest complete snapshot is 91–180 seconds old.
+- **Unavailable feed:** The latest complete snapshot is more than 180 seconds old, repeated updates have failed, decoding is invalid, or its timestamp has regressed.
 - **Alert context current:** Alert snapshot no older than ten minutes.
 
-A stale alert snapshot does not prove normal service. Where an unresolved active change may affect a station, the board fails closed.
+Train-specific movement age is evaluated separately: a fresh feed containing an older movement timestamp produces a Holding or Uncertain train state, not a feed-wide outage. A stale alert snapshot does not prove normal service. Where an unresolved active change may affect a station, the board fails closed.
 
 ### 9.3 Bulk-drop protection
 
@@ -376,8 +382,10 @@ Confidence is expressed as rider-understandable states, not a pseudo-precise sco
 | **Live** | Healthy feed; assigned train; movement or stop progress within 90 seconds | Rounded countdown: **3 min · Live** |
 | **Expected** | Assigned physical train at origin; no movement yet; departure not materially overdue; stable across two updates | Range: **Expected in 6–8 min** |
 | **Holding** | Feed is fresh but movement or stop progress is older than 90 seconds | Freeze time: **Holding near 14 St · last moved 2 min ago** |
-| **Uncertain** | No movement beyond 180 seconds, identity churn, implausible jump, stale feed, or track conflict | Remove exact minute and de-rank: **Arrival uncertain** |
+| **Uncertain** | No movement beyond 180 seconds, identity churn, implausible ETA jump, or degraded feed while the stopping pattern remains confirmed | Remove exact minute and de-rank: **Arrival uncertain** |
 | **Scheduled** | Live feed unavailable | Clock time: **Scheduled 10:42 · live data unavailable** |
+
+The Uncertain state is permitted only when the evidence still confirms that the train serves the displayed station. Any uncertainty about the stopping pattern—including a non-terminal actual-versus-scheduled-track conflict—suppresses the entire train row. The station or direction may instead show **Track change—check station signs** without an arrival claim.
 
 ### 10.1 “Due” behavior
 
@@ -395,6 +403,8 @@ Station and terminal dwell expectations differ. A train is flagged when its dwel
 An unusual dwell alone never deletes a train.
 
 ### 10.3 Hard suppression
+
+A train missing from one otherwise healthy full snapshot immediately loses Live status and leaves the primary next-three list. Keep it only as an uncertain internal continuity candidate during the short confirmation window; do not continue its exact countdown.
 
 A train is removed from the board when:
 
@@ -427,15 +437,28 @@ Fallback begins only when the relevant real-time feed is genuinely unavailable. 
 
 ### 11.2 Fallback order
 
-1. Current supplemented GTFS.
+1. Newest validated, non-superseded supplemented GTFS.
 2. Regular GTFS when supplemented data is unavailable, expired, or outside its horizon.
 3. No arrival estimate when neither schedule is valid for the service date.
 
-### 11.3 Rider presentation
+### 11.3 Supplemented-schedule currency
+
+An edition is usable only when its service-date coverage includes the trip. For overlapping coverage, a later validated edition supersedes every earlier edition, even if the earlier file still contains the same service date.
+
+Because the MTA publishes the supplemented feed hourly, use these initial currency states:
+
+- **Current schedule:** Retrieved within the past two hours and not superseded. It may provide labeled Scheduled times during a live-feed outage.
+- **Stale reference:** Two to twenty-four hours old and still valid for the service date. It may support a reference route and visibly stale clock times, but not a normal-looking station board.
+- **Topology only:** More than twenty-four hours old, superseded, or outside its effective coverage. It may help explain the normal network but provides no near-term departure claim.
+
+If a source publication timestamp is unavailable, use the first successful retrieval time of each distinct validated edition. Retrieving identical content again does not reset its age. Currency resets only when a distinct later edition is validated. Retain version identity so a later edition cannot silently revert to an older one. A failed new edition does not erase the last validated copy; it changes that copy's currency label as it ages.
+
+### 11.4 Rider presentation
 
 - Replace countdown minutes with scheduled clock times.
 - Show a persistent **Live data unavailable** label.
-- Show the schedule's last-updated or effective date when relevant.
+- Always show the schedule's retrieval age and effective service date.
+- For a Stale reference, say **Stored schedule—service changes may differ**.
 - Continue applying known active service-change vetoes.
 - Never say **on time**.
 
@@ -450,7 +473,7 @@ The design reflects the following official materials current as of July 30, 2026
 - [MTA Developer Resources](https://www.mta.info/developers)
 - [MTA GTFS-Realtime Reference for the New York City Subway](https://www.mta.info/document/134521)
 - [MTA GTFS Alerts Feed Documentation](https://www.mta.info/document/90881)
-- [MTA Stations Affected specification](https://github.com/nymta/gtfs-documentation/blob/main/feeds/subway/gtfs-rt/stations_affected.md)
+- [MTA Stations Affected specification, pinned revision](https://github.com/nymta/gtfs-documentation/blob/9569903801492454cf813f659fcfb5be91750d25/feeds/subway/gtfs-rt/stations_affected.md)
 - [MTA service-status guidance](https://www.mta.info/developers/service-status-box)
 - [Official GTFS-Realtime best practices](https://gtfs.org/documentation/realtime/realtime-best-practices/)
 
@@ -559,9 +582,11 @@ Show the three most useful nearby station complexes. Each card includes:
 - Route bullets.
 - Accessibility state.
 - A concise, station-specific disruption flag when relevant.
-- Up to three trustworthy arrivals for each useful direction.
+- Up to three trustworthy arrivals for every directional platform currently serving passengers.
 
-Both directions are visible without a search. On small screens, the station's primary direction remains expanded and the other direction is one thumb tap away within the same card.
+At an ordinary two-direction station, both direction sections and their next three qualifying arrivals are present in the initial Nearby view without a search, direction switch, or expansion tap. Scrolling is allowed. On small screens, stack the two sections vertically and prioritize arrival values over secondary detail.
+
+At a complex with multiple operational axes, show every passenger-serving directional platform under a clear bound or destination heading. Do not force intersecting services into two misleading Uptown/Downtown buckets.
 
 ### 14.5 Direction language
 
@@ -756,13 +781,30 @@ The app selects a planning topology using the trip's departure and arrival time,
 
 The system diagram prioritizes service comprehension; a geographic view prioritizes street access. Do not pretend the schematic diagram gives accurate walking distance. Entrance selection and walking guidance use the geographic view.
 
+### 17.5 Journey planning
+
+Destination planning is secondary to the zero-tap Nearby board but remains reachable from the bottom third. A rider can choose a destination from the map, saved places, recent stations, or search.
+
+Current journeys use admitted live stopping patterns and active service changes. Future journeys use the supplemented service pattern when within its horizon and the regular schedule beyond it, with the appropriate confidence label.
+
+Rank journey options by:
+
+1. Whether every proposed train and stop is currently valid.
+2. Accessibility requirements.
+3. Disruption and transfer risk.
+4. Number of transfers.
+5. Walking distance.
+6. Expected arrival time.
+
+Present at least one materially different alternative when available. Do not rank a fragile transfer above a slightly slower direct trip merely because its optimistic arrival is earlier.
+
 ---
 
 ## 18. Offline and zero-service behavior
 
 ### 18.1 Always-available content
 
-Keep the following available without a connection:
+Keep the following stored on the device and available without a connection:
 
 - Typical weekday and late-night vector service maps.
 - Station names, routes, and structural topology.
@@ -771,7 +813,9 @@ Keep the following available without a connection:
 - Equipment inventory and descriptions.
 - Saved stations and commutes.
 - Saved trip cards.
-- The most recent valid supplemented schedule within its effective period.
+- The newest validated, non-superseded supplemented schedule, with its retrieval age and effective service dates.
+
+The rider can plan a new subway journey offline using the stored structural network and the most recent schedule valid for that service date. The result is explicitly a reference itinerary: it cannot claim current reroutes, arrivals, or equipment availability.
 
 ### 18.2 Offline trip card
 
@@ -780,7 +824,7 @@ Before the rider descends, save an active trip card containing:
 - Origin, destination, and direction.
 - Station sequence.
 - Transfer instructions.
-- Exit and platform-zone guidance.
+- Exit and platform-zone guidance when that guidance is available in the current release and verified for the trip.
 - Accessible entrance and elevator chain when relevant.
 - Last-checked service and equipment status.
 - One or two previously verified contingencies.
@@ -796,7 +840,8 @@ Display a persistent message:
 Rules:
 
 - Preserve the last coherent screen instead of blanking it.
-- Replace live countdowns with scheduled clock times where a valid schedule exists.
+- Replace live countdowns with scheduled clock times only when a Current or Stale reference schedule covers the service date.
+- If the stored schedule is more than twenty-four hours old, use it for topology only and show no departure time.
 - Label every cached live value with its last-checked time.
 - Treat route-critical stale elevator state as Unknown.
 - Label offline maps **Reference pattern—not live**.
@@ -885,12 +930,33 @@ The nominally fastest path must not outrank a more resilient path merely by savi
 
 ### 20.1 Equipment states
 
+Because the public guidance does not document a feed-level completeness marker, apply a conservative snapshot-health contract.
+
+Initial policy:
+
+- **Current:** Successfully retrieved no more than five minutes ago, structurally valid, internally consistent, and free of a material population anomaly.
+- **Degraded:** Five to fifteen minutes old or showing a suspicious population change. Route-critical equipment becomes Unknown.
+- **Unavailable:** More than fifteen minutes old, failed, malformed, missing its expected response structure, or impossible to join to the current inventory.
+- **Provisional empty:** A structurally valid zero-outage result must repeat in two accepted snapshots at least one minute apart before it can support **No official outage reported**. Until then, route-critical status is Unknown.
+
+Treat a snapshot as anomalous when more than half of previously active outage records disappear at once without explicit restoration evidence, or when more than 10% of its records are malformed, duplicated, or cannot be matched to the equipment inventory. Require the next accepted snapshot to confirm the change.
+
+Recheck the official equipment inventory at least daily. If the inventory cannot be refreshed for seven days, equipment topology required by an accessible route becomes Unknown until a current inventory is accepted.
+
+These ages are conservative product defaults, not an MTA service-level promise. Recalibrate only after measuring the official publication cadence; never lengthen the threshold silently for accessibility-dependent riders.
+
 Every relevant machine has one of four states:
 
-- **In service:** A fresh, complete outage snapshot contains no matching outage.
+- **No official outage reported:** A current accepted outage snapshot contains no matching outage, subject to the provisional-empty rule.
 - **Out of service:** A matching current outage exists.
 - **Planned outage:** An official future alert identifies the closure period.
 - **Unknown:** The status is stale, incomplete, failed, or cannot be joined reliably.
+
+Match equipment inventory and outage status only through the official equipment identifier. Similar station names or equipment descriptions are not sufficient for a status join.
+
+When data becomes stale, preserve a last-known outage as **Out of service—status being rechecked** until restoration is proven. A previously available route-critical machine becomes Unknown when its freshness expires.
+
+Show **Checked 2 min ago** on route-critical equipment. Do not shorten **No official outage reported** to an unconditional **Working**.
 
 An estimated return time is shown as an estimate, never as a reopening countdown.
 
@@ -929,7 +995,12 @@ For an underway trip, never instruct a rider to exit at an inaccessible station.
 
 ### 20.5 Restoration
 
-An outage is considered restored only when a fresh, healthy status snapshot supports that conclusion. A machine disappearing from a failed, empty, or partial response is not evidence of restoration.
+An outage is considered restored when either:
+
+- An explicit current official state reports restoration.
+- Two accepted current outage snapshots at least one minute apart omit the prior outage and the surrounding feed population remains coherent.
+
+A machine disappearing from a failed, provisional-empty, anomalously truncated, or partial response is not evidence of restoration. Until the restoration rule passes, keep the last known outage visible with **Status being rechecked**.
 
 ### 20.6 Planned-work alternatives
 
@@ -1057,9 +1128,11 @@ Separately label:
 
 - **Platform confirmed:** Fresh actual-track evidence resolves to a known platform and remains stable across two updates.
 - **Expected platform:** Only the normal or scheduled platform is known.
-- **Check station signs:** Track conflict, stale data, reroute, or station-specific ambiguity exists.
+- **Check station signs:** No conflicting actual-track record exists, but live platform confirmation is unavailable because of stale data, a resolved reroute, or station-specific platform ambiguity.
 
 Because actual track data is generally near-term, a downstream platform is not called confirmed prematurely.
+
+An explicit non-terminal actual-versus-scheduled-track conflict suppresses the train's arrival row and all positioning guidance; it is not merely downgraded to **Check station signs**.
 
 ### 23.5 Recommendation rules
 
@@ -1081,9 +1154,18 @@ A transfer instruction includes:
 - Stairs, escalators, elevators, ramps, and long passageways.
 - Conservative walking-time range.
 - Accessibility validity.
-- Connection assessment: Likely, Tight, or Uncertain.
+- Connection assessment: Likely, Tight, Uncertain, or Unlikely.
 
-Do not promise a connection from an uncertain arrival. When the transfer becomes implausible, show the next workable option rather than continuing a stale instruction.
+For a specific connecting train, compare the conservative transfer window with the verified high-end walking time:
+
+- **Likely:** Even the conservative transfer window exceeds the high-end walk by at least three minutes, or five minutes for an accessible path.
+- **Tight:** The conservative window covers the high-end walk but leaves less than the applicable buffer.
+- **Uncertain:** Plausible arrival and departure ranges straddle the required walk, or either platform is merely Expected.
+- **Unlikely:** Even the optimistic transfer window is shorter than the high-end walk.
+
+The general default buffer is three minutes. Accessible Route Only uses five minutes. Riders may choose a more conservative five-, eight-, or ten-minute buffer, but never reduce the accessible default below five minutes.
+
+Do not promise a connection from an uncertain arrival. When a transfer is Unlikely, show the next workable option rather than continuing a stale instruction.
 
 ### 23.7 Coverage rollout
 
@@ -1105,7 +1187,7 @@ Prioritize:
 
 Do not show subway car-level crowding at launch.
 
-As of July 2026, the MTA's public subway implementation materials do not document consistent real-time car-level occupancy. Historical averages, headway gaps, station crowd estimates, or rider anecdotes must not be presented as live train-car capacity.
+As of the July 30, 2026 review, no supported real-time subway car-level occupancy source was found in the [MTA developer materials](https://www.mta.info/developers) or the currently linked [subway GTFS-RT reference](https://www.mta.info/document/134521). Historical averages, headway gaps, station crowd estimates, or rider anecdotes must not be presented as live train-car capacity. Re-audit the official feeds and documentation immediately before launch; absence from the reviewed sources is not a permanent claim that such data cannot become available.
 
 ### 24.2 Future enablement gate
 
@@ -1190,21 +1272,23 @@ Ineligible examples:
 
 ### 25.4 Delay threshold
 
+The default rider tolerance is five added journey minutes. Riders may choose ten or fifteen minutes for less sensitive alerts.
+
 “Delayed” is actionable when one or more of these affect the saved segment:
 
 - Official active delay alert.
-- No verified arrival within a rider-relevant threshold.
-- Observed gap materially exceeds the current planned headway.
-- Expected journey time increases beyond the rider's configured tolerance.
+- No verified arrival within the greater of twelve minutes or twice the current planned headway.
+- Observed gap reaches at least twice the planned headway and is at least six minutes longer than planned.
+- Expected journey time increases beyond the configured five-, ten-, or fifteen-minute tolerance.
 - A normally viable transfer becomes Tight or Uncertain.
 
-A transient one-update fluctuation does not trigger a push. The condition must persist across two coherent updates unless an official suspension, closure, or bypass is already active.
+A transient one-update fluctuation does not trigger a push. An inferred delay or gap must persist for at least two coherent updates spanning 60 seconds. An official suspension, closure, bypass, short turn, or blocking accessible-path outage is eligible immediately after one current coherent snapshot confirms that it affects the commute.
 
 ### 25.5 Delivery timing
 
 - Planned change: Notify once before the preparation lead time or at the start of the commute window, whichever gives useful action time.
 - Unplanned disruption: Notify promptly after persistence or authoritative confirmation.
-- Escalation: Send a second push only when the incident becomes materially worse or the recommended alternative changes.
+- Escalation: Send a second push only when added journey time worsens by at least five more minutes, a newly affected origin/transfer/destination appears, severity increases, the active period extends at least 30 minutes farther into the commute window, or the recommended alternative changes.
 - Restoration: Silent by default; optional per commute.
 - Repeated multi-day planned work: One useful summary plus a reminder only if the rider has not seen it or the plan changes.
 
@@ -1231,7 +1315,8 @@ Group updates by incident and commute impact. Do not notify again for copy edits
 - Higher severity.
 - A newly affected station or direction.
 - A changed recommended alternative.
-- A materially extended active period.
+- At least five additional expected journey minutes.
+- An active-period extension of at least 30 minutes farther into the commute window.
 
 ---
 
@@ -1351,7 +1436,7 @@ These are product-level acceptance targets, not implementation prescriptions.
 - **Fallback labeling:** 100% of static times visibly labeled Scheduled.
 - **Countdown freeze:** 100% of detected held trains stop decrementing.
 - **Known-outage accessible routing:** Zero routes recommended through an officially known broken required elevator.
-- **Unknown-state safety:** Empty, stale, or failed equipment responses never become In service.
+- **Unknown-state safety:** Raw empty, stale, anomalous, or failed equipment responses never become No official outage reported.
 
 ### 29.2 Usefulness targets
 
@@ -1463,7 +1548,7 @@ The product is not ready until these scenarios behave correctly.
 ### 31.6 Positioning and alarms
 
 33. Direction reverses; front and back guidance reverses correctly.
-34. Track conflict appears; positioning guidance disappears and says Check station signs.
+34. A non-terminal actual-versus-scheduled-track conflict appears; the arrival row and positioning guidance disappear, while the station context says Track change—check station signs.
 35. Accessible exit differs from quickest stairs; accessible positioning takes priority.
 36. A delay occurs on an unused segment of the rider's line; no commute push is sent.
 37. A bypass affects the saved origin during the commute window; one actionable push is sent.
@@ -1475,6 +1560,18 @@ The product is not ready until these scenarios behave correctly.
 40. Trips after midnight remain attached to the correct service date.
 41. Daylight-saving clock changes do not duplicate or reorder trains.
 42. A phone clock differs from the feed clock; feed freshness uses authoritative timestamps and tolerates only a small skew.
+
+### 31.8 Currency and threshold boundaries
+
+43. A later supplemented edition overlaps an earlier one; only the later validated edition is current.
+44. A three-hour-old stored supplemented schedule is labeled Stale reference; a copy older than twenty-four hours provides topology but no departure time.
+45. The first structurally valid zero-outage equipment response is Provisional empty; a second accepted snapshot can support No official outage reported.
+46. A previously reported elevator outage disappears once but remains Out of service—status being rechecked until restoration is confirmed.
+47. Transfer-window examples on each side of the three- and five-minute buffers produce the correct Likely, Tight, Uncertain, and Unlikely states.
+48. An inferred four-minute delay sends no default push; a delay exceeding five minutes across two coherent updates does.
+49. Repeated retrieval of an unchanged supplemented edition does not reset its currency age.
+50. An Expected train arriving before later Live trains remains eligible for the chronological next-three list.
+51. A Release 1 offline trip card remains complete without exit or platform-zone guidance when those verified features are not yet available.
 
 ---
 
@@ -1500,8 +1597,8 @@ Launch:
 - Station details and localized alerts.
 - Truth hierarchy, service-change reconciliation, and ghost handling.
 - Dark-first, one-handed interface.
-- Typical weekday and late-night offline maps.
-- Saved stations.
+- Typical weekday and late-night offline maps and structural offline routing.
+- Saved stations and offline trip cards with manual progress.
 - Schedule fallback.
 - Direction-aware station accessibility and live equipment status.
 - Accessible Route Only for verified complete paths.
@@ -1510,7 +1607,6 @@ Launch:
 
 Add:
 
-- Saved trip cards with manual underground progress.
 - Smart commute windows and disruption-only notifications.
 - Destination-aware exits and transfers.
 - Verified platform positioning at priority complexes.
@@ -1627,7 +1723,7 @@ Primary official references used for factual constraints:
 - [MTA Developer Resources](https://www.mta.info/developers)
 - [MTA GTFS-Realtime Reference for the New York City Subway](https://www.mta.info/document/134521)
 - [MTA GTFS Alerts Feed Documentation](https://www.mta.info/document/90881)
-- [MTA Stations Affected specification](https://github.com/nymta/gtfs-documentation/blob/main/feeds/subway/gtfs-rt/stations_affected.md)
+- [MTA Stations Affected specification, pinned revision](https://github.com/nymta/gtfs-documentation/blob/9569903801492454cf813f659fcfb5be91750d25/feeds/subway/gtfs-rt/stations_affected.md)
 - [MTA service-status guidance](https://www.mta.info/developers/service-status-box)
 - [MTA station accessibility and elevator-status guidance](https://www.mta.info/developers/display-elevators-NYCT)
 - [MTA Subway Stations and Complexes](https://data.ny.gov/Transportation/MTA-Subway-Stations-and-Complexes/5f5g-n3cz)
@@ -1635,5 +1731,12 @@ Primary official references used for factual constraints:
 - [MTA Colors](https://data.ny.gov/Transportation/MTA-Colors/3uhz-sej2)
 - [MTA subway maps](https://www.mta.info/maps)
 - [Official GTFS-Realtime best practices](https://gtfs.org/documentation/realtime/realtime-best-practices/)
+
+Version context:
+
+- The subway GTFS-RT reference identifies itself as version 1.1 dated September 7, 2012. It remained the reference linked from the official MTA developer page when checked on July 30, 2026.
+- The MTA alerts document is dated December 2021 and remained the official linked alert reference when checked on July 30, 2026.
+- The Stations Affected link is pinned to MTA documentation repository revision `9569903801492454cf813f659fcfb5be91750d25`, the head of its main branch retrieved on July 30, 2026.
+- Open-data records and operational documentation are mutable. Revalidate feed fields, update cadence, station accessibility, colors, licensing terms, and crowding availability immediately before launch and at every source-version change.
 
 Proposed thresholds, ranking rules, notification logic, quality targets, and confidence states in this document are product policies derived from official feed semantics. They are not represented as MTA guarantees and must be calibrated with observed service behavior before public launch.
