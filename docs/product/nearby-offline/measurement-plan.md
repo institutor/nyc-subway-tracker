@@ -54,7 +54,7 @@ The [location and personal-data rules](location-and-personal-data-rules.md) cont
 An accepted aggregate record contains only:
 
 - measure identifier and fixed product and artifact versions;
-- reviewed observation window and broad service-pattern context;
+- reviewed observation window;
 - one permitted coarse segment, or a separately approved limited intersection;
 - numerator, denominator, Not observed count, Not measured count, and Inconclusive count as applicable;
 - owner-supplied decision category and later-outcome category;
@@ -217,9 +217,9 @@ At the current version, the release readout is:
 |---|---|
 | Evidence completeness and privacy | **Not run — Pending**; no fixed product version, observation cohort, aggregate lineage, or mandatory reviewer decisions |
 | Guardrails | **Not run — Pending**; no mature later-outcome, accessibility, cached-state, permission, context, or companion evidence |
-| Trusted departure decision rate | **Not measured**; no governed denominator or later-outcome cohort |
-| Usefulness targets | **Not measured**; no fixed observed timing, control, Offline-open, or nearby-card cohort |
-| Supporting measures | **Not measured / companion Pending** |
+| Trusted departure decision rate | **Not run — Pending**; no fixed product version, governed denominator, or later-outcome cohort |
+| Usefulness targets | **Not run — Pending**; no fixed observed timing, control, Offline-open, or nearby-card cohort |
+| Supporting measures | **Not run — Pending**; companion inputs are also Pending |
 | Release decision | **NO-GO — GATE 0 NOT PASSED**; public arrival boards remain blocked |
 
 ## Acceptance fixtures
