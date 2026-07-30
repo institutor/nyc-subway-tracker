@@ -400,7 +400,7 @@ Tasks 1–3 establish the product contract. Tasks 4–7 turn that contract into 
 
 **Steps**
 
-1. Run all commute-related acceptance scenarios from the specification, including scenarios 42–51.
+1. Run the commute-owned acceptance scenarios 36–39 and 48, plus scenario 42 wherever authoritative-time freshness affects the final notification decision.
 2. Add representative cases for ordinary weekday service, planned weekend reroutes, overnight service, an elevator outage affecting the selected path, a feed-health degradation, and alert recovery.
 3. Record the evidence, expected decision, actual decision, message outcome, and reviewer for every case.
 4. Conduct a silent evaluation period in which notification decisions are scored but no riders are contacted.

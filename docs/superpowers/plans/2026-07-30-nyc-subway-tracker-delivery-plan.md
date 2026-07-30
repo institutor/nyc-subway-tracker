@@ -191,7 +191,7 @@ Execute the Release 1 portions of:
 
 **Evidence set**
 
-- Complete results for specification acceptance scenarios 1–41 and 46–51 where relevant to Release 1.
+- Complete results for specification acceptance scenarios 1–32, 40–46, and 49–51.
 - Legibility and one-handed reach review across the defined compact and large screen conditions.
 - Offline cold-open, in-station loss-of-service, and reconnection walkthroughs.
 - Accessibility review covering origin, transfer, destination, directional, and partial-accessibility cases.
@@ -230,7 +230,7 @@ Complete the positioning, transfer, and commute portions of:
 
 **Evidence set**
 
-- Complete results for specification acceptance scenarios 42–51.
+- Complete results for specification acceptance scenarios 33–39, 47, and 48, plus regression evidence for all Release 1 truth and accessibility behavior those features depend on.
 - Positioning field validation for every published recommendation.
 - Silent commute-alert evaluation followed by a reversible limited pilot.
 - Notification relevance, timeliness, duplicate, and opt-out guardrails.
@@ -298,14 +298,14 @@ Before each release gate, run the following joins rather than reviewing features
 
 | Specification scenario group | Primary plan | Required supporting review |
 |---|---|---|
-| 1–8: normal and real-time service | Arrival truth | Nearby board |
-| 9–16: service changes | Arrival truth | Nearby board, commute alerts where applicable |
-| 17–24: feed degradation and ghosts | Arrival truth | Content and operations |
-| 25–30: location and offline | Nearby and offline | Privacy, content |
-| 31–41: accessibility | Accessibility and guidance | Nearby, operations |
-| 42–45: positioning and alarms | Accessibility/guidance and commute | Truth, content |
-| 46–48: time edge cases | Arrival truth | Commute, offline |
-| 49–51: currency and threshold boundaries | Arrival truth and commute | Operations |
+| 1–5: normal and real-time service | Arrival truth | Nearby board |
+| 6–12: service changes | Arrival truth | Nearby board, commute alerts where applicable |
+| 13–20: feed degradation and ghosts | Arrival truth | Content and operations |
+| 21–25: location and offline | Nearby and offline | Privacy, content |
+| 26–32: accessibility | Accessibility and guidance | Nearby, operations |
+| 33–39: positioning and alarms | Accessibility/guidance and commute | Truth, content |
+| 40–42: time edge cases | Arrival truth | Commute, offline |
+| 43–51: currency and threshold boundaries | Arrival truth, accessibility/guidance, commute, and nearby/offline according to subject | Operations |
 
 No scenario may be marked passed solely by a written assertion. Results must show the input conditions, expected rider-visible outcome, actual reviewed outcome, evidence reference, reviewer, and date.
 
