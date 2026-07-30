@@ -451,7 +451,14 @@ Section 31.8 scenarios 45–48 and 51 belong to the accessibility, transfer, com
 
 - Create: `docs/product/quality/arrival-truth-acceptance-catalog.md`
 - Create: `docs/product/quality/arrival-truth-requirement-traceability.md`
-- Update: all case artifacts created in Tasks 3–10 when a conflict or gap is found.
+- Update as required by a reviewed gap: `docs/product/arrival-truth/time-and-identity-acceptance-cases.md`
+- Update as required by a reviewed gap: `docs/product/arrival-truth/snapshot-anomaly-and-recovery-cases.md`
+- Update as required by a reviewed gap: `docs/product/arrival-truth/arrival-board-decision-table.md`
+- Update as required by a reviewed gap: `docs/product/arrival-truth/service-change-scope-cases.md`
+- Update as required by a reviewed gap: `docs/product/arrival-truth/reroute-short-turn-and-bypass-cases.md`
+- Update as required by a reviewed gap: `docs/product/arrival-truth/ghost-lifecycle-boundary-cases.md`
+- Update as required by a reviewed gap: `docs/product/arrival-truth/suppression-and-recovery-cases.md`
+- Update as required by a reviewed gap: `docs/product/arrival-truth/schedule-currency-boundary-cases.md`
 
 **Dependencies**
 

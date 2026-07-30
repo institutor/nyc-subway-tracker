@@ -45,12 +45,12 @@ This program intentionally contains no source code, framework selection, archite
 
 | Workstream | Primary rider outcome | Starts after | Release contribution |
 |---|---|---|---|
-| Arrival truth and service changes | The board excludes bypassed, stale, contradictory, and implausibly stuck trains | Approved design | Truth Gate and Release 1 |
+| Arrival truth and service changes | The board excludes bypassed, stale, contradictory, and implausibly stuck trains | Phase 0 vocabulary approval | Truth Gate and Release 1 |
 | Nearby station and offline experience | Opening the product immediately answers “what can I board here?” and remains navigable underground | Stable terminology; truth contract for live states | Release 1 |
 | Accessibility and platform guidance | Riders receive complete-path accessibility warnings and evidence-backed positioning help | Station/direction identity; truth status; map relationships | Release 1 accessibility core, Release 2 guidance |
 | Commute alerts and launch quality | Riders are warned only about relevant disruptions before entering | Truth Gate; saved-trip model; service-change impact taxonomy | Release 2 |
 
-Arrival-truth contract work and static Nearby interaction design may proceed in parallel. Live board acceptance cannot complete until the truth contract is approved. Accessibility path modeling can proceed alongside offline map design once station, entrance, platform, and direction terms are frozen. Notification pilots cannot begin before the Truth Gate passes.
+After Phase 0 vocabulary approval, arrival-truth contract work and static Nearby interaction design may proceed in parallel. Live board acceptance cannot complete until the truth contract is approved. Accessibility path modeling can proceed alongside offline map design once station, entrance, platform, and direction terms are frozen. Notification pilots cannot begin before the Truth Gate passes.
 
 ## Program artifacts
 
@@ -88,6 +88,10 @@ Each artifact must identify its source specification sections, owner, reviewers,
 - Create: `docs/product/artifact-index.md`
 - Create: `docs/product/review-and-approval-policy.md`
 
+**Dependencies**
+
+- None beyond the approved product specification.
+
 **Steps**
 
 1. List every planned artifact from the four workstream plans.
@@ -114,6 +118,10 @@ Each artifact must identify its source specification sections, owner, reviewers,
 - Create: `docs/product/contracts/transit-product-glossary.md`
 - Create: `docs/product/contracts/rider-language-rules.md`
 - Create: `docs/product/decisions/subway-product-decisions.md`
+
+**Dependencies**
+
+- Task 0.1 product artifact index and review policy.
 
 **Steps**
 
@@ -309,7 +317,12 @@ Before each release gate, run the following joins rather than reviewing features
 | 26–32: accessibility | Accessibility and guidance | Nearby, operations |
 | 33–39: positioning and alarms | Accessibility/guidance and commute | Truth, content |
 | 40–42: time edge cases | Arrival truth | Commute, offline |
-| 43–51: currency and threshold boundaries | Arrival truth, accessibility/guidance, commute, and nearby/offline according to subject | Operations |
+| 43–44: supplemented-edition currency | Arrival truth | Offline |
+| 45–46: equipment empty and restoration boundaries | Accessibility and guidance | Operations |
+| 47: transfer-buffer boundaries | Accessibility and guidance | Arrival truth |
+| 48: commute-delay boundary | Commute alerts | Arrival truth |
+| 49–50: schedule age and next-three ordering | Arrival truth | Nearby and offline |
+| 51: minimum-complete Release 1 offline trip card | Nearby and offline | Accessibility and guidance |
 
 No scenario may be marked passed solely by a written assertion. Results must show the input conditions, expected rider-visible outcome, actual reviewed outcome, evidence reference, reviewer, and date.
 

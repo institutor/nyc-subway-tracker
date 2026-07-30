@@ -4,7 +4,7 @@
 
 **Goal:** Deliver a subway-first experience that opens directly to useful nearby station boards, remains legible and operable underground with one hand, and preserves honest map, station, and trip utility when connectivity disappears.
 
-**Source of truth:** The approved specification at `docs/superpowers/specs/2026-07-30-nyc-subway-train-time-tracker-design.md`, specifically Sections 13-18, 26, 28, 29.2, 30, 31.1, 31.4, 31.7, 32.2, and the related risks in Section 33.
+**Source of truth:** The approved specification at `docs/superpowers/specs/2026-07-30-nyc-subway-train-time-tracker-design.md`, specifically Sections 13-18, 26, 28, 29.2, 30, 31.1, 31.4, 31.7, scenario 51 in 31.8, 32.2, and the related risks in Section 33.
 
 **Scope and boundaries:**
 
@@ -103,7 +103,7 @@
 - [ ] **Step 4: Define temporary location failure.** Preserve the last coherent station screen, label that location is unavailable, and give a reachable next action without replacing the view with search.
 - [ ] **Step 5: Define foreground return.** Refresh automatically without jumping the reading position or resetting station, direction, or filters.
 - [ ] **Step 6: Add scenario walkthroughs.** Document the exact first visible content, permitted rider action, and recovery path for each permission outcome.
-- [ ] **Step 7: Add cross-links.** Link the startup flow from the experience contract and record that it fulfills Sections 14.1, 14.2, 28.1, and acceptance scenarios 21-23.
+- [ ] **Step 7: Add cross-links.** Link the startup flow from the experience contract and record that it fulfills Sections 14.1, 14.2, 28.1, and acceptance scenario 22. Point scenario 21 to Task 3 entrance ranking and scenario 23 to Task 10 tunnel preservation rather than claiming them here.
 
 **Acceptance evidence:**
 
@@ -346,11 +346,13 @@
 - [ ] **Step 5: Define stale-context treatment.** Keep last-checked times attached to service and equipment information and prevent manual progress from making those conditions appear refreshed.
 - [ ] **Step 6: Review a transfer trip.** Walk through loss of service before boarding, manual advancement through stops, transfer instructions, a verified contingency, and destination arrival.
 - [ ] **Step 7: Review an accessible trip.** Confirm that the complete stored entrance and elevator chain remains readable while its operational status is clearly last-checked or Unknown.
+- [ ] **Step 8: Review the Release 1 minimum-complete variant.** Remove unavailable exit and platform-zone guidance, then confirm that the card still preserves origin, destination, direction, station sequence, transfer instructions, last-checked service and equipment status, manual progress, and available verified contingencies without an empty placeholder or implied missing requirement.
 
 **Acceptance evidence:**
 
 - The transfer-trip walkthrough retains stops, transfer instructions, verified exit guidance, and manual progress, satisfying acceptance scenario 24.
 - The accessible-trip walkthrough preserves the structural chain without claiming stale equipment is operating.
+- The Release 1 minimum-complete walkthrough satisfies acceptance scenario 51 without requiring exit or platform-zone guidance that has not yet been verified or released.
 - Manual advancement changes trip position only; it does not alter the last-checked time or convert reference information into live information.
 
 **Suggested lowercase commit:** `specify offline trip card progress`
@@ -491,7 +493,6 @@
 **Product artifacts:**
 
 - Create: `docs/product/nearby-offline/acceptance-evidence.md`
-- Update: every product artifact created in Tasks 1-13 with a link to its applicable acceptance cases
 
 **Dependencies:**
 
@@ -504,18 +505,19 @@
 - [ ] **Step 2: Add normal-service cases 1-5.** Cover moving Live, assigned Expected then Live, absent scheduled trip during healthy replacement coverage, identifier continuity without duplication, and quarantined ambiguous identity.
 - [ ] **Step 3: Add location and offline cases 21-25.** Cover entrance-based ranking, denied-location fallback, stable tunnel entry, complete saved trip with manual progress, and a weekday-to-late-night itinerary that explains the pattern change.
 - [ ] **Step 4: Add time cases 40-42.** Cover after-midnight service date, daylight-saving change without duplication or reordering, and a phone-clock difference that does not distort authoritative freshness.
-- [ ] **Step 5: Add Nearby coverage cases.** Prove zero-tap launch, three useful complexes when available, all passenger-serving directions, three qualified arrivals when available, fewer-than-three honesty, multi-axis headings, actual destinations, and preserved state on refresh.
-- [ ] **Step 6: Add underground interaction cases.** Prove dark-first launch, route recognition without color, large-text retention, assistive decision order, reduced motion, bottom-third controls, 48-by-48-point targets, one-tap direction switch, and visible gesture alternatives.
-- [ ] **Step 7: Add offline and reconnection cases.** Prove instant weekday and late-night maps, topology-only behavior after the 24-hour boundary, structurally step-free wording, stale elevator Unknown, persistent offline messaging, reconnection priority, and active-trip invalidation warning.
-- [ ] **Step 8: Add saved and privacy cases.** Prove saved-state continuity, hidden-route disruption visibility, preference reset, approximate-location utility, denied-location parity, no background-location dependency, and private-by-default saved information.
-- [ ] **Step 9: Review time ordering.** Verify that after-midnight and daylight-saving cases retain correct service order and identity while phone-clock skew does not reclassify freshness.
-- [ ] **Step 10: Close evidence gaps.** Reject any case whose visible result depends on an unlabeled cached claim, a color-only distinction, a centroid-only station rank, a hidden direction, or a network wait for stored content.
+- [ ] **Step 5: Add Release 1 conditional-guidance case 51.** Prove that an offline trip card remains complete without exit or platform-zone guidance when those verified features are unavailable, while preserving all required core trip content.
+- [ ] **Step 6: Add Nearby coverage cases.** Prove zero-tap launch, three useful complexes when available, all passenger-serving directions, three qualified arrivals when available, fewer-than-three honesty, multi-axis headings, actual destinations, and preserved state on refresh.
+- [ ] **Step 7: Add underground interaction cases.** Prove dark-first launch, route recognition without color, large-text retention, assistive decision order, reduced motion, bottom-third controls, 48-by-48-point targets, one-tap direction switch, and visible gesture alternatives.
+- [ ] **Step 8: Add offline and reconnection cases.** Prove instant weekday and late-night maps, topology-only behavior after the 24-hour boundary, structurally step-free wording, stale elevator Unknown, persistent offline messaging, reconnection priority, and active-trip invalidation warning.
+- [ ] **Step 9: Add saved and privacy cases.** Prove saved-state continuity, hidden-route disruption visibility, preference reset, approximate-location utility, denied-location parity, no background-location dependency, and private-by-default saved information.
+- [ ] **Step 10: Review time ordering.** Verify that after-midnight and daylight-saving cases retain correct service order and identity while phone-clock skew does not reclassify freshness.
+- [ ] **Step 11: Close evidence gaps.** Reject any case whose visible result depends on an unlabeled cached claim, a color-only distinction, a centroid-only station rank, a hidden direction, or a network wait for stored content.
 
 **Acceptance evidence:**
 
-- `docs/product/nearby-offline/acceptance-evidence.md` contains all 13 numbered source scenarios in Sections 31.1, 31.4, and 31.7 plus the derived Nearby, underground, offline, saved, and privacy cases named above.
+- `docs/product/nearby-offline/acceptance-evidence.md` contains all 13 numbered source scenarios in Sections 31.1, 31.4, and 31.7, scenario 51 from Section 31.8, plus the derived Nearby, underground, offline, saved, and privacy cases named above.
 - Every case identifies an expected visible result and a prohibited result.
-- Every product artifact in Tasks 1-13 links to at least one case, and every case links back to an approved source requirement.
+- The acceptance-evidence traceability table maps every product artifact in Tasks 1-13 to at least one case, and every case to an approved source requirement.
 - Any failed truth, accessibility, offline-validity, or rights case remains a release blocker; it is not converted into a softer presentation claim.
 
 **Suggested lowercase commit:** `add nearby offline acceptance evidence`

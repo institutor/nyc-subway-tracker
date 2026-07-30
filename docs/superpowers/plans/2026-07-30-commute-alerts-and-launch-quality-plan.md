@@ -9,7 +9,7 @@ Deliver recurring, disruption-only subway commute alerts that tell a rider about
 ## Source of truth
 
 - Product specification: `docs/superpowers/specs/2026-07-30-nyc-subway-train-time-tracker-design.md`
-- Controlling sections: 24–35, with particular emphasis on sections 25, 27–33, and acceptance scenarios 42–51.
+- Controlling sections: 24–35, with particular emphasis on sections 25 and 27–33; commute-owned acceptance scenarios 36–39 and 48; and cross-cutting authoritative-time scenario 42. Scenarios 43–47 and 49–51 remain upstream or cross-plan dependencies and are consumed only where they affect a commute decision.
 - Upstream truth behavior is delivered through `docs/superpowers/plans/2026-07-30-arrival-truth-and-service-changes-plan.md`.
 - Rider preferences and saved-station behavior are delivered through `docs/superpowers/plans/2026-07-30-nearby-station-and-offline-experience-plan.md`.
 
@@ -329,7 +329,6 @@ Tasks 1–3 establish the product contract. Tasks 4–7 turn that contract into 
 - Create: `docs/product/measurement/commute-alert-scorecard.md`
 - Create: `docs/product/measurement/commute-alert-event-dictionary.md`
 - Create: `docs/product/measurement/commute-alert-sampling-plan.md`
-- Update: `docs/product/measurement/product-scorecard.md`
 
 **Dependencies**
 
@@ -405,7 +404,6 @@ Tasks 1–3 establish the product contract. Tasks 4–7 turn that contract into 
 - Create: `docs/product/release/commute-alert-launch-checklist.md`
 - Create: `docs/product/release/commute-alert-scenario-results.md`
 - Create: `docs/product/release/commute-alert-go-no-go-record.md`
-- Update: `docs/product/release/subway-release-readiness.md`
 
 **Dependencies**
 

@@ -516,33 +516,37 @@ The execution work is divided into focused, reviewable product artifacts:
 
 **Product artifacts:**
 
-- Create: `docs/product/quality/accessibility-and-guidance-release-gates.md`
-- Update: `docs/product/accessibility/accessibility-acceptance-pack.md`
-- Update: `docs/product/guidance/platform-coverage-register.md`
-- Update: `docs/product/crowding/subway-crowding-enablement-gate.md`
+- Create at the Release 1 checkpoint: `docs/product/quality/accessibility-and-guidance-release-gates.md`
+- Update at the Release 1 checkpoint: `docs/product/accessibility/accessibility-acceptance-pack.md`
+- Update after Task 10 creates it: `docs/product/guidance/platform-coverage-register.md`
+- Update after Task 11 creates it: `docs/product/crowding/subway-crowding-enablement-gate.md`
 
 **Dependencies:**
 
-- Tasks 1-11 complete.
+- Release 1 checkpoint: Tasks 1-6 complete.
+- Release 2 and future checkpoints: Tasks 7-11 complete after the Release 1 decision has been recorded.
+- Commute accessibility-notification checkpoint: the commute-alert plan has completed its accessible-path notification evidence.
 - Approved specification sections 29.1, 29.3-29.4, 31.5-31.6, 32.2-32.3, and 33.1-33.3.
 
 **Produces for later work:**
 
-- A single go/no-go record for Release 1 accessibility, Release 2 guidance, later coverage expansion, and any future crowding enablement.
+- One incrementally completed gate record with an independently signable Release 1 accessibility decision, followed later by separate Release 2 guidance, coverage-expansion, and future crowding decisions.
 
 **Ordered steps:**
 
 - [ ] **Step 1: Define the Release 1 accessibility gate.** Require direction-aware station accessibility, complete-path validation, current equipment-state treatment, Accessible Route Only hard constraints, and all Task 6 cases to pass before launch.
 - [ ] **Step 2: Apply the safety targets.** Require zero routes recommended through an officially known broken required elevator and require raw empty, stale, anomalous, or failed equipment responses never to become **No official outage reported**.
-- [ ] **Step 3: Apply proactive-warning evidence.** Require a blocking accessible-path outage to warn before the commute window or last accessible decision point when authoritative timing permits, and record whether a verified alternative was offered.
-- [ ] **Step 4: Define the Release 2 positioning gate.** Require every displayed recommendation to have current route-direction orientation and a verification date; require no recommendation during an unresolved platform or reroute conflict; require direction-reversal, track-conflict, and accessible-priority cases to pass.
-- [ ] **Step 5: Apply transfer boundary evidence.** Require Likely, Tight, Uncertain, and Unlikely examples on both sides of the three- and five-minute buffers to match Task 9.
-- [ ] **Step 6: Apply rider-feedback observability.** Require platform-guidance coverage and correction review to distinguish wrong zone, unclear instruction, and changed station geometry.
-- [ ] **Step 7: Apply the coverage-expansion gate.** Permit positioning only for station-direction-objective combinations that pass the Task 7 evidence standard and appear eligible in the Task 10 register. Missing coverage results in omission, not a lower-certainty guess.
-- [ ] **Step 8: Apply the crowding gate.** Keep crowding disabled for launch. A later go decision requires every Task 11 condition and a fresh official-source audit; otherwise record no-go and retain full omission.
-- [ ] **Step 9: Review cross-risk controls.** Confirm that station-geometry gaps cause omission, accessibility gaps keep Unknown distinct from operational, reroutes onto unverified platforms are rejected, and platform claims fail closed when direction or track evidence conflicts.
-- [ ] **Step 10: Record the release decision.** For each release gate, record the reviewed artifacts, unresolved safety findings, scenario results, coverage included, exclusions, reviewer names, decision date, and go/no-go outcome. Any unresolved safety finding yields no-go for the affected feature.
-- [ ] **Step 11: Run a final terminology check.** Confirm that all product artifacts use the same complete-path definition; Current, Degraded, Unavailable, and Provisional empty snapshot states; four rider-visible equipment states; Verified, Expected, and Unavailable positioning certainty; three platform states; and four transfer likelihood states.
+- [ ] **Step 3: Apply Release 1 underway-warning evidence.** Require a blocking accessible-path outage to warn before the last accessible decision point when current authoritative timing permits, and record whether a verified alternative was offered.
+- [ ] **Step 4: Record the independent Release 1 decision.** After Tasks 1-6, record the reviewed artifacts, unresolved safety findings, scenario results, coverage included, exclusions, reviewer names, decision date, and go/no-go outcome. Do not wait for platform, transfer, crowding, or commute-window work, and do not allow those later features to waive a Release 1 safety blocker.
+- [ ] **Step 5: Define the Release 2 positioning gate.** Require every displayed recommendation to have current route-direction orientation and a verification date; require no recommendation during an unresolved platform or reroute conflict; require direction-reversal, track-conflict, and accessible-priority cases to pass.
+- [ ] **Step 6: Apply transfer boundary evidence.** Require Likely, Tight, Uncertain, and Unlikely examples on both sides of the three- and five-minute buffers to match Task 9.
+- [ ] **Step 7: Apply pre-commute accessibility-warning evidence.** With the commute-alert plan, require a blocking accessible-path outage to notify before the commute window when authoritative timing permits, name the broken required path, and offer only a verified alternative. Keep this Release 2 notification evidence separate from the Release 1 underway-warning gate.
+- [ ] **Step 8: Apply rider-feedback observability.** Require platform-guidance coverage and correction review to distinguish wrong zone, unclear instruction, and changed station geometry.
+- [ ] **Step 9: Apply the coverage-expansion gate.** Permit positioning only for station-direction-objective combinations that pass the Task 7 evidence standard and appear eligible in the Task 10 register. Missing coverage results in omission, not a lower-certainty guess.
+- [ ] **Step 10: Apply the crowding gate.** Keep crowding disabled for launch. A later go decision requires every Task 11 condition and a fresh official-source audit; otherwise record no-go and retain full omission.
+- [ ] **Step 11: Review cross-risk controls.** Confirm that station-geometry gaps cause omission, accessibility gaps keep Unknown distinct from operational, reroutes onto unverified platforms are rejected, and platform claims fail closed when direction or track evidence conflicts.
+- [ ] **Step 12: Record each later release decision.** After Tasks 7-11, separately record the Release 2 positioning/transfer decision, coverage-expansion decision, and future crowding decision with reviewed artifacts, unresolved safety findings, scenario results, coverage included, exclusions, reviewer names, decision date, and go/no-go outcome. Any unresolved safety finding yields no-go for the affected feature.
+- [ ] **Step 13: Run a final terminology check.** Confirm that all product artifacts use the same complete-path definition; Current, Degraded, Unavailable, and Provisional empty snapshot states; four rider-visible equipment states; Verified, Expected, and Unavailable positioning certainty; three platform states; and four transfer likelihood states.
 
 **Evidence and acceptance checks:**
 
@@ -556,16 +560,19 @@ The execution work is divided into focused, reviewable product artifacts:
 - Crowding remains absent unless every future gate condition passes.
 - Every go/no-go decision is supported by named artifacts and scenario outcomes.
 
-**Suggested lowercase git commit:** `set accessibility and guidance release gates`
+**Suggested lowercase git commits:**
+
+- After Step 4: `record release one accessibility gate`
+- After Step 13: `set accessibility and guidance release gates`
 
 ---
 
 ## Delivery sequence and release boundaries
 
-1. Complete Tasks 1-6 before the Release 1 accessibility go/no-go review.
+1. Complete Tasks 1-6, then open Task 12 and complete Steps 1-4 to make the independent Release 1 accessibility go/no-go decision.
 2. Complete Tasks 7-10 before enabling any Release 2 front/middle/back or specific-transfer guidance.
-3. Complete Task 11 before launch review so the no-data rule is explicit even though no crowding surface ships.
-4. Complete Task 12 after all preceding artifacts have passed their independent evidence checks.
+3. Complete Task 11 before the overall subway launch review so the no-data rule is explicit even though no crowding surface ships.
+4. Resume Task 12 after Tasks 7-11 and complete Steps 5-13 for the separate Release 2 and future-feature decisions; complete Step 7 only after its commute-plan dependency is ready.
 5. Expand positioning after Release 2 only through new verified entries in the same coverage register.
 6. Reconsider crowding only after a newly authoritative source passes the full future enablement gate.
 
