@@ -15,7 +15,7 @@
 
 This contract owns the contextual station board, compact header, bottom-third control behavior, decision-first row presentation, row disclosure, localized alert placement, rider-readable freshness, and cause-gated empty and degraded states. It does not own arrival admission or ordering, feed health, confidence classification, service-change resolution, track-conflict disposition, accessible-path truth, platform certainty, positioning guidance, saved-preference policy, visual conformance, or release approval.
 
-The approved specification's §14.6 controls station-board refresh behavior and §16 supplies normative hierarchy, route-recognition, reach, accessibility, and motion constraints. The planned `docs/product/nearby-offline/underground-visual-and-reachability-standard.md`, Task 6, owns measured 48-by-48-point targets, one-handed reach, contrast, large-text, assistive-reading, and motion evidence. This Task 5 contract reserves the required control locations and information order but cannot claim that Task 6 proof.
+The approved specification's §14.6 controls station-board refresh behavior and §16 supplies normative hierarchy, route-recognition, reach, accessibility, and motion constraints. The [underground visual and reachability standard](underground-visual-and-reachability-standard.md), Task 6, fixes the visual hierarchy, route-recognition, contrast, large-text, assistive-reading, target-size, reach, and motion criteria. This Task 5 contract consumes those criteria while retaining ownership of the defined control behavior, locations, and decision order below. The Draft standard is not measured proof; Nearby Task 14 still owns the observed rendered evidence.
 
 The [Approved artifact index](../artifact-index.md) currently registers §15 only for this artifact. Controlled governance reconciliation of the index with this contract's normative §§14.6 and 16 consumption is **Pending** before any lifecycle advancement. This Task 5 fix does not edit the index, reinterpret its approval, or advance this artifact beyond **Draft**.
 
@@ -42,7 +42,7 @@ The header remains compact enough that the next arrival decision stays above the
 | Header content | Required treatment | Evidence boundary |
 |---|---|---|
 | Station complex | Rider-recognizable complex name with constituent scope retained where it changes entrance, direction, accessibility, or disruption meaning. | A complex name does not widen one constituent's state to the whole complex. |
-| Routes | Redundant route recognition: current color plus letter or number, applicable shape, and spoken route label. | Color or a route badge alone never proves current service or satisfies Task 6 contrast and rights review. |
+| Routes | Redundant route recognition: current color plus letter or number, applicable shape, and spoken route label under the [underground visual and reachability standard](underground-visual-and-reachability-standard.md). | Color or a route badge alone never proves current service or satisfies Task 6 contrast and rights review. |
 | Practical walk and entrance | Task 3's approximate walking time, its supported precision, and the selected useful entrance for the current direction. | Never substitute centroid distance, imply false precision, or reuse an entrance across unsupported directions. |
 | Saved state | A compact **Saved** indicator when applicable. The actionable **Save station** or **Saved** control remains in the bottom third. | The header indicator does not silently create, remove, or edit a preference. |
 | Accessible path | The exact supplied path summary for the current entrance, constituent, route, direction, and destination scope. | Never reduce a complete-path decision to a station badge or infer approval from an elevator icon. |
@@ -50,7 +50,7 @@ The header remains compact enough that the next arrival decision stays above the
 
 ## Bottom-third control inventory
 
-Every core action has a visible labeled control in the bottom third and is required to provide at least a 48-by-48-point target. Gestures may accelerate the same action but never replace its visible control. This inventory fixes product location and behavior; Task 6 owns measured target-size and observed-reach proof. A bottom sheet used for directions or filters preserves visible station context at a useful intermediate height.
+Every core action has a visible labeled control in the bottom third and is required to provide at least a 48-by-48-point target. Gestures may accelerate the same action but never replace its visible control. This inventory fixes product location and behavior; the [underground visual and reachability standard](underground-visual-and-reachability-standard.md) fixes the measurement and reach criteria, while Task 14 owns observed target-size and reach evidence. A bottom sheet used for directions or filters preserves visible station context at a useful intermediate height.
 
 | Visible label | Bottom-third location | State mutation | Preserved state | Visible gesture alternative |
 |---|---|---|---|---|
@@ -87,7 +87,7 @@ Route filters use a redundant route bullet plus route text. A filter may hide ad
 
 ## Decision-first arrival rows
 
-The visible row follows the underground glance hierarchy:
+The visible row applies the exact five-level hierarchy in the [underground visual and reachability standard](underground-visual-and-reachability-standard.md) while preserving this defined Task 5 behavior:
 
 1. Supported arrival time or operational state together with the explicit visible evidence state.
 2. Redundant route identity and actual destination.
@@ -97,7 +97,9 @@ The visible row follows the underground glance hierarchy:
 
 The row always retains the actual destination. Large or urgent state information comes before secondary detail, but no compact treatment may erase evidence meaning.
 
-This visual glance order is distinct from assistive reading order. Assistive technology receives route and actual destination, supported time or operational state, evidence state, service exception, applicable platform or accessibility warning, and verified guidance in that decision sequence. Task 6 owns observed assistive-reading conformance.
+The visible evidence state qualifies level 1 rather than creating a sixth visual level, and verified relevant guidance leads other level-5 secondary detail. Neither treatment changes the standard's exact hierarchy.
+
+This visual glance order is distinct from assistive reading order. Assistive technology receives route and actual destination, supported time or operational state, evidence state, service exception, applicable platform or accessibility warning, and verified guidance in that decision sequence. The [underground visual and reachability standard](underground-visual-and-reachability-standard.md) fixes assistive-reading criteria; Task 14 owns observed conformance.
 
 | Supplied arrival disposition | Board area and time treatment | Task 5 rule |
 |---|---|---|
@@ -300,7 +302,7 @@ Every walkthrough is an expected product fixture. None is observed evidence.
 | Arrival admission, order, confidence, service change, track conflict, feed health, and their rider treatments | Linked Arrival Truth policies and contracts | Preserve exact supplied row, absence, state copy, scoped consequence, feed isolation, and recovery treatment. | **NO-GO — GATE 0 NOT PASSED**; public boards blocked |
 | Accessible-path and equipment state | Companion accessibility artifacts planned under `docs/product/accessibility/` | Preserve exact path scope and fail closed; do not infer a badge or current path. | Approval and observed evidence absent |
 | Platform and positioning guidance | Companion guidance artifacts planned under `docs/product/guidance/` | Show only verified supplied state and guidance; suppress during conflict or ambiguity. | Approval and observed evidence absent |
-| Visual, reach, target-size, contrast, large-text, assistive, and motion conformance | `docs/product/nearby-offline/underground-visual-and-reachability-standard.md`, Task 6 | Reserve bottom-third locations and decision order only. | Task 6 artifact and measured proof absent |
+| Visual, reach, target-size, contrast, large-text, assistive, and motion conformance | [Underground visual and reachability standard](underground-visual-and-reachability-standard.md), Task 6 | Consume the Draft criteria while reserving bottom-third locations and defined decision behavior here. | Draft standard exists; all six rendered/measured audits and Task 14 proof are **Not run — Pending** |
 | Foreground lifecycle and location retry | [Zero-tap startup and location-permission flow](zero-tap-startup-and-permission-flow.md), Task 2 | Present board refresh and keep global **Try location again** distinct from the state CTA. | Draft; Task 14 Not run — Pending |
 | Station-board acceptance | `docs/product/nearby-offline/acceptance-evidence.md`, Task 14 | Record fixed-version observations for every control, state, and walkthrough. | Not run — Pending |
 
@@ -308,8 +310,8 @@ Every walkthrough is an expected product fixture. None is observed evidence.
 
 | Review question | Required Draft result | Evidence needed later |
 |---|---|---|
-| Does the compact header retain all required context while arrivals remain above the fold? | Yes by contract; not visually demonstrated. | Task 6 layout review and Task 14 observation |
-| Are direction, reverse, filter, Refresh, save, and four primary destinations in the bottom third with visible gesture alternatives? | Yes by inventory; size and reach are not measured here. | Task 6 measured 48-by-48 and reach evidence |
+| Does the compact header retain all required context while arrivals remain above the fold? | Yes by contract; not visually demonstrated. | Task 6 [arm's-length and large-text audits](underground-visual-and-reachability-standard.md) and Task 14 observation |
+| Are direction, reverse, filter, Refresh, save, and four primary destinations in the bottom third with visible gesture alternatives? | Yes by inventory; size and reach are not measured here. | Task 6 [one-handed reach audit](underground-visual-and-reachability-standard.md) and Task 14 evidence |
 | Do reverse direction and positioning orientation change together without a multi-axis guess? | Yes. | OH-02 observed result |
 | Can a filter conceal an affected route's disruption? | No. | OH-03 observed result |
 | Do rows preserve upstream disposition, platform constraints, guidance limits, and track-conflict suppression? | Yes. | Arrival Truth and companion guidance evidence plus Task 14 |
