@@ -2,7 +2,7 @@
 
 | Governance field | Value |
 |---|---|
-| Source sections | Approved specification §§19.2, 21, 31.5, and 33.3; accessibility and platform-guidance plan `Product artifact map` and Task 2 `Product artifacts`, `Dependencies`, `Produces for later tasks`, `Ordered steps`, and `Evidence and acceptance checks` |
+| Source sections | Approved specification §§19.2, 21, 31.5, 32.2, and 33.3; accessibility and platform-guidance plan `Product artifact map`; Task 2 `Product artifacts`, `Dependencies`, `Produces for later tasks`, `Ordered steps`, and `Evidence and acceptance checks`; and Task 6 `Product artifacts`, `Dependencies`, `Produces for later tasks`, `Ordered steps` Step 6, and `Evidence and acceptance checks` |
 | Owner | Accessibility Product Lead |
 | Required reviewers | Product, Accessibility, Data Quality, Content, Operations |
 | Status | Draft |
@@ -25,11 +25,11 @@ The authoritative release decision remains:
 
 Public arrival boards remain blocked.
 
-Task 2 does not pass Gate 0, approve a station-direction combination, or make the Release 1 accessibility decision.
+Tasks 2 and 6 do not pass Gate 0, approve a station-direction combination, or make the Release 1 accessibility decision.
 
 ## Governance provenance reconciliation
 
-The [artifact index](../artifact-index.md) cites specification §§19.2 and 33.3 for this register. Task 2 also applies the scenario branches in §§21 and 31.5 and the plan's full Task 2 provenance, as recorded above. Product Governance Lead reconciliation of the index and this metadata is **Pending** before this artifact may advance from **Draft**. This task does not edit the index or manufacture approval.
+The [artifact index](../artifact-index.md) cites specification §§19.2 and 33.3 for this register. Task 2 also applies the scenario branches in §§21 and 31.5 and the plan's full Task 2 provenance. Task 6 adds the Release 1 evidence handoff and applies the applicable §§21 and 31.5 cases plus §32.2, as recorded above. Product Governance Lead reconciliation of the index and this broader metadata is **Pending** before this artifact may advance from **Draft**. Task 6 does not edit the index or manufacture approval.
 
 ## Atomic coverage unit
 
@@ -127,6 +127,24 @@ Any missing, Unknown, wrong-scope, unreviewed, contradictory, or stale-under-own
 
 This empty result is an honesty boundary, not a network coverage measurement. The schema, expected rules, and documentation commit establish no real accessibility, no current availability, no coverage percentage, and no approval.
 
+## Release 1 acceptance-pack handoff
+
+The [Release 1 accessibility acceptance pack](accessibility-acceptance-pack.md) consumes only an immutable complete row with all 26 fields above. The shorter Task 6 list of entrance, line, direction, complete chain, restrictions, and verification date is a minimum highlight; it never reduces the controlling schema.
+
+| Handoff key or result | Current Release 1 value | Evidence and release effect |
+|---|---|---|
+| Coverage record ID and version | **Pending — no real row exists** | No structural decision can be credited |
+| Pack case and attempt | **Pending — no real row is bound** | No case may borrow absent coverage |
+| Fixed package version | `A11Y-R1-PACK-v1` evidence-definition identifier only; fixed product/build **Pending** | Documentation identity is not execution evidence |
+| Exact constituent, line, direction, entrance, corner, platform, boarding area, path, edges, equipment membership, restrictions, and unsupported scope | **Pending** | Missing or wrong-scope content remains **Pending / ineligible** |
+| Source package, durable evidence, verification date, and verifier | **Pending** | No mutable page, expected prose, or commit supplies verification |
+| Product, Accessibility, Data Quality, Content, and Operations decisions and dates | **Pending** | Silence or assignment is not approval |
+| Structural disposition | **Pending / ineligible** | Structural disposition contains no runtime state and does not mean accessible now |
+| Attempt disposition | **Not run — Pending** | Blocks Release 1 eligibility |
+| Correction and separately linked rerun | **Pending — none recorded** | Any later correction preserves the original attempt |
+
+The handoff contains zero real rows, zero structurally accepted rows, and zero established Release 1 eligible combinations. Absence of a row is not evidence that a real combination is inaccessible. A later handoff must key each attempt to the exact coverage record ID and immutable version, `A11Y-R1-PACK-v1` case and attempt, fixed product/build, complete evidence package, and same-version five-role decisions.
+
 ## Draft completion checklist
 
 - [ ] Every real row, when later entered, contains all 26 atomic fields for one exact combination.
@@ -138,6 +156,7 @@ This empty result is an honesty boundary, not a network coverage measurement. Th
 - [ ] Structural disposition contains no current runtime status.
 - [ ] Current equipment and current service/platform decisions are consumed separately before any accessible-now consideration.
 - [ ] Every applicable abstract fixture remains linked to an actual same-version result; currently all are **Not run — Pending**.
+- [ ] Every Release 1 handoff binds an immutable 26-field coverage row to one pack case and attempt, one fixed package, durable evidence, and same-version five-role decisions.
 - [ ] No real coverage, verification, approval, Gate 0 passage, or Release 1 eligibility has been fabricated.
 
 Every unchecked item blocks row completion. Even a completed structural row remains insufficient for **accessible now** until every required current owner decision passes for that exact chain.

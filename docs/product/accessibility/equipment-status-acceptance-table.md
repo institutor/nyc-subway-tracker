@@ -2,7 +2,7 @@
 
 | Governance field | Value |
 |---|---|
-| Source sections | Approved specification §§20, 21.9, 29.1, 31.5, and 31.8; accessibility and platform-guidance plan `Product artifact map` and Task 4 `Product artifacts`, `Dependencies`, `Produces for later tasks`, `Ordered steps`, and `Evidence and acceptance checks` |
+| Source sections | Approved specification §§20, 21.9, 29.1, 31.5, 31.8, and 32.2, including Task 6's applicable §§20.1 and 20.5 boundaries; accessibility and platform-guidance plan `Product artifact map`; Task 4 `Product artifacts`, `Dependencies`, `Produces for later tasks`, `Ordered steps`, and `Evidence and acceptance checks`; and Task 6 `Product artifacts`, `Dependencies`, `Produces for later tasks`, `Ordered steps` Steps 4 and 7, and `Evidence and acceptance checks` |
 | Owner | Release Quality Lead |
 | Required reviewers | Product, Accessibility, Data Quality, Content, Operations |
 | Status | Draft |
@@ -25,11 +25,11 @@ The authoritative release decision remains:
 
 Public arrival boards remain blocked.
 
-Task 4 does not pass Gate 0 or the Release 1 accessibility gate.
+Tasks 4 and 6 do not pass Gate 0 or the Release 1 accessibility gate.
 
 ## Governance provenance reconciliation
 
-The [artifact index](../artifact-index.md) cites specification §§20, 31.5, and 31.8 for this table. Task 4 additionally applies acceptance case §21.9, accessibility target §29.1, and the plan's full Task 4 provenance, as recorded above. Product Governance Lead reconciliation of the narrower index citation and this metadata is **Pending** before this artifact may advance from **Draft**. This task does not edit the index or treat the mismatch as approved.
+The [artifact index](../artifact-index.md) cites specification §§20, 31.5, and 31.8 for this table. Task 4 additionally applies acceptance case §21.9, accessibility target §29.1, and the plan's full Task 4 provenance. Task 6 adds the first-empty, confirmed-empty, one-omission, restoration, failed-response, cross-artifact, and Release 1 handoff controls and applies §32.2, as recorded above. Product Governance Lead reconciliation of the narrower index citation and this broader metadata is **Pending** before this artifact may advance from **Draft**. Task 6 does not edit the index or treat the mismatch as approved.
 
 ## Fixture execution contract
 
@@ -337,6 +337,27 @@ For every detailed record:
 | Correction / rerun | **None recorded / Not run** |
 | Evidence status | **Not run — Pending** |
 
+## Release 1 acceptance-pack handoff
+
+The [Release 1 accessibility acceptance pack](accessibility-acceptance-pack.md) references, but does not rewrite, renumber, execute, or approve EQ-01 through EQ-13. Every handoff binds the exact fixture and version to one pack control or source case, one fixed product/build and artifact package, actual visible and assistive output, durable evidence, five-role review, correction, and a separately linked rerun.
+
+| EQ fixture branch | Pack control and initial attempt | Required Release 1 result | Current actual/evidence/review/correction/rerun |
+|---|---|---|---|
+| EQ-05 / `EQ-05-v1` — first accepted coherent Current globally zero-outage response | `A11Y-EQ-C05` / `A11Y-EQ-C05-A01`; also A11Y-31-30 | Internal **Provisional empty**; route-critical **Unknown**; never **No official outage reported** | **Pending / Pending / Pending / Pending / Pending** |
+| EQ-06 / `EQ-06-v1` — second accepted coherent Current globally zero-outage response | `A11Y-EQ-C06` / `A11Y-EQ-C06-A01` | 59 seconds cannot confirm; at least one authoritative minute may support **No official outage reported** only when every other gate passes | **Pending / Pending / Pending / Pending / Pending** |
+| EQ-11 / `EQ-11-v1` — one accepted omission of a prior outage | `A11Y-EQ-C11` / `A11Y-EQ-C11-A01` | Preserve exact **Out of service—status being rechecked** for the exact machine | **Pending / Pending / Pending / Pending / Pending** |
+| EQ-12 / `EQ-12-v1` — explicit Current restoration or two qualifying omissions | `A11Y-EQ-C12` / `A11Y-EQ-C12-A01` | Clear the adverse state for the exact matched machine only; use the source-matched Task 5 branch and begin full-path reevaluation | **Pending / Pending / Pending / Pending / Pending** |
+| EQ-13 / `EQ-13-v1` — healthy Current non-empty complete same-scope target absence | `A11Y-EQ-C13` / `A11Y-EQ-C13-A01` | May support **No official outage reported** for the exact target only with current inventory, valid other-ID population, no prior target outage awaiting restoration, and no veto | **Pending / Pending / Pending / Pending / Pending** |
+| EQ-02/03/04 stale, EQ-07/08 anomalous, and EQ-10 inventory-cutoff branches | `A11Y-EQ-NEG` / `A11Y-EQ-NEG-A01`; applicable A11Y-21-09 and A11Y-31-30 attempts | Route-critical **Unknown**, except preserve the exact prior adverse recheck state when applicable; no positive equipment or route claim | **Pending / Pending / Pending / Pending / Pending** |
+
+For every row, fixed product/build and Task 6 artifact revisions are **Pending**, no actual visible or assistive output has been observed, no durable evidence exists, all Product, Accessibility, Data Quality, Content, and Operations decisions are Pending, and no correction or rerun is recorded.
+
+Pack-local control `A11Y-EQ-FR-01-A01` separately exercises a failed, malformed, missing-structure, incomplete, unmatched, or unjoinable response. It is **Not run — Pending**, is not a fourteenth EQ fixture, and cannot invent or renumber a Task 4 result. Its route-critical expected state is **Unknown** or the exact preserved prior adverse recheck state; **No official outage reported** is prohibited.
+
+The raw-empty safety rule means **raw or unconfirmed empty**, stale, anomalous, failed, malformed, structurally incomplete, unmatched, or unjoinable evidence never produces **No official outage reported**. It does not erase the confirmed-empty EQ-06 or healthy non-empty exact-target EQ-13 positive branches.
+
+Machine-level restoration is never route acceptance. Task 5 IMP-13 keeps the current path warning and verified safe action active until a fresh complete-path reevaluation passes every required exact edge and scope, or the rider explicitly selects a still-passing governed replacement.
+
 ## Acceptance review checklist
 
 - [ ] Every run binds a fixed reviewed product version and immutable artifact revisions.
@@ -350,6 +371,10 @@ For every detailed record:
 - [ ] Product, Accessibility, Data Quality, Content, and Operations reviewers and dates are recorded.
 - [ ] Durable evidence is immutable and traceable to the fixed run.
 - [ ] Every failure keeps its original evidence and links a correction and a new rerun.
+- [ ] Every Release 1 handoff binds the exact EQ fixture/version and pack control/attempt to one fixed product/build and artifact package, actual visible and assistive output, durable evidence, same-version five-role decisions, correction, and separately linked rerun.
+- [ ] Raw/unconfirmed empty and all failed, malformed, incomplete, unmatched, or unjoinable branches remain negative without erasing EQ-06 or EQ-13.
+- [ ] Pack-local failed-response control A11Y-EQ-FR-01 remains separate from, and does not renumber or fabricate, EQ-01 through EQ-13.
+- [ ] IMP-13 preserves the path warning until fresh complete-path acceptance or explicit selection of a governed verified replacement.
 - [ ] No fixture advances from **Not run — Pending** without the complete record.
 - [ ] No fixture result is treated as Gate 0 passage, Release 1 accessibility approval, threshold calibration, or production evidence.
 
