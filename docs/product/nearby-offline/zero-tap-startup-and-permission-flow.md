@@ -17,7 +17,7 @@ This flow owns the first visible Nearby context, the timing and explanation of t
 
 The [nearby and offline experience contract](experience-contract.md) owns persistent destinations and context continuity. Shared concepts retain their meanings in the [approved transit product glossary](../contracts/transit-product-glossary.md), and all public wording remains subject to the [approved rider language rules](../contracts/rider-language-rules.md). The [approved product specification](../../superpowers/specs/2026-07-30-nyc-subway-train-time-tracker-design.md) controls every conflict.
 
-This artifact is **Draft**. Its lifecycle outcomes, timing, scenario evidence, Gate 0 truth dependencies, and Release 1 disposition remain **Pending**. It makes no approval, launch, measured-performance, or scenario-passage claim.
+This artifact is **Draft**. Its lifecycle outcomes, timing, scenario evidence, and Release 1 disposition remain **Pending**. The authoritative [Gate 0 exit record](../quality/gate-0-exit-record.md) is **NO-GO — GATE 0 NOT PASSED**, so public arrival boards remain blocked. This artifact makes no approval, launch, measured-performance, or scenario-passage claim.
 
 ## Zero-tap contract
 
@@ -215,10 +215,10 @@ Planned paths remain code text until those artifacts exist.
 |---|---|---|---|
 | Persistent destination and restored context | [Nearby and offline experience contract](experience-contract.md), Task 1 | Render the owned context and invoke restore before refresh. | Draft; evidence Pending |
 | Scenario 21 useful-entrance ranking | `docs/product/nearby-offline/station-ranking-and-entrance-rules.md`, Task 3 | Supply only the granted location precision and preserve the result in place. | Not claimed by Task 2; Pending |
-| Arrival admission and fewer-than-three ordering | [Arrival admission and ordering contract](../arrival-truth/arrival-admission-and-ordering-contract.md) | Consume the supplied order without admission, promotion, reordering, or backfill. | Gate 0 approval and scenario evidence Pending |
-| Feed degradation and recovery | [Route-level feed health policy](../arrival-truth/feed-health-policy.md) | Apply frozen, unavailable, or current treatment inside the shell. | Gate 0 approval and scenario evidence Pending |
-| Service-change impact and veto | [Service-change impact and resolution policy](../arrival-truth/service-change-impact-and-resolution-policy.md) | Preserve supplied scope and veto; location cannot clear it. | Gate 0 approval and scenario evidence Pending |
-| Confidence and fallback | [Arrival confidence and ghost policy](../arrival-truth/arrival-confidence-and-ghost-policy.md) and [schedule fallback and currency policy](../arrival-truth/schedule-fallback-and-currency-policy.md) | Preserve state, precision, and separation; never create cached Live. | Gate 0 approval and scenario evidence Pending |
+| Arrival admission and fewer-than-three ordering | [Arrival admission and ordering contract](../arrival-truth/arrival-admission-and-ordering-contract.md) | Consume the supplied order without admission, promotion, reordering, or backfill. | [Gate 0: **NO-GO — not passed**](../quality/gate-0-exit-record.md); public boards blocked; scenario evidence Pending |
+| Feed degradation and recovery | [Route-level feed health policy](../arrival-truth/feed-health-policy.md) | Apply frozen, unavailable, or current treatment inside the shell. | [Gate 0: **NO-GO — not passed**](../quality/gate-0-exit-record.md); public boards blocked; scenario evidence Pending |
+| Service-change impact and veto | [Service-change impact and resolution policy](../arrival-truth/service-change-impact-and-resolution-policy.md) | Preserve supplied scope and veto; location cannot clear it. | [Gate 0: **NO-GO — not passed**](../quality/gate-0-exit-record.md); public boards blocked; scenario evidence Pending |
+| Confidence and fallback | [Arrival confidence and ghost policy](../arrival-truth/arrival-confidence-and-ghost-policy.md) and [schedule fallback and currency policy](../arrival-truth/schedule-fallback-and-currency-policy.md) | Preserve state, precision, and separation; never create cached Live. | [Gate 0: **NO-GO — not passed**](../quality/gate-0-exit-record.md); public boards blocked; scenario evidence Pending |
 | Station-board refresh controls and freshness | `docs/product/nearby-offline/station-board-and-controls-contract.md`, Task 5 | Own only the lifecycle trigger and context-restoration invocation. | Task 5 and Task 14 evidence Pending |
 | Scenario 22 denied-location fallback | This artifact, Task 2 | Own last-used, saved, and bottom-picker precedence without a blank screen. | Task 14 and Release 1 evidence Pending |
 | Scenario 23 tunnel preservation | `docs/product/nearby-offline/offline-degraded-and-reconnection-states.md`, Task 10 | Do not claim tunnel or offline acceptance here. | Not claimed by Task 2; Pending |
@@ -239,4 +239,4 @@ Planned paths remain code text until those artifacts exist.
 | Does temporary location failure preserve a station screen without claiming old location is current? | Yes; it uses the required sentence and bottom actions. | Task 14 temporary-failure case |
 | Does foreground return restore context before refresh without another prompt or jump? | Yes. | Task 14 foreground-return case |
 | Can location admit, reorder, or strengthen a train or accessibility decision? | No. | Upstream evidence plus Task 14 integration cases |
-| Are privacy, Gate 0, metrics, evidence, and Release 1 claims still Pending? | Yes. | Required owner reviews and observed evidence |
+| Does the artifact preserve the current Gate 0 decision while keeping privacy, metrics, scenario evidence, and Release 1 claims Pending? | Yes. Gate 0 is **NO-GO — not passed** and public boards are blocked; the other listed claims remain Pending. | A later signed Gate 0 record plus required owner reviews and observed evidence |
