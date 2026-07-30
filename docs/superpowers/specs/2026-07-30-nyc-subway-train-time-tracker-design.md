@@ -962,3 +962,678 @@ Official MTA station data distinguishes fully and partially accessible stations 
 - [MTA Subway Entrances and Exits data](https://data.ny.gov/Transportation/MTA-Subway-Entrances-and-Exits-2024-Map/68hr-j2j7)
 - [MTA accessible-stations guidance](https://www.mta.info/accessibility/stations)
 - [MTA subway maps](https://www.mta.info/maps)
+
+---
+
+## 22. Service-change impact taxonomy
+
+Alert categories are descriptive inputs, not sufficient behavior by themselves. The product resolves the actual rider consequence.
+
+| Impact | Arrival-board behavior | Routing behavior | Notification eligibility |
+|---|---|---|---|
+| Delay or slow speeds | Keep valid trains; adjust confidence and show localized explanation | Increase uncertainty and compare alternatives | Notify only when it materially affects the saved trip |
+| Train holding | Freeze that train's countdown | Preserve route unless connection becomes implausible | Notify only for a significant commute impact |
+| Express running local | Add only stops present in the live pattern | Recalculate journey and travel time | Notify when it changes the saved segment materially |
+| Local running express | Suppress skipped local stops | Reroute around skipped origin, transfer, or destination | Yes |
+| Reroute via another line | Display actual stop pattern and **Via…** label | Route over the operational pattern | Yes |
+| Short turn or terminal change | Use actual destination; suppress downstream stops | Recalculate transfer or destination path | Yes when the commute extends beyond the new terminal |
+| Partial suspension | Remove unavailable segment and affected arrivals | Find a verified alternative | Yes |
+| Full suspension | Remove route as a valid option | Find a verified alternative | Yes |
+| Station closure | Remove boarding/alighting at that station | Use another station or route | Yes when relevant |
+| Entrance closure | Change entrance guidance; keep service if usable | Recalculate street approach | Only when it affects a saved or accessible entrance |
+| Elevator outage | Keep train arrivals; invalidate only affected accessible paths | Recalculate accessible journey | Yes for Accessible Route Only commuters |
+| Escalator outage | Keep arrivals; affect Avoid Stairs preference | Recalculate only when required by preference | Preference-dependent |
+| Platform or track change | Show Confirmed, Expected, or Check station signs | Suppress positioning when orientation is uncertain | Yes only when operationally consequential |
+
+### 22.1 Alert resolution rules
+
+- Use active periods and early-display guidance to decide when a planned change becomes relevant.
+- Treat route, station, and direction values within one impact record as jointly scoped.
+- Do not infer that every station on a route is affected because one station-specific record exists.
+- Prefer station- and direction-specific rider copy over line-wide status.
+- Interpret free-text alert categories as changeable labels, not permanent machine meanings.
+- Preserve the original official alert text in details even when the product provides a shorter plain-language summary.
+- Never let an alert revive a stale or suppressed train. Alerts explain operational context; movement evidence establishes a live arrival.
+
+### 22.2 Unresolved alerts
+
+High-impact alerts that cannot be mapped safely enter an exception state:
+
+- Show the original service-change message.
+- Hide only the route, direction, or segment that is materially unresolved.
+- Do not suppress unrelated routes at a shared complex.
+- Record the ambiguity for quality review.
+- Permit an authorized operational correction to suppress or annotate service, but never to invent a live train.
+
+---
+
+## 23. Platform positioning and transfer guidance
+
+### 23.1 Rider outcome
+
+When a rider selects a destination or saved journey, the app advises:
+
+- **Front**
+- **Middle**
+- **Back**
+
+The recommendation optimizes either:
+
+- Fastest destination exit.
+- Fastest transfer.
+- Verified accessible boarding and exit path.
+
+The rider can switch the objective. Accessible Route Only always overrides a shorter stair-based exit.
+
+### 23.2 Required evidence
+
+Positioning guidance depends on verified:
+
+- Platform orientation.
+- Train direction and destination.
+- Front/rear ordering in that direction.
+- Platform zones.
+- Exit and transfer-passage locations.
+- Relevant street corners.
+- Accessible elevator or boarding-area locations.
+- Known platform variations by route or service pattern.
+- Verification date.
+
+Subway entrance coordinates alone are insufficient. They identify street access but not where a staircase, passage, or elevator meets the platform.
+
+### 23.3 Guidance certainty
+
+Use three levels:
+
+- **Verified:** Direction, platform, and platform-zone relationship are current and field-checked. Show **Front best for transfer to the L**.
+- **Expected:** Static platform is known, but live platform is not confirmed. Show **Middle usually best for 14 St exit**.
+- **Unavailable:** Platform, direction, reroute, consist orientation, or geometry is uncertain. Show no positioning claim.
+
+The UI does not expose a numeric confidence score.
+
+### 23.4 Platform state
+
+Separately label:
+
+- **Platform confirmed:** Fresh actual-track evidence resolves to a known platform and remains stable across two updates.
+- **Expected platform:** Only the normal or scheduled platform is known.
+- **Check station signs:** Track conflict, stale data, reroute, or station-specific ambiguity exists.
+
+Because actual track data is generally near-term, a downstream platform is not called confirmed prematurely.
+
+### 23.5 Recommendation rules
+
+- Use front/middle/back thirds as the default level of precision.
+- Use car numbers only if train length, car ordering, stopping position, and orientation are all verified for that train.
+- Never convert an unverified platform zone into a precise car number.
+- Suppress guidance when a reroute changes platform orientation or transfer path.
+- Recalculate after direction reversal.
+- Explain the benefit: **Front—shortest walk to the Lexington Ave exit**.
+- Show a secondary accessible recommendation when it differs: **Middle—nearest elevator**.
+
+### 23.6 Transfer guidance
+
+A transfer instruction includes:
+
+- Arrival platform and confidence.
+- Front/middle/back position.
+- Plain-language walking path.
+- Stairs, escalators, elevators, ramps, and long passageways.
+- Conservative walking-time range.
+- Accessibility validity.
+- Connection assessment: Likely, Tight, or Uncertain.
+
+Do not promise a connection from an uncertain arrival. When the transfer becomes implausible, show the next workable option rather than continuing a stale instruction.
+
+### 23.7 Coverage rollout
+
+Positioning appears station by station as data is verified. Stations without trusted geometry simply omit it. Coverage quantity must never lower the evidence standard.
+
+Prioritize:
+
+1. Highest-transfer-volume complexes.
+2. Terminals and airport connections.
+3. Complexes with long passages or asymmetric exits.
+4. Accessible stations where elevator placement materially changes the best boarding zone.
+5. Remaining stations.
+
+---
+
+## 24. Car crowding
+
+### 24.1 Subway launch decision
+
+Do not show subway car-level crowding at launch.
+
+As of July 2026, the MTA's public subway implementation materials do not document consistent real-time car-level occupancy. Historical averages, headway gaps, station crowd estimates, or rider anecdotes must not be presented as live train-car capacity.
+
+### 24.2 Future enablement gate
+
+Enable crowding for a train only when an authoritative source provides:
+
+- A reliable match to the displayed train instance.
+- Per-car or per-carriage occupancy.
+- Correct front-to-back orientation.
+- Known train length and car order.
+- Current data, initially no older than 90 seconds.
+- Sufficient fleet and route coverage to avoid misleading gaps.
+
+If any gate fails, omit the crowding module rather than filling it with Unknown cars.
+
+### 24.3 Future rider presentation
+
+Use text, icon, and color together:
+
+- **Seats likely** — green.
+- **Room to stand** — amber.
+- **Very crowded** — red.
+
+Avoid precise passenger counts unless the source supports that precision. State the last update time and make clear that conditions can change at each stop.
+
+Crowding guidance never overrides an accessible boarding area or safe platform advice.
+
+---
+
+## 25. Smart commute windows
+
+### 25.1 Setup
+
+A commute contains:
+
+- Origin station and preferred entrance.
+- Destination station and preferred exit.
+- Travel days.
+- Start and end of the commute window.
+- Preferred and acceptable alternate routes.
+- Usual direction.
+- Optional transfer preference.
+- How long before the window to evaluate conditions.
+- Accessible Route Only or Avoid Stairs preference.
+
+The app can suggest a commute after repeated station use, but it never creates notifications without explicit confirmation.
+
+### 25.2 Notification promise
+
+Default behavior:
+
+> Stay silent unless a delay, service change, station issue, or required accessibility outage materially affects the saved journey.
+
+There is no routine all-clear notification.
+
+### 25.3 Trigger eligibility
+
+A push is eligible only when all are true:
+
+1. The impact overlaps the commute window or the chosen preparation lead time.
+2. It affects the actual origin-to-destination segment, transfer, entrance, exit, or required accessible path.
+3. It changes a rider decision: leave earlier, use another entrance, take another line, use another station, or avoid the trip.
+4. The evidence is current enough for the claim.
+5. An equivalent notification has not already been delivered for the same incident state.
+
+Eligible examples:
+
+- Primary line suspended on the used segment.
+- Trains bypass the origin, transfer, or destination.
+- A reroute removes the normal transfer.
+- A short turn ends before the destination.
+- A material delay or headway gap affects the window.
+- The origin, destination, or transfer station closes.
+- A required elevator becomes unavailable for an accessible commute.
+
+Ineligible examples:
+
+- A delay on a distant, unused segment of the same line.
+- An alert outside the commute window.
+- A minor staircase repair unrelated to the chosen entrance.
+- The absence of active alerts.
+- A generic data outage, unless the rider explicitly opts into data-health notices.
+
+### 25.4 Delay threshold
+
+“Delayed” is actionable when one or more of these affect the saved segment:
+
+- Official active delay alert.
+- No verified arrival within a rider-relevant threshold.
+- Observed gap materially exceeds the current planned headway.
+- Expected journey time increases beyond the rider's configured tolerance.
+- A normally viable transfer becomes Tight or Uncertain.
+
+A transient one-update fluctuation does not trigger a push. The condition must persist across two coherent updates unless an official suspension, closure, or bypass is already active.
+
+### 25.5 Delivery timing
+
+- Planned change: Notify once before the preparation lead time or at the start of the commute window, whichever gives useful action time.
+- Unplanned disruption: Notify promptly after persistence or authoritative confirmation.
+- Escalation: Send a second push only when the incident becomes materially worse or the recommended alternative changes.
+- Restoration: Silent by default; optional per commute.
+- Repeated multi-day planned work: One useful summary plus a reminder only if the rider has not seen it or the plan changes.
+
+### 25.6 Notification content
+
+Every push answers:
+
+1. What changed?
+2. Which part of my commute is affected?
+3. What should I do?
+
+Example:
+
+> Downtown F trains are bypassing 14 St during your 8–9 AM commute. Use the A/C from W 4 St or leave from 23 St. Allow about 12 extra minutes.
+
+An accessibility alert names the broken path:
+
+> The street-to-mezzanine elevator at your 74 St entrance is out. Your usual step-free route is unavailable; use 61 St–Woodside instead.
+
+### 25.7 Deduplication
+
+Group updates by incident and commute impact. Do not notify again for copy edits, renewed timestamps, or equivalent alert records. A new notification requires:
+
+- Higher severity.
+- A newly affected station or direction.
+- A changed recommended alternative.
+- A materially extended active period.
+
+---
+
+## 26. Saved stations and personalization
+
+### 26.1 Saved station card
+
+A saved station remembers:
+
+- Preferred entrance.
+- Preferred direction.
+- Relevant route filters.
+- Accessible-route-only state.
+- Common destination for platform guidance.
+
+Opening a saved station still refreshes all routes and shows hidden-route disruption indicators when needed.
+
+### 26.2 Contextual ordering
+
+Nearby results may use time-of-day and explicitly saved preferences to order station cards, but distance and current usability remain visible. The app must not silently hide a geographically closer workable station because of a learned habit.
+
+### 26.3 Reset and control
+
+Riders can inspect, edit, pause, or delete every commute and saved preference. Personalization never changes official arrival or disruption truth.
+
+---
+
+## 27. Data quality operations
+
+### 27.1 Provenance
+
+Every rider-facing claim retains:
+
+- Source type.
+- Source timestamp.
+- Effective period.
+- Route, station, direction, trip, or equipment scope.
+- Transformation into the displayed state.
+- Reason for suppression when applicable.
+
+The rider sees plain-language freshness and state. Detailed provenance remains available for support and quality review.
+
+### 27.2 Quarantine
+
+Do not let suspect records influence primary boards:
+
+- Malformed timestamps.
+- Future timestamps beyond a small clock-skew allowance.
+- Stop-order regression.
+- Duplicated train identities.
+- Impossible direction changes.
+- Track conflicts.
+- Suspiciously empty snapshots.
+- Alert records with contradictory scope.
+
+Quarantine is reversible after coherent evidence returns.
+
+### 27.3 Correction policy
+
+Operational corrections may:
+
+- Suppress a known bad arrival.
+- Clarify an alert's affected segment.
+- Mark platform guidance unavailable.
+- Correct station geometry or accessibility relationships.
+
+They may not fabricate movement, add an unsupported arrival, or declare an elevator operational without authoritative evidence.
+
+### 27.4 Audit and calibration
+
+Retain enough non-personal operational history to answer:
+
+- Why was this train shown or hidden?
+- Which source caused the state?
+- Did the train actually progress to the target stop in later snapshots?
+- How long did a Holding state persist?
+- Did an alert mapping suppress too much or too little?
+- Did an elevator restoration state arrive from a complete healthy snapshot?
+
+Use these outcomes to tune thresholds by route, station, direction, terminal, and operating period.
+
+---
+
+## 28. Privacy and permissions
+
+### 28.1 Location
+
+- Use location to rank nearby entrances and stations.
+- Do not require continuous background location for core arrivals.
+- Do not retain a movement history by default.
+- Allow approximate location.
+- Make last-used and saved-station fallbacks fully functional.
+
+### 28.2 Notifications
+
+- Ask for notification permission only when the rider saves a commute or explicitly enables an alert.
+- Explain that the default is disruption-only.
+- Allow per-commute pause, schedule, severity, restoration, and accessibility controls.
+
+### 28.3 Personal data
+
+- Saved stations and commutes are private by default.
+- Collect only the minimum diagnostic information needed to measure feed and product quality.
+- Keep operational train-quality analysis separate from rider identity.
+- Offer clear deletion and reset controls.
+
+---
+
+## 29. Reliability and experience targets
+
+These are product-level acceptance targets, not implementation prescriptions.
+
+### 29.1 Trust targets
+
+- **False bypass arrival:** Zero known cases released to riders.
+- **Live-label freshness compliance:** At least 99.9% of Live labels meet the freshness policy.
+- **Fallback labeling:** 100% of static times visibly labeled Scheduled.
+- **Countdown freeze:** 100% of detected held trains stop decrementing.
+- **Known-outage accessible routing:** Zero routes recommended through an officially known broken required elevator.
+- **Unknown-state safety:** Empty, stale, or failed equipment responses never become In service.
+
+### 29.2 Usefulness targets
+
+- Last-known station shell visible within 0.5 seconds on a typical warm launch.
+- Current nearby stations and first trustworthy arrivals visible within two seconds at median and four seconds at the 95th percentile when feeds and location are healthy.
+- Direction switch, route filter, and station change respond immediately from the rider's perspective.
+- Offline map and saved trip open without network waiting.
+- At least three useful nearby station cards for riders within walking range, when geography permits.
+
+### 29.3 Notification targets
+
+- At least 85% of disruption pushes judged actionable through lightweight feedback.
+- Fewer than one non-actionable commute push per active commuter per month.
+- No duplicate push for equivalent copies of one incident.
+- Blocking accessible-path outages notified before the commute window when authoritative timing permits.
+
+### 29.4 Positioning targets
+
+- Every displayed recommendation has current route-direction orientation and a verification date.
+- No recommendation remains visible during an unresolved platform or reroute conflict.
+- Rider feedback distinguishes wrong zone, unclear instruction, and changed station geometry.
+
+---
+
+## 30. Product analytics
+
+Measure behavior without rewarding false certainty.
+
+### 30.1 North-star measure
+
+**Trusted departure decision rate:** The share of arrival-view sessions in which the rider receives a current, coherent, boardable option without a later known contradiction before the train reaches the station.
+
+### 30.2 Supporting measures
+
+- Time to first useful arrival.
+- Share of launches requiring search.
+- Nearest-station card engagement.
+- Live versus Holding versus Scheduled exposure.
+- Service-change suppression count and later outcome.
+- Ghost false-positive and false-negative rates.
+- Alert localization coverage.
+- Accessible-route validation and reroute success.
+- Offline trip-card opens and completion.
+- Platform-guidance coverage and correction rate.
+- Commute push actionability and mute rate.
+
+### 30.3 Guardrail measures
+
+- Arrivals shown at stations later confirmed bypassed.
+- Scheduled times mistaken for live.
+- Accessible journeys invalidated by a known outage.
+- Excessive alert suppression of unaffected service.
+- Notification opt-out after a non-actionable push.
+- Location-permission denial after the value explanation.
+
+---
+
+## 31. Acceptance scenarios
+
+The product is not ready until these scenarios behave correctly.
+
+### 31.1 Normal and real-time service
+
+1. A moving train serves the station normally and appears as Live.
+2. An assigned terminal train appears as Expected, then becomes Live after movement.
+3. A scheduled trip is absent inside a healthy replacement period and is not restored from static data.
+4. A train's identifier changes without creating a duplicate.
+5. Two ambiguous train identities remain quarantined rather than merged incorrectly.
+
+### 31.2 Service changes
+
+6. F trains run via the E: bypassed F stops receive no arrival; verified E stops receive the rerouted F.
+7. A local train runs express and all skipped local stations suppress it.
+8. A short-turn train uses its actual terminal and disappears from downstream boards.
+9. A planned alert contains station and direction metadata and affects only that direction.
+10. A reroute alert lacks sufficient station detail; the unresolved route-direction hides arrivals rather than guessing.
+11. A delay-only alert leaves coherent trains visible with a delay explanation.
+12. A station closure removes boarding and alighting but not unrelated transfer services in the same complex.
+
+### 31.3 Feed degradation and ghosts
+
+13. A fresh feed contains a train with no movement for 100 seconds; countdown freezes as Holding.
+14. A train remains held for several minutes with a valid entity; it is not silently deleted.
+15. A train disappears from one healthy snapshot and receives grace.
+16. A train disappears from two healthy snapshots and is suppressed.
+17. Forty percent of entities vanish in one snapshot; the product enters degraded mode rather than announcing mass cancellations.
+18. Feed timestamps regress; exact countdowns stop until recovery.
+19. Real-time data remains unavailable; supplemented scheduled times appear with unmissable labels.
+20. An active unresolved service change prevents an optimistic static fallback.
+
+### 31.4 Location and offline
+
+21. Precise location is granted; nearby cards rank useful entrances rather than station centroids.
+22. Location is denied; last-used or saved stations appear without a blank screen.
+23. The rider enters a tunnel; the current screen remains stable and switches to explicit offline state.
+24. A saved trip retains stops, transfers, exits, and manual progress.
+25. The trip crosses from weekday to late-night service; the itinerary explains the pattern change.
+
+### 31.5 Accessibility
+
+26. A station is accessible only in one direction; the other direction is rejected.
+27. An elevator exists but is not on an ADA path; the app does not infer accessibility.
+28. One elevator in a redundant chain fails; an alternate verified chain is used.
+29. A required chained elevator fails; the full route is invalidated.
+30. Equipment data is empty or stale; route-critical state becomes Unknown.
+31. A rerouted train uses an unverified platform; accessible routing rejects it.
+32. An underway rider receives a warning before the last accessible transfer decision.
+
+### 31.6 Positioning and alarms
+
+33. Direction reverses; front and back guidance reverses correctly.
+34. Track conflict appears; positioning guidance disappears and says Check station signs.
+35. Accessible exit differs from quickest stairs; accessible positioning takes priority.
+36. A delay occurs on an unused segment of the rider's line; no commute push is sent.
+37. A bypass affects the saved origin during the commute window; one actionable push is sent.
+38. The alert wording changes but its impact does not; no duplicate push is sent.
+39. A required elevator fails before an accessible commute; an accessible-path alert and alternative are sent.
+
+### 31.7 Time edge cases
+
+40. Trips after midnight remain attached to the correct service date.
+41. Daylight-saving clock changes do not duplicate or reorder trains.
+42. A phone clock differs from the feed clock; feed freshness uses authoritative timestamps and tolerates only a small skew.
+
+---
+
+## 32. Release strategy
+
+### 32.1 Gate 0: Truth validation
+
+Before public arrival boards:
+
+- Replay normal, weekend, late-night, and major disruption periods.
+- Compare admitted and suppressed arrivals with later stop progress.
+- Run in shadow mode against current MTA data.
+- Validate route-specific feed health and bulk-drop detection.
+- Establish the false-bypass incident review process.
+
+Exit gate: No known systematic source of bypassed-stop false positives and all degraded states visibly honest.
+
+### 32.2 Release 1: Trustworthy subway utility
+
+Launch:
+
+- Nearby station boards.
+- Station details and localized alerts.
+- Truth hierarchy, service-change reconciliation, and ghost handling.
+- Dark-first, one-handed interface.
+- Typical weekday and late-night offline maps.
+- Saved stations.
+- Schedule fallback.
+- Direction-aware station accessibility and live equipment status.
+- Accessible Route Only for verified complete paths.
+
+### 32.3 Release 2: Journey convenience
+
+Add:
+
+- Saved trip cards with manual underground progress.
+- Smart commute windows and disruption-only notifications.
+- Destination-aware exits and transfers.
+- Verified platform positioning at priority complexes.
+- Broader accessible-path resilience and alternatives.
+
+### 32.4 Release 3: Coverage expansion
+
+Expand:
+
+- Positioning coverage across the system.
+- More detailed in-station wayfinding.
+- Multimodal accessible alternatives where explicitly requested.
+- LIRR and Metro-North as separately validated product surfaces.
+- Car-level crowding only where official, current, train-matched data passes the enablement gate.
+
+---
+
+## 33. Dependencies and risks
+
+### 33.1 MTA data limitations
+
+Risks:
+
+- Supplemented schedules include most, not all, temporary changes.
+- Station-level alert metadata is optional.
+- Alert categories and text can evolve.
+- Real-time trip identifiers do not always match static identifiers.
+- Reroutes may occur between snapshots.
+
+Response:
+
+- Require positive live stop evidence.
+- Let negative evidence veto.
+- Fail closed on high-impact ambiguity.
+- Expose state and freshness.
+- Maintain quality review and conservative correction tools.
+
+### 33.2 Station geometry
+
+Risk:
+
+Public entrance data does not fully describe platform-relative exits, transfer passages, elevator chains, or front/rear orientation.
+
+Response:
+
+- Treat platform guidance as verified editorial data.
+- Version and reverify it.
+- Roll out by station.
+- Omit claims where evidence is incomplete.
+
+### 33.3 Accessibility completeness
+
+Risk:
+
+A station badge can conceal constituent-line, direction, passage, or equipment differences.
+
+Response:
+
+- Validate complete path edges.
+- Keep Unknown distinct from operational.
+- Reject unverified substitutes.
+- Prefer resilient paths with fewer single points of failure.
+
+### 33.4 Brand and map rights
+
+Risk:
+
+MTA permits feed use subject to terms, but official logos, maps, symbols, and intellectual property require licensing.
+
+Response:
+
+- Secure the appropriate license before public use.
+- Use current official line-color data.
+- Maintain readable text and shapes independent of brand color.
+
+### 33.5 Notification fatigue
+
+Risk:
+
+Line-wide alerts create irrelevant pushes and opt-outs.
+
+Response:
+
+- Resolve impacts to the saved segment and window.
+- Require a decision-changing consequence.
+- Deduplicate by incident impact.
+- Default restoration messages to off.
+
+---
+
+## 34. Final product decisions
+
+1. The launch is subway-first.
+2. Nearby station boards are the default home.
+3. Real-time explicit stop evidence is required for a live arrival.
+4. Current negative evidence vetoes an arrival.
+5. Static schedules never masquerade as countdowns.
+6. A held train freezes; it is not automatically deleted as a ghost.
+7. Alerts are localized to rider consequence rather than reduced to a line-wide status.
+8. Dark mode is default, and one-handed controls stay in the bottom third.
+9. Offline maps and saved trips remain navigable, with live status clearly unavailable.
+10. Accessible Route Only validates the complete path and fails closed.
+11. Platform guidance appears only at verified stations and is suppressed during operational ambiguity.
+12. Subway crowding is absent until authoritative car-level data exists.
+13. Commute notifications are disruption-only and segment-aware.
+14. Trust and accessibility errors are release-blocking quality failures.
+
+---
+
+## 35. Source notes
+
+Primary official references used for factual constraints:
+
+- [MTA Developer Resources](https://www.mta.info/developers)
+- [MTA GTFS-Realtime Reference for the New York City Subway](https://www.mta.info/document/134521)
+- [MTA GTFS Alerts Feed Documentation](https://www.mta.info/document/90881)
+- [MTA Stations Affected specification](https://github.com/nymta/gtfs-documentation/blob/main/feeds/subway/gtfs-rt/stations_affected.md)
+- [MTA service-status guidance](https://www.mta.info/developers/service-status-box)
+- [MTA station accessibility and elevator-status guidance](https://www.mta.info/developers/display-elevators-NYCT)
+- [MTA Subway Stations and Complexes](https://data.ny.gov/Transportation/MTA-Subway-Stations-and-Complexes/5f5g-n3cz)
+- [MTA Subway Entrances and Exits](https://data.ny.gov/Transportation/MTA-Subway-Entrances-and-Exits-2024-Map/68hr-j2j7)
+- [MTA Colors](https://data.ny.gov/Transportation/MTA-Colors/3uhz-sej2)
+- [MTA subway maps](https://www.mta.info/maps)
+- [Official GTFS-Realtime best practices](https://gtfs.org/documentation/realtime/realtime-best-practices/)
+
+Proposed thresholds, ranking rules, notification logic, quality targets, and confidence states in this document are product policies derived from official feed semantics. They are not represented as MTA guarantees and must be calibrated with observed service behavior before public launch.
