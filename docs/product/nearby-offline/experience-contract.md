@@ -9,7 +9,7 @@
 | Last validation date | 2026-07-30 |
 | Supersedes | None |
 | Approval evidence | Pending |
-| Scenario results | Pending — Nearby Task 14 and Release 1 evidence have not been produced |
+| Scenario results | **Not run — Pending**; Nearby Task 14 has registered 91 `A01` attempts, all Pending, and Release 1 is NO-GO |
 
 ## Purpose and authority
 
@@ -23,7 +23,7 @@ The [station board and controls contract](station-board-and-controls-contract.md
 
 The [map modes and journey behavior contract](map-modes-and-journey-behavior.md), Task 7, owns the Map destination's independent appearance, service-meaning, spatial-view, and overlay axes; Actual-now and reference-layer rules; reroute visualization; interaction continuity inside Map; and journey planning and ranking. This experience contract continues to own exactly four persistent destinations and the restore-first boundary across them. The map contract records specification §17 and §31.4 scenario 25 as its source provenance and marks the artifact-index reconciliation **Pending** before lifecycle advancement.
 
-This artifact is **Draft**. The authoritative [Gate 0 exit record](../quality/gate-0-exit-record.md) is **NO-GO — GATE 0 NOT PASSED**; public boards blocked. Every absent planned artifact and scenario result remains **Pending** until its own required review and observed evidence are complete. Accessibility, guidance, Task 6 rendered/measured evidence, and Task 7 walkthrough evidence remain absent. This contract makes no launch, readiness, or approval claim.
+This artifact is **Draft**. The authoritative [Gate 0 exit record](../quality/gate-0-exit-record.md) and the applying [Release 1 readiness record](release-1-readiness.md) state **NO-GO — GATE 0 NOT PASSED**; public arrival boards remain blocked. The [Release 1 risk register](risk-register.md) records current experience risks without changing their narrower owners or required responses. Every absent artifact and scenario result remains **Pending** until its own required review and observed evidence are complete. Accessibility, guidance, Task 6 rendered/measured evidence, Task 7 walkthrough evidence, rights resolution, and all six release-reviewer decisions remain absent. This contract makes no launch, readiness, or approval claim.
 
 ## Experience architecture
 
@@ -150,7 +150,7 @@ Existing owned artifacts are linked. Planned artifacts remain code text until th
 | Location and personal data | `docs/product/nearby-offline/location-and-personal-data-rules.md`, Task 12 | Nearby, Saved, and measurement | Location ranks utility; it is not required truth evidence. |
 | Usefulness and guardrails | `docs/product/nearby-offline/measurement-plan.md`, Task 13 | Product readout | Metrics cannot reward false certainty. |
 | Scenario evidence | `docs/product/nearby-offline/acceptance-evidence.md`, Task 14 | All Tasks 1–13 | Expected outcomes remain Pending until observed. |
-| Release decision and risks | `docs/product/nearby-offline/release-1-readiness.md` and `docs/product/nearby-offline/risk-register.md`, Task 15 | Release 1 review | Cannot waive truth, accessibility, offline-honesty, privacy, or rights blockers. |
+| Release decision and risks | [Release 1 readiness](release-1-readiness.md) and [Release 1 risk register](risk-register.md), Task 15 | Release 1 review | Records the current no-go; cannot waive truth, accessibility, offline-honesty, privacy, or rights blockers. |
 | Arrival admission, ordering, service change, confidence, suppression, and fallback | Existing upstream arrival-truth artifacts | Nearby, Station, Map, Saved, Commute | Consumed without reclassification. |
 | Complete accessible paths and current equipment state | `docs/product/accessibility/complete-path-contract.md`, `docs/product/accessibility/equipment-status-policy.md`, and companion cases | Nearby, Station, Map, Saved, active trip | Consumed as a hard constraint; not reduced to a badge. |
 | Platform and positioning guidance | `docs/product/guidance/platform-evidence-standard.md`, `docs/product/guidance/platform-state-and-certainty-matrix.md`, and `docs/product/guidance/positioning-rider-experience.md` | Station, Map, active trip | Consumed only at verified scope. |
@@ -185,11 +185,11 @@ This table is the complete source-to-task allocation for the approved specificat
 | §31.4 scenarios 21–25 | Useful entrance ranking, no-location fallback, stable tunnel state, complete offline trip, and pattern-transition explanation | Tasks 2, 3, 9, and 10 in their named artifacts; scenario 25 pattern selection and boundary explanation in the [map modes and journey behavior contract](map-modes-and-journey-behavior.md), Task 7, with trip-card application remaining Task 9 | `docs/product/nearby-offline/acceptance-evidence.md`, Task 14 |
 | §31.7 scenarios 40–42 | Preserve upstream service-day, daylight-saving, and authoritative-clock outcomes across Nearby and offline surfaces | Upstream arrival-truth time policy; applying nearby owners in Tasks 4, 8, 9, and 10 | `docs/product/nearby-offline/acceptance-evidence.md`, Task 14, referencing upstream truth evidence |
 | §31.8 scenario 51 | Offline trip completeness without unavailable exit or platform-zone guidance | `docs/product/nearby-offline/offline-trip-card-and-progress-contract.md`, Task 9 | `docs/product/nearby-offline/acceptance-evidence.md`, Task 14 |
-| §32.2 | Release 1 capability allocation and dependency boundaries | This contract, Task 1, allocates; Tasks 2–14 specify and evidence | `docs/product/nearby-offline/release-1-readiness.md`, Task 15 |
-| §33.1 | MTA-data risk: positive evidence, negative veto, fail-closed ambiguity, freshness, and correction | Upstream truth owners; `docs/product/nearby-offline/risk-register.md`, Task 15, records the experience dependency | Task 15 no-go effect |
+| §32.2 | Release 1 capability allocation and dependency boundaries | This contract, Task 1, allocates; Tasks 2–14 specify and evidence | [Release 1 readiness](release-1-readiness.md), Task 15 |
+| §33.1 | MTA-data risk: positive evidence, negative veto, fail-closed ambiguity, freshness, and correction | Upstream truth owners; [Release 1 risk register](risk-register.md), Task 15, records the experience dependency | Task 15 no-go effect |
 | §33.2 | Incomplete geometry: verified, versioned, station-scoped guidance or omission | [Map modes and journey behavior contract](map-modes-and-journey-behavior.md), Task 7, consumes companion guidance; Task 15 risk register records exposure | Task 14 guidance-omission cases and Task 15 no-go effect |
 | §33.3 | Accessibility completeness: complete path, Unknown, no substitute, resilient alternative | Tasks 3, 8, 9, and 10 consume companion accessibility truth; Task 15 risk register records exposure | Task 14 accessibility/offline cases and Task 15 no-go effect |
-| §33.4 | Map and brand rights: permission before public use; text/shape independent of color | [Underground visual and reachability standard](underground-visual-and-reachability-standard.md), Task 6, and [map modes and journey behavior contract](map-modes-and-journey-behavior.md), Task 7, constrain presentation; `docs/product/nearby-offline/risk-register.md`, Task 15, records rights | Unresolved rights block Task 15 |
+| §33.4 | Map and brand rights: permission before public use; text/shape independent of color | [Underground visual and reachability standard](underground-visual-and-reachability-standard.md), Task 6, and [map modes and journey behavior contract](map-modes-and-journey-behavior.md), Task 7, constrain presentation; [Release 1 risk register](risk-register.md), Task 15, records rights | Unresolved rights block Task 15 |
 | §33.5 | Notification-fatigue risk remains companion-owned; nearby/offline does not create alert eligibility | `docs/product/commute/notification-eligibility-contract.md` and `docs/product/commute/notification-suppression-matrix.md`; Task 15 records the dependency | Companion commute evidence; no nearby duplication |
 | §34 SPD-01 | The launch is subway-first | This contract, Task 1, owns the nearby/offline subway-first boundary | Task 15 binary readiness review |
 | §34 SPD-02 | Nearby station boards are the default home | This contract, Task 1; startup behavior in `docs/product/nearby-offline/zero-tap-startup-and-permission-flow.md`, Task 2 | Task 14 launch evidence |
@@ -204,7 +204,7 @@ This table is the complete source-to-task allocation for the approved specificat
 | §34 SPD-11 | Platform guidance appears only at verified stations and is suppressed during operational ambiguity | Companion guidance workstream | Nearby Tasks 5, 7, and 9 consume; Task 14 references companion evidence |
 | §34 SPD-12 | Subway crowding is absent until authoritative car-level data exists | Excluded and deferred from the nearby/offline release contract; companion crowding work remains later-release scope | Task 15 records exclusion and prevents an unsupported claim |
 | §34 SPD-13 | Commute notifications are disruption-only and segment-aware | Companion commute workstream | Commute destination preserves the boundary; Task 15 references companion evidence |
-| §34 SPD-14 | Trust and accessibility errors are release-blocking quality failures | `docs/product/nearby-offline/release-1-readiness.md` and `risk-register.md`, Task 15 | Signed Task 15 decision only; Draft completion is not approval |
+| §34 SPD-14 | Trust and accessibility errors are release-blocking quality failures | [Release 1 readiness](release-1-readiness.md) and [Release 1 risk register](risk-register.md), Task 15 | Signed Task 15 decision only; Draft completion is not approval |
 
 ## Acceptance-scenario ownership
 
@@ -270,6 +270,12 @@ Task 14 must record, against a fixed reviewed version:
 - every prohibited-result check.
 
 Until that observed record exists, this walkthrough remains an expected **Pending** result.
+
+## Release-review authority
+
+The [Release 1 readiness record](release-1-readiness.md) owns the applying binary recommendation, required dependency and reviewer evidence, stop blockers, and reconsideration conditions. The [Release 1 risk register](risk-register.md) records cross-workstream exposure and release effect while each narrower product owner retains its decision boundary. Neither artifact can re-admit a train, approve an accessibility path, invent current equipment or guidance, authorize personal-data use, grant rights, or weaken an Offline label.
+
+The current applying decision is **NO-GO — GATE 0 NOT PASSED**. Public arrival boards remain blocked. All 91 Task 14 `A01` attempts are **Not run — Pending**; no fixed working-product, companion accessibility/guidance approval, rights resolution, metric package, or P/A/D/C/R/O release decision exists.
 
 ## Contract review
 
