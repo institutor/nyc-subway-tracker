@@ -226,3 +226,36 @@ These three definitions are not executed evidence. They do not establish real po
 - [ ] All real geometry, route-direction coverage, stations, observations, results, approvals, and release evidence remain unclaimed.
 
 Every unchecked required item blocks review completion and Release 2 consideration. This documentation commit is not working-product evidence.
+
+## Task 9 append-only transfer presentation and provenance
+
+Task 9 adds no new positioning objective and changes none of the Task 8 rules or `POS-33`, `POS-34`, and `POS-35` fixture definitions above. For a fastest-transfer objective, this artifact now consumes the separate [transfer connection assessment](transfer-connection-assessment.md) without reclassifying its **Likely**, **Tight**, **Uncertain**, **Unlikely**, or no-assessment result.
+
+### Applying provenance and Pending reconciliation
+
+Task 9 applies approved specification §23.6, §31.8 scenario 47, and §§32.2–32.3; the accessibility and platform-guidance plan `Product artifact map` and full Task 9 `Product artifacts`, `Dependencies`, `Produces for later tasks`, `Ordered steps`, and `Evidence and acceptance checks`; accepted Task 7 commit `3d39129a58b497c92d0125569edebd894c47a71d`; and accepted Task 8 commit `0fcb00265a23ea859681dfef7b6edad213c674df` with this file's accepted pre-append blob `38e7e5fda00dd4b4ed577a2a37c7eb5fb596499d`.
+
+The Task 9 plan cites §31.6, while the transfer-threshold case is scenario 47 in §31.8. Section 31.6 scenarios 33–35 remain the Task 8 positioning inputs above; Task 9 does not own alarm scenarios 36–39. The [product artifact index](../artifact-index.md) cites §§23.6, 31.6, and 31.8 for the transfer artifact but omits applying §§32.2–32.3. Product Governance Lead reconciliation remains **Pending**. This task does not edit the index or invent approval.
+
+### Combined positioning and connection presentation
+
+When a current transfer assessment exists, visible and assistive presentation carry the same:
+
+- Front/Middle/Back position and supported transfer benefit when Task 8 permits a zone;
+- connection text state and reason;
+- conservative walking range;
+- exact accessibility validity and whether Accessible Route Only controls;
+- incoming and outgoing platform certainty; and
+- next-option status without silently activating or switching it.
+
+If no zone is supported, omit the zone. The connection assessment may remain only when an independently verified all-position high-end walk covers every allowed alighting position; otherwise omit both the positioning recommendation and connection assessment. Never invent a zone, car number, walking high end, or weaker likelihood to fill the gap.
+
+**Likely** never becomes a guaranteed connection. **Tight** explains limited margin without instructing the rider to run or use unsafe movement. **Uncertain** names range overlap or an **Expected platform** and never promises. **Unlikely** removes the original walk from active visible and assistive guidance and presents only a fully reevaluated next option as a rider choice.
+
+Accessible Route Only remains On and continues to override a faster stair-based transfer. Any Failed or Unknown required accessible transfer edge yields no connection label and only the first verified accessible alternative in the accepted order; if none exists, use exactly **No verified step-free subway route is available right now.**
+
+A hard conflict on either leg preserves the Task 8 suppression behavior and exact strings above: suppress the affected row and every dependent positioning, transfer, and accessibility instruction while preserving unrelated service. A **Check station signs** platform, unsupported Holding or arrival-Uncertain interval, Scheduled fallback, Offline state, or another failed hard input receives no current four-state assessment; absence is not transfer-likelihood Uncertain.
+
+Offline preserves the trip context and may retain only an explicitly historical likelihood with its original claim-specific last-checked time. Static walking or positioning may remain only as verified reference with a verification date. Do not calculate, rank, or activate a next option offline. Reconnection reevaluates positioning and transfer context only at stage 4 after accessible path and equipment, service-change, and arrival recovery; a returned snapshot never restores prior Likely automatically. The Release 1 offline card remains complete without positioning or current likelihood when legitimately unavailable.
+
+All Task 9 actual results, visible and assistive observations, reviewer decisions, evidence attachments, corrections, reruns, approvals, and release dispositions are **Pending** or **Not run — Pending** in the transfer artifact. No real station, platform, walk, path, connection, coverage, run, capture, reviewer, approval, or release authorization is claimed. The authoritative **NO-GO — GATE 0 NOT PASSED**, public-arrival-board block, **NO-GO — REQUIRED ACCESSIBILITY EVIDENCE AND COVERAGE ARE NOT DEMONSTRATED**, and Task 12 Steps 5–13 **Pending** status remain unchanged.
