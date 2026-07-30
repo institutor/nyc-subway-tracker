@@ -5,7 +5,7 @@
 | Source sections | Approved specification §34; master delivery plan Task 0.2 `Artifacts` and `Steps`; Task 0.3 brief |
 | Owner | Product Governance Lead |
 | Required reviewers | Product, Accessibility, Data Quality, Content, Privacy, Operations |
-| Status | In review |
+| Status | Approved |
 | Last validation date | 2026-07-30 |
 | Supersedes | None |
 | Approval evidence | [Phase 0 governance approval record](../release/phase-0-governance-approval.md) |
@@ -13,7 +13,7 @@
 
 ## Purpose and authority
 
-This review version records the approved specification's cross-domain subway product decisions verbatim so later artifacts can reference one stable decision identifier. It does not replace the approved specification and does not re-own a rule assigned to a narrower contract. Until independent review approves the fixed Phase 0 review version, this artifact remains **In review** and is not itself approved guidance.
+This approved record preserves the approved specification's cross-domain subway product decisions verbatim so later artifacts can reference one stable decision identifier. It does not replace the approved specification and does not re-own a rule assigned to a narrower contract.
 
 ## Decision record
 

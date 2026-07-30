@@ -5,7 +5,7 @@
 | Source sections | Approved specification §§3.1–3.3, 27, 28, 31–34; Task 0.1 brief; Task 0.3 brief |
 | Owner | Product Governance Lead |
 | Required reviewers | Product, Accessibility, Data Quality, Content, Privacy, Operations |
-| Status | In review |
+| Status | Approved |
 | Last validation date | 2026-07-30 |
 | Supersedes | None |
 | Approval evidence | [Phase 0 governance approval record](release/phase-0-governance-approval.md) |

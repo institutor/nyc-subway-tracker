@@ -5,7 +5,7 @@
 | Source sections | Approved specification §§2.4, 3, 10.1, 11.4, 14.5, 16.3–16.4, 18.3, 19–20, 23, 25.7, 34; master delivery plan Task 0.2 `Artifacts` and `Steps`; Task 0.3 brief |
 | Owner | Content Lead |
 | Required reviewers | Product, Accessibility, Data Quality, Content, Operations |
-| Status | In review |
+| Status | Approved |
 | Last validation date | 2026-07-30 |
 | Supersedes | None |
 | Approval evidence | [Phase 0 governance approval record](../release/phase-0-governance-approval.md) |
