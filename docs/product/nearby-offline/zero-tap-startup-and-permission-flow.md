@@ -50,7 +50,7 @@ On a normal warm launch after location permission has been granted:
 
 1. Render the last coherent Nearby shell immediately. This is the first visible state and remains governed context, not proof that any arrival, alert, accessibility state, or guidance is current.
 2. Request a current location result at the permission already granted: precise or approximate. Do not display another operating-system prompt.
-3. Pass the permitted location result to Task 3's useful-entrance and station-ranking rules. Task 3, not this flow, decides ranking and fulfills scenario 21.
+3. Pass the permitted location result to the [useful station and entrance ranking rules](station-ranking-and-entrance-rules.md). Task 3, not this flow, decides ranking and owns the expected result for scenario 21, which remains Pending.
 4. Obtain the current qualified-arrival order, localized service-change consequences, route-critical accessibility state, and applicable station or entrance result from their authoritative owners.
 5. Apply supported current content inside the already visible shell without changing the rider's selected station, direction, filters, Accessible Route Only state, or reading position.
 6. Keep the old shell's unsupported claims out of Live treatment. Remove, freeze, separate, or relabel content only as required by the governing truth decision.
@@ -88,7 +88,7 @@ Exactly five permission outcomes are defined here. Each preserves the same arriv
 | Precondition | Precise location permission is granted. A coherent shell may or may not exist. |
 | Exact first visible content | If a coherent shell exists, show that complete Nearby shell as governed context. Otherwise show **Nearby** selected, **Nearby stations**, non-claim card structure, **Finding nearby stations…**, and bottom-anchored **Choose a station**. |
 | Location request | Request one current precise location result within the granted permission. Do not show another operating-system prompt. |
-| Station source | Task 3 ranks station complexes by shortest practical walk to a useful entrance using the precise location input and governed entrance evidence. |
+| Station source | The [useful station and entrance ranking rules](station-ranking-and-entrance-rules.md) rank station complexes by shortest practical walk to an eligible entrance using the precise location input and governed entrance evidence. If no useful entrance can be established, retain the bottom picker; do not use a station centroid or guess. |
 | Transit-truth treatment | Current arrivals, localized service changes, and route-critical accessibility state replace shell context only after their owners supply them. Fewer than three qualified arrivals remains fewer than three. |
 | Permitted rider action | Open **Choose a station**, select a visible station result, or continue reading the preserved shell while refresh proceeds. |
 | Recovery path | If the location request fails temporarily, preserve the station screen and enter the temporary-location-failure state. A later result updates suggestions in place and does not replace a rider-selected station. |
@@ -102,7 +102,7 @@ Exactly five permission outcomes are defined here. Each preserves the same arriv
 | Precondition | Approximate location permission is granted; precise location is not granted. |
 | Exact first visible content | If a coherent shell exists, show that complete Nearby shell as governed context. Otherwise show **Nearby** selected, **Nearby stations**, non-claim card structure, **Finding nearby stations…**, and bottom-anchored **Choose a station**. |
 | Location request | Request one current approximate location result. Do not ask the rider to upgrade to precise permission as a condition of use. |
-| Station source | Task 3 ranks only to the precision the approximate result and entrance evidence support. The bottom station picker remains available when nearby ordering is uncertain. |
+| Station source | The [useful station and entrance ranking rules](station-ranking-and-entrance-rules.md) rank only to the precision the approximate result and entrance evidence support. The bottom station picker remains available when nearby ordering is uncertain. Do not claim an exact entrance, walking time, or nearest result beyond supported precision. |
 | Transit-truth treatment | Apply current qualified arrivals, localized service changes, and route-critical accessibility decisions independently of location precision. Approximation never weakens a veto or upgrades evidence. |
 | Permitted rider action | Use the approximate Nearby result, open **Choose a station**, or select a saved or recent station without broadening permission. |
 | Recovery path | A later approximate result may refresh suggestion order in place. A rider may voluntarily change operating-system permission, but the product does not interrupt utility to request precise access. |
@@ -214,7 +214,7 @@ Planned paths remain code text until those artifacts exist.
 | Decision or evidence | Owning artifact or task | Task 2 responsibility | Current disposition |
 |---|---|---|---|
 | Persistent destination and restored context | [Nearby and offline experience contract](experience-contract.md), Task 1 | Render the owned context and invoke restore before refresh. | Draft; evidence Pending |
-| Scenario 21 useful-entrance ranking | `docs/product/nearby-offline/station-ranking-and-entrance-rules.md`, Task 3 | Supply only the granted location precision and preserve the result in place. | Not claimed by Task 2; Pending |
+| Scenario 21 useful-entrance ranking | [Useful station and entrance ranking rules](station-ranking-and-entrance-rules.md), Task 3 | Supply only the granted location precision and preserve the result in place. Denied location cannot produce a current nearest claim. | Not claimed by Task 2; Pending — Task 14 |
 | Arrival admission and fewer-than-three ordering | [Arrival admission and ordering contract](../arrival-truth/arrival-admission-and-ordering-contract.md) | Consume the supplied order without admission, promotion, reordering, or backfill. | [Gate 0: **NO-GO — GATE 0 NOT PASSED**](../quality/gate-0-exit-record.md); public boards blocked; scenario evidence Pending |
 | Feed degradation and recovery | [Route-level feed health policy](../arrival-truth/feed-health-policy.md) | Apply frozen, unavailable, or current treatment inside the shell. | [Gate 0: **NO-GO — GATE 0 NOT PASSED**](../quality/gate-0-exit-record.md); public boards blocked; scenario evidence Pending |
 | Service-change impact and veto | [Service-change impact and resolution policy](../arrival-truth/service-change-impact-and-resolution-policy.md) | Preserve supplied scope and veto; location cannot clear it. | [Gate 0: **NO-GO — GATE 0 NOT PASSED**](../quality/gate-0-exit-record.md); public boards blocked; scenario evidence Pending |
