@@ -15,11 +15,11 @@
 
 This contract owns the initial Nearby result count, required station-card content, complete direction and operational-axis coverage, direction headings, small-screen priority, and faithful presentation of the upstream next-three result. It does not own station or entrance ranking, arrival admission, train identity, chronological ordering, schedule-fallback eligibility, service-change scope, accessibility truth, or release approval.
 
-The [useful station and entrance ranking rules](station-ranking-and-entrance-rules.md) supply an ordered set of eligible complexes with exact entrance, axis, baseline-order, and personalization reasons. The [arrival admission and ordering contract](../arrival-truth/arrival-admission-and-ordering-contract.md) supplies the qualified primary order and separate dispositions. The [time and train continuity policy](../arrival-truth/time-and-train-continuity-policy.md), [schedule fallback and currency policy](../arrival-truth/schedule-fallback-and-currency-policy.md), and [arrival truth acceptance catalog](../quality/arrival-truth-acceptance-catalog.md) retain identity, fallback, and expected scenario authority.
+The [useful station and entrance ranking rules](station-ranking-and-entrance-rules.md) supply an ordered set of eligible complexes with exact entrance, axis, baseline-order, and personalization reasons. The [arrival admission and ordering contract](../arrival-truth/arrival-admission-and-ordering-contract.md) supplies the qualified primary order and separate dispositions. The [station board and controls contract](station-board-and-controls-contract.md) expands a selected card without changing its station, direction, order, filter, evidence-state, or disruption context. The [time and train continuity policy](../arrival-truth/time-and-train-continuity-policy.md), [schedule fallback and currency policy](../arrival-truth/schedule-fallback-and-currency-policy.md), and [arrival truth acceptance catalog](../quality/arrival-truth-acceptance-catalog.md) retain identity, fallback, and expected scenario authority.
 
 The [approved product specification](../../superpowers/specs/2026-07-30-nyc-subway-train-time-tracker-design.md) controls every conflict. Shared concepts retain their meanings in the [transit product glossary](../contracts/transit-product-glossary.md), and public wording remains subject to the [rider language rules](../contracts/rider-language-rules.md).
 
-This artifact is **Draft**. The authoritative [Gate 0 exit record](../quality/gate-0-exit-record.md) is **NO-GO — GATE 0 NOT PASSED**. Public arrival boards remain blocked. Companion accessibility approval and observed Nearby evidence are absent. Every walkthrough below is an expected fixture with status **Not run — Pending**, not an observed pass, approval, or launch claim.
+This artifact is **Draft**. The authoritative [Gate 0 exit record](../quality/gate-0-exit-record.md) is **NO-GO — GATE 0 NOT PASSED**; public boards blocked. Companion accessibility approval and observed Nearby evidence are absent. Every walkthrough below is an expected fixture with status **Not run — Pending**, not an observed pass, approval, or launch claim.
 
 ## Initial Nearby result set
 
@@ -125,6 +125,24 @@ When the upstream primary list contains zero, one, or two rows, show exactly tha
 
 Do not choose a generic gap message when a narrower service-change explanation controls. Do not infer no service from missing predictions, call an absent train cancelled, use Scheduled to fill a healthy live board, or display a quarantined identity.
 
+## Station board handoff
+
+Task 4's Nearby card remains the zero-tap initial view: every passenger-serving direction and operational axis stays visible without a switch or expansion. Task 5's direction switch belongs only to the expanded [station board and controls contract](station-board-and-controls-contract.md); it does not retroactively hide a direction on the Nearby card.
+
+Opening a direction heading or arrival row passes:
+
+- the same station complex and exact rider-facing direction;
+- the current constituent, useful entrance, practical-walk precision, accessible-path scope, and localized disruption;
+- redundant route identity and every actual destination;
+- the exact upstream primary order and every separate Holding, Uncertain, Scheduled, suppression, unavailable, or limitation disposition; and
+- the current route filters, evidence-state labels, and reading context.
+
+A card-level open action uses the direction already selected in shared context. If no direction is selected, the card's visible direction choices establish it; the station board does not guess a direction or a multi-axis opposite.
+
+Expansion may expose governed row detail and one-handed controls. It must not rerank stations or arrivals, collapse axes, re-admit a train, promote or relabel a disposition, use row count to backfill, clear a scoped disruption, hide an affected filtered route's warning, or replace the Task 4 initial all-directions contract. Returning from the station board restores the originating card, selected direction, filters, state labels, disruptions, and reading position before refresh.
+
+This handoff remains **Draft** and **Not run — Pending** under Nearby Task 14. The authoritative decision remains **NO-GO — GATE 0 NOT PASSED**; public boards blocked. This handoff does not supply accessibility, guidance, or Task 6 approval.
+
 ## Scenario 31.1 identity walkthroughs
 
 These walkthroughs apply the expected upstream catalog result without claiming it has been observed on a public Nearby board.
@@ -219,9 +237,10 @@ Each fixture is an expected product review, not a rendered or observed result.
 | Decision | Authoritative owner | Task 4 consumption | Current disposition |
 |---|---|---|---|
 | Complex/entrance order and personalization reason | [Useful station and entrance ranking rules](station-ranking-and-entrance-rules.md), Task 3 | Take up to the first three without reranking. | Draft; scenario 21 Pending |
-| Admission and chronological next-three | [Arrival admission and ordering contract](../arrival-truth/arrival-admission-and-ordering-contract.md) | Preserve exact primary order and dispositions. | Gate 0 **NO-GO — GATE 0 NOT PASSED**; public boards blocked |
-| Train identity | [Time and train continuity policy](../arrival-truth/time-and-train-continuity-policy.md) | Preserve one row, absence, or stronger independently qualified candidate exactly. | **NO-GO — GATE 0 NOT PASSED; public boards blocked** |
-| Schedule fallback | [Schedule fallback and currency policy](../arrival-truth/schedule-fallback-and-currency-policy.md) | Show only in the separated supplied fallback state. | **NO-GO — GATE 0 NOT PASSED; public boards blocked** |
+| Admission and chronological next-three | [Arrival admission and ordering contract](../arrival-truth/arrival-admission-and-ordering-contract.md) | Preserve exact primary order and dispositions. | **NO-GO — GATE 0 NOT PASSED**; public boards blocked |
+| Train identity | [Time and train continuity policy](../arrival-truth/time-and-train-continuity-policy.md) | Preserve one row, absence, or stronger independently qualified candidate exactly. | **NO-GO — GATE 0 NOT PASSED**; public boards blocked |
+| Schedule fallback | [Schedule fallback and currency policy](../arrival-truth/schedule-fallback-and-currency-policy.md) | Show only in the separated supplied fallback state. | **NO-GO — GATE 0 NOT PASSED**; public boards blocked |
+| Station-board expansion | [Station board and controls contract](station-board-and-controls-contract.md), Task 5 | Preserve station, direction, filters, upstream order, evidence-state labels, disruptions, and every disposition on expansion and return. | Draft; Task 14 Not run — Pending |
 | Accessibility | Companion artifacts planned under `docs/product/accessibility/` | Preserve exact scoped state; do not infer approval or path validity. | Approval and evidence absent |
 | Scenarios 1–5 | [Arrival truth acceptance catalog](../quality/arrival-truth-acceptance-catalog.md) and `docs/product/nearby-offline/acceptance-evidence.md`, Task 14 | Apply expected visible Nearby result and prohibited checks. | Not run — Pending |
 | Release 1 | `docs/product/nearby-offline/release-1-readiness.md`, Task 15 | Make no readiness or launch claim. | Pending |
@@ -236,4 +255,5 @@ Each fixture is an expected product review, not a rendered or observed result.
 | Is upstream admission and order preserved exactly? | Yes. | Scenarios 1–5, AT-S50, and RC-03 |
 | Can Holding, Uncertain, Scheduled, suppression, unavailability, or quarantine fill a primary slot? | No. | Task 14 disposition review |
 | Does fewer-than-three remain honest? | Yes. | RC-01 and RC-04 |
-| Are any board, accessibility, or scenario results claimed as approved? | No. Gate 0 is a no-go, public boards are blocked, and all cases remain Not run/Pending. | Required owner reviews and fixed-version evidence |
+| Does station-board expansion preserve the exact card station, direction, order, filters, state labels, disruptions, and all-directions Nearby contract? | Yes. | Task 14 card-to-board and return observation |
+| Are any board, accessibility, or scenario results claimed as approved? | No. The decision remains **NO-GO — GATE 0 NOT PASSED**; public boards blocked, and all cases remain Not run/Pending. | Required owner reviews and fixed-version evidence |
