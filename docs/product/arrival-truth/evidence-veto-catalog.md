@@ -62,13 +62,20 @@ Generic **Affected** metadata alone can create neither a resolved bypass or supp
 
 ## Veto review record
 
-For every suppressed, unavailable, or quarantined claim, retain:
+For every suppressed, unavailable, quarantined, or limited claim, retain:
 
-1. Source type, source timestamp, and effective period.
-2. Exact route, station, direction, trip, or segment scope.
-3. The resolved hard veto or materially unresolved unavailability condition.
-4. The positive prediction defeated or claim withheld by the recorded disposition.
-5. The board disposition and reason for suppression or unavailability, with internal quarantine recorded separately.
-6. The row-specific release prerequisite, both recovery updates, proof of all five conditions, applicable coherent-path evidence, and every Live gate evaluated before readmission.
+1. Source type, source timestamp, effective period, and authoritative observation time.
+2. Exact route, station, direction, trip, segment, stop, and path scope supported by the evidence.
+3. The controlling condition and owning rule, classified as exactly one of:
+   - a resolved hard veto that makes the supported scope ineligible;
+   - independent current high-impact evidence plus materially unresolved scope that makes only the affected **arrival claim unavailable**; or
+   - lower-basis missing, ambiguous, or contradictory evidence, including the exact governing quarantine or limitation trigger, that proves neither resolved suppression nor Task 6 unavailability.
+4. The candidate rejection, including the positive prediction defeated or claim withheld, recorded separately from the internal disposition and rider-visible outcome.
+5. The exact internal and public disposition: scoped suppression with no arrival row and only its narrow resolved consequence; scoped unavailability with no positive arrival row, the governed explanation, original official details, and unrelated service preserved; or quarantine/limitation with its supported board-level treatment or no row. Record proof that no unsupported Live, Expected, Holding, Uncertain, Scheduled, exact-time, or dependent-guidance state was invented.
+6. Disposition-specific release evidence:
+   - for resolved hard suppression, the unchanged row-specific prerequisite, both catalog-wide recovery updates, all five recovery conditions, applicable coherent-path evidence, and every Live gate required before readmission;
+   - for **arrival claim unavailable**, newer coherent evidence that resolves every material scope dimension, followed by any still-applicable row-specific and catalog-wide recovery gate carried over from a separately recorded hard suppression; unavailability alone does not invent a two-update hard-veto gate; or
+   - for quarantine or limitation, coherent evidence satisfying the exact trigger-specific owning release rule and any separately applicable recovery rule; the record must not claim two hard-veto updates unless that rule independently governs.
+7. Proof that a static or supplemented schedule, operational correction, missing alert, missing scope metadata, or generic **Affected** metadata was not counted as release or recovery evidence.
 
-Operational corrections may suppress a known bad arrival, make a materially unresolved claim unavailable, or clarify an affected segment. They may not fabricate movement, add an unsupported arrival, turn unavailability into a resolved bypass, or restore a hard-suppressed claim without the catalog-wide release gate.
+Operational corrections may suppress a known bad arrival, make a materially unresolved claim unavailable, or clarify an affected segment. They may not fabricate movement, add an unsupported arrival, turn unavailability into a resolved bypass, or restore a hard-suppressed claim without the catalog-wide release gate. An operational correction is never release evidence; only separately accepted coherent current source evidence satisfying the disposition-specific owning rule can support release.
