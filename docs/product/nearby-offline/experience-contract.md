@@ -17,6 +17,8 @@ This contract owns the four persistent product destinations, cross-surface rider
 
 The [approved product specification](../../superpowers/specs/2026-07-30-nyc-subway-train-time-tracker-design.md) controls every conflict. Shared concepts retain their meanings in the [transit product glossary](../contracts/transit-product-glossary.md), and every public label remains subject to the [rider language rules](../contracts/rider-language-rules.md). Review and lifecycle changes follow the [product artifact review and approval policy](../review-and-approval-policy.md).
 
+The [zero-tap startup and location-permission flow](zero-tap-startup-and-permission-flow.md) fulfills the §§14.1–14.2 startup sequence and first-use permission experience, the §28.1 functional location fallback at startup, and scenario 22. It consumes this contract's context continuity and upstream truth; it does not take ownership of arrival truth, accessibility truth, broader privacy and retention rules, or Release 1 approval.
+
 This artifact is **Draft**. Every referenced planned artifact and scenario result remains **Pending** until its own required review and observed evidence are complete. This contract makes no launch, readiness, or approval claim.
 
 ## Experience architecture
@@ -128,7 +130,7 @@ The path column records planned artifacts as code text rather than links because
 | Product decision or state | Authoritative owner | Applying surface or evidence owner | This contract's boundary |
 |---|---|---|---|
 | Persistent destinations and cross-surface preservation | `docs/product/nearby-offline/experience-contract.md`, Task 1 | Every nearby/offline surface | Owns continuity, not the narrower surface behavior. |
-| Startup and permission fallback | `docs/product/nearby-offline/zero-tap-startup-and-permission-flow.md`, Task 2 | Nearby | Must preserve context and no-account utility. |
+| Startup and permission fallback | [Zero-tap startup and location-permission flow](zero-tap-startup-and-permission-flow.md), Task 2 | Nearby | Fulfills §§14.1–14.2, startup application of §28.1, and scenario 22 while preserving context, no-account utility, and upstream truth/privacy authority. |
 | Station and entrance ranking | `docs/product/nearby-offline/station-ranking-and-entrance-rules.md`, Task 3 | Nearby and Map | Cannot override accessibility, closure, or arrival truth. |
 | Nearby cards, directions, and next-three | `docs/product/nearby-offline/nearby-card-and-direction-contract.md`, Task 4 | Nearby | Applies upstream admission and ordering without backfill. |
 | Station detail, filters, and one-handed controls | `docs/product/nearby-offline/station-board-and-controls-contract.md`, Task 5 | Contextual station detail | Owns surface controls, not truth classification. |
@@ -156,7 +158,7 @@ This table is the complete source-to-task allocation for the approved specificat
 | §13.1 | Exactly four persistent destinations and contextual station detail | This contract, Task 1 | `docs/product/nearby-offline/acceptance-evidence.md`, Task 14 |
 | §13.2 | Cross-surface state preservation; restore first, refresh second | This contract, Task 1 | Task 1 walkthrough and Task 14 preserved-state cases |
 | §13.3 | Exact no-account capability list and optional synchronization | This contract, Task 1 | Task 14 no-account and privacy cases |
-| §§14.1–14.2 | Warm launch, first-use location explanation, permission outcomes, and no-location fallback | `docs/product/nearby-offline/zero-tap-startup-and-permission-flow.md`, Task 2 | Task 14 scenario 22 and launch cases |
+| §§14.1–14.2 | Warm launch, first-use location explanation, permission outcomes, and no-location fallback | [Zero-tap startup and location-permission flow](zero-tap-startup-and-permission-flow.md), Task 2 | Task 14 scenario 22 and launch cases |
 | §14.3 | Practical-walk station and entrance ranking, grouping, and accessible-mode ranking | `docs/product/nearby-offline/station-ranking-and-entrance-rules.md`, Task 3 | Task 14 scenario 21 and ranking cases |
 | §§14.4–14.5 | Initial cards, every passenger-serving direction, qualified next-three, and direction language | `docs/product/nearby-offline/nearby-card-and-direction-contract.md`, Task 4 | Task 14 scenarios 1–5 and Nearby coverage cases |
 | §14.6 | Non-disruptive refresh while preserving station, direction, filter, and reading context | `docs/product/nearby-offline/station-board-and-controls-contract.md`, Task 5, owns station-board refresh; Task 2 owns only the foreground lifecycle trigger and context-restoration invocation; this contract governs cross-surface continuity | Task 1 walkthrough and Task 14 refresh case |
@@ -167,8 +169,9 @@ This table is the complete source-to-task allocation for the approved specificat
 | §18.2 | Complete offline trip card and manual underground progress | `docs/product/nearby-offline/offline-trip-card-and-progress-contract.md`, Task 9 | Task 14 scenarios 24 and 51 |
 | §§18.3–18.4 | Explicit offline presentation, cached-value limits, prioritized reconnection, and invalidation warning | `docs/product/nearby-offline/offline-degraded-and-reconnection-states.md`, Task 10 | Task 14 scenario 23 and reconnection cases |
 | §§26.1–26.3 | Saved context, transparent personalization, edit/delete/reset controls | `docs/product/nearby-offline/saved-station-and-personalization-contract.md`, Task 11 | Task 14 saved-state and reset cases |
-| §§28.1 and 28.3 | Location minimization, functional fallbacks, private saved information, diagnostic separation, and reset | `docs/product/nearby-offline/location-and-personal-data-rules.md`, Task 12 | Task 14 permission and privacy cases |
+| §28.1 | Location purpose, approximate and denied-permission utility, no background-location dependency, and no default movement history | [Zero-tap startup and location-permission flow](zero-tap-startup-and-permission-flow.md), Task 2, fulfills startup behavior; `docs/product/nearby-offline/location-and-personal-data-rules.md`, Task 12, owns broader location purpose, retention, and control | Task 14 scenario 22 and permission/privacy cases |
 | §28.2 | No nearby/offline notification prompt; permission belongs to explicit commute alert intent | Task 12 records the boundary in `docs/product/nearby-offline/location-and-personal-data-rules.md`; companion commute workstream owns notification controls | Companion commute evidence; Task 15 records the dependency |
+| §28.3 | Private saved information, diagnostic separation, deletion, and reset | `docs/product/nearby-offline/location-and-personal-data-rules.md`, Task 12 | Task 14 privacy and reset cases |
 | §29.2 | Warm-launch, nearby-result, immediate-control, offline-open, and useful-card targets | `docs/product/nearby-offline/measurement-plan.md`, Task 13 | Task 15 release readout |
 | §§30.1–30.3 | Trusted departure north star, supporting measures, and guardrails without rewarding false certainty | `docs/product/nearby-offline/measurement-plan.md`, Task 13 | Task 15 release readout and risk review |
 | §31.1 scenarios 1–5 | Apply upstream normal-service, identity, and no-static-backfill truth to Nearby | `docs/product/nearby-offline/nearby-card-and-direction-contract.md`, Task 4 | `docs/product/nearby-offline/acceptance-evidence.md`, Task 14, referencing upstream truth evidence |
@@ -206,7 +209,7 @@ This matrix names all Section 31 scenario groups so the nearby/offline plan neit
 | 6–12 | Arrival-truth service-change owners | Tasks 4, 5, 7, and 10 preserve exact impact scope, vetoes, official explanations, and unaffected context. | Pending — upstream truth evidence and Task 14 derived integration cases |
 | 13–20 | Arrival-truth feed, ghost, suppression, and fallback owners | Tasks 4, 5, 8, and 10 preserve confidence, degradation, disappearance, frozen context, fallback labels, and veto precedence. | Pending — upstream truth evidence and Task 14 derived integration cases |
 | 21 | Nearby/offline Task 3, `docs/product/nearby-offline/station-ranking-and-entrance-rules.md` | Own useful-entrance ranking. | Pending — Task 14 |
-| 22 | Nearby/offline Task 2, `docs/product/nearby-offline/zero-tap-startup-and-permission-flow.md` | Own no-location fallback without a blank screen. | Pending — Task 14 |
+| 22 | Nearby/offline Task 2, [zero-tap startup and location-permission flow](zero-tap-startup-and-permission-flow.md) | Own last-used, saved, and bottom-picker no-location fallback without a blank screen; does not own scenario 21 ranking or scenario 23 tunnel preservation. | Pending — Task 14 and Release 1 evidence |
 | 23 | Nearby/offline Task 10, `docs/product/nearby-offline/offline-degraded-and-reconnection-states.md` | Own stable tunnel entry and explicit offline state. | Pending — Task 14 |
 | 24 | Nearby/offline Task 9, `docs/product/nearby-offline/offline-trip-card-and-progress-contract.md` | Own retained trip content and manual progress. | Pending — Task 14 |
 | 25 | Nearby/offline Tasks 7 and 9 | Own pattern-transition explanation and trip continuity. | Pending — Task 14 |
