@@ -51,11 +51,11 @@ Capture every input snapshot and its completeness decision, authoritative observ
 
 ### Case S3 — Exactly 60 seconds after first absence
 
-**Setup:** After the first qualifying absence at `T0`, advance authoritative elapsed time to exactly `T0 + 60 seconds` without a qualifying recovery sequence. A second healthy complete absence need not have arrived.
+**Setup:** After the first qualifying absence at `T0`, advance authoritative elapsed time to exactly `T0 + 60 seconds` without a qualifying recovery sequence and without any second countable healthy complete-snapshot absence before that boundary. Absence count remains one through `T0 + 60 seconds`, so the elapsed test is the controlling trigger.
 
-**Expected:** Hard-suppress at exactly 60 seconds. Record the elapsed-time trigger and retain only the permitted non-personal quality record.
+**Expected:** Hard-suppress at exactly 60 seconds from the elapsed test. Record one countable absence through the boundary, the controlling elapsed-time trigger, and only the permitted non-personal quality record.
 
-**Prohibited:** Waiting until 61 seconds, keeping internal grace active as the controlling disposition, continuing any public arrival treatment, or inferring cancellation.
+**Prohibited:** Introducing a second countable absence before the boundary, attributing this fixture to the count-two trigger, waiting until 61 seconds, keeping internal grace active as the controlling disposition, continuing any public arrival treatment, or inferring cancellation.
 
 ### Scenario 16 — Second consecutive healthy complete-snapshot absence
 
@@ -125,11 +125,13 @@ Capture every input snapshot and its completeness decision, authoritative observ
 
 ### Case S12 — Bypass
 
-**Setup:** Provide current evidence that establishes, or materially leaves unresolved, a bypass of the exact target and direction while positive live prediction remains.
+**Setup:** Provide current resolved, scoped evidence that establishes a bypass of the exact target and direction while positive live prediction remains.
 
 **Expected:** Hard-suppress the affected exact-stop claim and show the narrowest supported service-change consequence.
 
-**Prohibited:** Allowing prediction to override the veto, retaining Arrival uncertain, or widening the bypass beyond supported scope.
+**Prohibited:** Allowing prediction to override the veto, retaining Arrival uncertain, widening the bypass beyond supported scope, or calling materially unresolved high-impact scope a resolved bypass.
+
+When high-impact bypass or reroute evidence leaves material scope unresolved, use the separately governed Task 6 **arrival claim unavailable** outcome: withhold the affected row and preserve the official message without asserting a resolved bypass or labeling the outcome resolved hard suppression. This boundary remains fail-closed.
 
 ### Case S13 — Suspension
 
@@ -143,9 +145,9 @@ Capture every input snapshot and its completeness decision, authoritative observ
 
 **Setup:** Provide a non-terminal actual-versus-scheduled-track conflict that invalidates the target or downstream path and dependent guidance.
 
-**Expected:** Hard-suppress affected arrivals and guidance immediately. Preserve the candidate only as internal conflict evidence.
+**Expected:** Hard-suppress affected arrivals and guidance immediately. Preserve the candidate only as internal conflict evidence. A first later coherent path update begins recovery update one and restores nothing; require a second qualifying update and all five recovery conditions before Live readmission.
 
-**Prohibited:** Treating normal terminal variation as this fixture, retaining a lower-confidence row or guidance, clearing the conflict from a new predicted time alone, or showing a Scheduled replacement inside the live board.
+**Prohibited:** Treating normal terminal variation as this fixture, retaining a lower-confidence row or guidance, clearing the conflict from a new predicted time or one coherent path update alone, waiving any recovery condition, or showing a Scheduled replacement inside the live board.
 
 ## Recovery cases
 
@@ -165,13 +167,13 @@ Capture every input snapshot and its completeness decision, authoritative observ
 
 **Prohibited:** Restoring after update one, carrying forward a pre-suppression countdown, skipping any of the five recovery conditions, duplicating the train, or treating recovery as proof that a prior suppression was cancellation.
 
-### Case R3 — Two coherent updates recover only the supported state
+### Case R3 — Missing current movement or progress blocks recovery
 
-**Setup:** Provide two qualifying fresh coherent updates that establish stable identity, plausible stop order, continued target service, and no conflict, but current movement/progress supports Expected or Holding rather than Live.
+**Setup:** Provide two fresh coherent accepted updates that establish stable identity, plausible stop order, continued target service, and no unresolved service or track conflict, but do not establish current movement or stop progress. In separate runs, Task 8 evidence may independently support non-primary Holding or Uncertain context.
 
-**Expected:** Complete confirmation, then apply full admission and confidence rules. Show Expected only if its origin-terminal requirements pass; keep Holding secondary when supported. Do not show an exact countdown unless Live evidence passes.
+**Expected:** Five-condition Task 9 recovery remains incomplete because condition 3 is absent. Keep the exact countdown and primary eligibility absent. Any independently supported Holding or Uncertain context remains secondary under the arrival confidence and ghost policy and is not recorded or described as completed Task 9 recovery.
 
-**Prohibited:** Treating two updates as an automatic Live grant, promoting Holding to the primary next-three, or inventing current movement.
+**Prohibited:** Calling the pair qualifying or complete; restoring Live or Expected; showing any primary row or exact countdown; promoting Holding or Uncertain to the primary next-three; describing secondary Task 8 context as Task 9 recovery; or inventing current movement/progress.
 
 ### Case R4 — Incomplete second recovery update
 
@@ -194,7 +196,7 @@ Capture every input snapshot and its completeness decision, authoritative observ
 | Case | Required actual-result evidence | Status |
 |---|---|---|
 | Scenario 15 | First healthy complete absence immediately removes Live, exact countdown, and primary slot; internal grace only; no cancellation claim | Pending |
-| S2 / S3 — 59 and exactly 60 seconds | 59 seconds remains internal grace with no public row; exactly 60 seconds hard-suppresses | Pending |
+| S2 / S3 — 59 and exactly 60 seconds | 59 seconds remains internal grace with no public row; with absence count still one, exactly 60 seconds hard-suppresses from the controlling elapsed trigger | Pending |
 | Scenario 16 | Second healthy complete absence hard-suppresses before 60 seconds; no cancellation claim | Pending |
 | S5 — Incomplete update | Incomplete update counts as neither absence nor recovery; elapsed clock and stricter feed-health behavior verified | Pending |
 | S6 — Target removed | Exact target claim hard-suppressed immediately; no static reconstruction | Pending |
@@ -202,12 +204,12 @@ Capture every input snapshot and its completeness decision, authoritative observ
 | S8 / S9 — Stop-order regression | First regression quarantines and removes precision; second independent confirmation hard-suppresses | Pending |
 | S10 — Duplicate pair | Weaker confident duplicate removed; at most one independently eligible train remains | Pending |
 | S11 — Cancellation | Explicit evidence and narrow supported scope verified | Pending |
-| S12 — Bypass | Exact-stop veto defeats positive prediction without scope widening | Pending |
+| S12 — Resolved bypass boundary | Resolved scoped bypass hard-suppresses; materially unresolved high-impact scope stays fail-closed as Task 6 arrival claim unavailable, not resolved suppression | Pending |
 | S13 — Suspension | Only the resolved suspended scope is removed; unrelated service remains | Pending |
 | S14 — Track conflict | Affected arrivals and guidance are removed; prediction alone cannot clear the conflict | Pending |
 | R1 — One good update | No precision or primary recovery after one apparently good update | Pending |
 | R2 — Complete recovery | Both fresh coherent updates and all five conditions proven; full readmission and exact Live evidence verified | Pending |
-| R3 — Supported-state recovery | Two updates do not force Live or exact precision when Expected or Holding evidence controls | Pending |
+| R3 — Missing movement/progress | Two updates without condition 3 leave recovery incomplete, exact countdown and primary eligibility absent; no Expected restoration; secondary Task 8 context is not recovery | Pending |
 | R4 — Incomplete recovery | Nonqualifying update breaks confirmation; a later good update restarts at one | Pending |
 | R5 — Missing condition | Each unresolved recovery condition independently blocks exact countdown and primary eligibility | Pending |
 

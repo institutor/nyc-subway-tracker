@@ -100,7 +100,9 @@ Apply this decision in order:
 5. Place **Service change—this train's downstream stops are not verified.** beside each affected board's suppression state.
 6. Preserve unrelated trains and any claims not downstream of the invalidated path when their own evidence passes admission.
 
-The conflict releases only after a later current coherent update demonstrates a trustworthy operational path: the train instance remains coherent, its ordered remaining stops and actual destination/direction agree, the target exact directional stop is present, the track/path evidence no longer conflicts, and no other veto applies. Reevaluate every admission gate before restoring a downstream row. The scheduled track alone, a new predicted time, or a confidence reduction cannot clear the conflict.
+The first later fresh coherent update that demonstrates a trustworthy operational path begins recovery review only: the train instance remains coherent, its ordered remaining stops and actual destination/direction agree, the target exact directional stop is present, the track/path evidence no longer conflicts, and no other veto applies. That first update restores no downstream row, guidance, precision, or primary eligibility.
+
+Readmission requires the full two-update sequence in the [suppression, grace, and recovery policy](suppression-grace-and-recovery-policy.md). A second fresh coherent update must preserve the trustworthy path and, across the pair, prove all five recovery conditions before every current Live admission gate is reevaluated. Only then may an independently supported downstream Live row and guidance return. The scheduled track alone, a new predicted time, a confidence reduction, or one coherent path update cannot clear the conflict for public readmission.
 
 Normal terminal track variation is excluded from this hard-conflict rule unless separate evidence makes the downstream stopping path unreliable. Do not infer a platform assignment or track conflict from station layout, route identity, or a static schedule alone.
 
@@ -115,6 +117,6 @@ For each visible, suppressed, or unavailable claim, preserve:
 5. The resolved alert time, route, station or segment, direction, train, and consequence scope.
 6. Every veto or unresolved high-impact condition and the positive prediction it defeated.
 7. The affected board disposition and the explanation shown beside it.
-8. For a track conflict, why terminal behavior does or does not apply, the downstream scope removed, and the later coherent evidence required for release.
+8. For a track conflict, why terminal behavior does or does not apply, the downstream scope removed, both recovery updates, the coherent path evidence preserved across them, and proof of all five recovery conditions before release.
 
 No record may invent a train, stop, platform, track assignment, or service claim. Missing or contradictory required evidence remains **Unknown** and cannot authorize an arrival.

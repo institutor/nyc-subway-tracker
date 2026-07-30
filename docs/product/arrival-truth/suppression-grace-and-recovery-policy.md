@@ -31,7 +31,7 @@ Grace and quarantine are internal truth-control dispositions. They are never rid
 | One impossible stop-order regression | Quarantine the candidate for confirmation. Record the regressed sequence and preserve identity evidence for comparison. | Remove the exact countdown and primary row because plausible stop order no longer passes admission. Do not expose “grace” or “quarantine” as copy. |
 | A hard-suppression cause | Mark the train or exact stop claim suppressed and retain only the non-personal quality record defined below. | No affected arrival row, countdown, confidence downgrade, or dependent guidance survives. Show only the narrowest supported board-level consequence or service-change explanation. |
 | Recovery update one | Keep the candidate internal while the recovery sequence is incomplete. | No exact countdown and no primary eligibility. One apparently good update is insufficient. |
-| Recovery update two | Complete full readmission only if both updates qualify and every current admission gate passes. | The supported Live or Expected treatment may return; an exact countdown returns only when current Live evidence supports it. |
+| Recovery update two | Complete full readmission only if both updates prove all five conditions and every current Live admission gate passes. | One supported Live row and exact countdown may return. Task 9 recovery cannot restore Expected; without current movement or stop progress, exact countdown and primary eligibility remain absent. |
 
 Disappearance alone never proves cancellation. A cancellation label or explanation requires separate current cancellation evidence. During first-snapshot grace and after hard suppression caused only by absence, the product says no more than the available evidence supports, such as fewer verified arrivals.
 
@@ -79,11 +79,13 @@ Hard suppression occurs immediately when any applicable cause below is establish
 | Twice-confirmed stop-order regression | An impossible regression appears in one accepted coherent update and is confirmed by a second accepted coherent update. | First regression quarantines internally and removes public precision; the second confirmation hard-suppresses. A single regression alone does not satisfy this hard-suppression cause. |
 | Weaker confident duplicate | One-to-one continuity evidence confidently establishes that two records represent one train and identifies the weaker duplicate. | Hard-suppress the weaker record immediately. Keep only the stronger coherent instance if it independently passes every admission gate. |
 | Cancellation | Current authoritative evidence explicitly establishes cancellation in the supported train or trip scope. | Suppress within that scope and use only approved cancellation language. Absence is not cancellation evidence. |
-| Bypass | Current evidence establishes, or materially leaves unresolved, that the train will bypass the target. | Suppress at the affected exact stop and direction. |
+| Bypass | Current resolved, scoped evidence establishes that the train will bypass the exact target and direction. | Suppress at the affected exact stop and direction. |
 | Suspension | A current suspension covers the train, route, segment, stop, direction, and time scope at issue. | Suppress only within the resolved affected scope. |
-| Invalidating track conflict | A non-terminal actual-versus-scheduled-track conflict or other current track/path conflict invalidates the target or downstream prediction. | Suppress affected arrivals and dependent guidance until coherent path evidence resolves the conflict. Normal terminal variation is not enough. |
+| Invalidating track conflict | A non-terminal actual-versus-scheduled-track conflict or other current track/path conflict invalidates the target or downstream prediction. | Suppress affected arrivals and dependent guidance. One later coherent path update begins recovery only; require the full two-update sequence and all five conditions before readmission. Normal terminal variation is not enough. |
 
 These causes are independent. A train suppressed for absence does not need a cancellation explanation, and a train suppressed for a bypass or target removal does not remain eligible merely because it is still present in the feed.
+
+A resolved, scoped bypass is the hard-suppression cause above. When a high-impact bypass or reroute may affect service but material scope remains unresolved, fail closed under the [reroute and track-conflict playbook](reroute-and-track-conflict-playbook.md): withhold the affected row as **arrival claim unavailable** and preserve the official message. Do not mislabel that unresolved Task 6 state as a resolved bypass or resolved hard suppression.
 
 ## Stop-order confirmation
 
@@ -103,16 +105,18 @@ Recovery requires two fresh coherent accepted updates for the same candidate aft
 
 The pair is qualifying only when no required condition is missing, stale, contradictory, or materially unresolved. Evidence may accumulate across the two updates, but neither update may contradict any of the five conditions, and the second must leave all five currently established. Stable identity and continued target service must be demonstrated across the pair, not asserted from one isolated record.
 
-After the first qualifying update, keep the candidate outside the primary next-three and do not show an exact countdown. After the second qualifying update, reevaluate every admission gate. The train may return to the primary board only if its resulting state is independently eligible. An exact countdown may return only if current movement/progress and every Live gate pass; two updates do not force Live when Expected, Holding, suppression, or another stricter disposition is supported.
+After the first qualifying update, keep the candidate outside the primary next-three and do not show an exact countdown. After the second qualifying update, reevaluate every Live admission gate. Task 9 recovery completes only when current movement or stop progress and the other four conditions remain established and every Live gate passes; then one supported Live row and exact countdown may return.
+
+If current movement or stop progress is absent, five-condition recovery is incomplete even when the other four conditions hold across two updates. Exact countdown and primary eligibility remain absent, and this branch cannot restore Expected. Independently supported non-primary Holding or Uncertain context may appear only under the [arrival confidence and ghost policy](arrival-confidence-and-ghost-policy.md); that secondary context is not Task 9 recovery and must not be described as completing it.
 
 ## Complete and incomplete recovery
 
 | Recovery sequence | Decision |
 |---|---|
 | One fresh coherent update proves all five conditions | Recovery remains incomplete. No exact countdown or primary eligibility returns. |
-| Two consecutive fresh coherent accepted updates collectively prove all five conditions and the second leaves every gate passing | Recovery is complete; full readmission determines the supported state and presentation. |
+| Two consecutive fresh coherent accepted updates collectively prove all five conditions and the second leaves every Live gate passing | Recovery is complete; one supported Live row and exact countdown may return after full readmission. |
 | First update qualifies; second is incomplete, stale, malformed, regressed, contradictory, anomalous, or lacks any required condition | The second update does not count and breaks confirmation. Keep the public row absent and restart the two-update sequence from the next qualifying update. |
-| Two updates are fresh but identity changes ambiguously, stop order is implausible, current progress is absent, the target is missing, or a service/track conflict remains | Recovery is incomplete. Do not average, downgrade, or infer through the missing condition. |
+| Two updates are fresh but identity changes ambiguously, stop order is implausible, current movement/progress is absent, the target is missing, or a service/track conflict remains | Recovery is incomplete. Exact countdown and primary eligibility remain absent. Do not restore Expected, average evidence, downgrade through Task 9, or infer through the missing condition. Any independently supported secondary Holding or Uncertain context remains a Task 8 decision, not completed recovery. |
 | Feed-level recovery also applies | Both the route/feed-group recovery rule and this train-level two-update rule must pass. Use the stricter incomplete state; one sequence cannot waive the other. |
 
 ## Non-personal quality-review record

@@ -215,21 +215,21 @@ Do not widen a constituent-station closure to the station complex, invent a plat
 
 **Setup**
 
-Use a fixed fixture with an explicit actual-versus-scheduled-track conflict outside normal terminal behavior. Include a live prediction for an exact directional stop downstream of the conflicted path, unrelated coherent candidates, and a later current coherent update that either does or does not demonstrate a trustworthy path.
+Use a fixed fixture with an explicit actual-versus-scheduled-track conflict outside normal terminal behavior. Include a live prediction for an exact directional stop downstream of the conflicted path, unrelated coherent candidates, and two later updates. In one branch, update one is fresh and coherent and demonstrates a trustworthy path; update two is also fresh and coherent, preserves that path, and collectively proves all five suppression-recovery conditions. In another branch, update one fails the path requirement or update two is absent or nonqualifying.
 
 **Expected decision**
 
 At conflict detection, invalidate the downstream stop claim and quarantine the train internally from affected scheduled station boards. Remove the downstream arrival and dependent platform guidance; do not reduce confidence while retaining it. Preserve unrelated candidates.
 
-For the later update, restore the downstream claim only if the train instance, ordered remaining stops, actual destination and direction, exact target stop, and track/path evidence form a coherent trustworthy path and no other veto applies. If any requirement remains unresolved, keep the claim suppressed.
+If update one coherently reestablishes the operational path, count it only as recovery update one and restore nothing. Require update two to preserve that path and complete the full five-condition sequence in the [suppression, grace, and recovery policy](suppression-grace-and-recovery-policy.md), then reevaluate every current Live admission gate before readmission. If either update or any requirement remains unresolved, keep the claim suppressed.
 
 **Visible result**
 
-While the conflict persists, the downstream board has no arrival row for the train and places **Service change—this train's downstream stops are not verified.** beside the suppression state. A qualifying later update permits a newly reevaluated arrival; a non-qualifying update leaves it absent.
+While the conflict persists and after recovery update one, the downstream board has no arrival row, guidance, exact countdown, or primary eligibility for the train and places **Service change—this train's downstream stops are not verified.** beside the suppression state while the conflict remains. Only after qualifying update two may an independently supported Live arrival and guidance return; any nonqualifying or missing update leaves them absent.
 
 **Prohibited outcome**
 
-Do not show **Arrival uncertain**, continue a countdown, show a Scheduled replacement, retain or invent platform guidance, clear the conflict from a new prediction alone, apply the hard-conflict rule to normal terminal variation without separate invalidating evidence, or suppress unrelated trains.
+Do not show **Arrival uncertain**, continue a countdown, show a Scheduled replacement, retain or invent platform guidance, clear the conflict from a new prediction or one coherent path update alone, waive any of the five recovery conditions, apply the hard-conflict rule to normal terminal variation without separate invalidating evidence, or suppress unrelated trains.
 
 ## Truth Gate result record
 
@@ -244,6 +244,6 @@ Do not show **Arrival uncertain**, continue a countdown, show a Scheduled replac
 | R7 — Partial suspension | Arrivals inside only the resolved segment are removed; independently coherent outside service remains visible | Pending |
 | R8 — Full suspension | Suspended route is absent only in the resolved active scope; unrelated service remains visible | Pending |
 | R9 — Station closure | Affected boarding, alighting, and arrivals are removed only at the exact closed scope; unrelated complex service remains visible | Pending |
-| R10 — Non-terminal track conflict | Downstream arrival and guidance are removed, not confidence-reduced; only a later coherent trustworthy path permits readmission; unrelated trains remain visible | Pending |
+| R10 — Non-terminal track conflict | Downstream arrival and guidance remain removed after the first coherent path update; only a second qualifying update, preserved coherent path, all five recovery conditions, and Live gates permit readmission; unrelated trains remain visible | Pending |
 
 For every run, capture the fixed reviewed product version, complete inputs without invented operational facts, source timestamps and effective periods, planned or unplanned ordered reconciliation, route identity and service pattern separately, exact directional-stop decision, every veto, rider-visible result, prohibited-result checks, date, and reviewer. Failures remain recorded and must link their correction and rerun.
