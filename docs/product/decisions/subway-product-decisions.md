@@ -2,18 +2,18 @@
 
 | Governance field | Value |
 |---|---|
-| Source sections | Approved specification §34; master delivery plan Task 0.2 `Artifacts` and `Steps`; Task 0.3 brief |
+| Source sections | Approved specification §34 for the historical Phase 0 SPD-01–SPD-14 set; applying approved specification §§25.2, 25.5, and 33.5 and commute alerts and launch quality plan Task 1 Step 8 for SPD-15; master delivery plan Task 0.2 `Artifacts` and `Steps`; Task 0.3 brief |
 | Owner | Product Governance Lead |
 | Required reviewers | Product, Accessibility, Data Quality, Content, Privacy, Operations |
-| Status | Approved |
+| Status | Draft |
 | Last validation date | 2026-07-30 |
 | Supersedes | None |
-| Approval evidence | [Phase 0 governance approval record](../release/phase-0-governance-approval.md) |
-| Scenario results | Not applicable — this Phase 0 artifact governs vocabulary, ownership, lifecycle, and review, not rider-visible operational behavior; this does not waive later operational, accessibility, offline, positioning, or notification acceptance evidence. |
+| Approval evidence | Pending — the [Phase 0 governance approval record](../release/phase-0-governance-approval.md) remains historical approval evidence for unchanged SPD-01–SPD-14 only and does not approve SPD-15 or this materially revised version |
+| Scenario results | Not run — Pending for SPD-15 and its applying commute-window fixtures; the historical Phase 0 Not applicable determination remains limited to unchanged SPD-01–SPD-14 and does not waive later operational, accessibility, offline, positioning, or notification acceptance evidence |
 
 ## Purpose and authority
 
-This approved record preserves the approved specification's cross-domain subway product decisions verbatim so later artifacts can reference one stable decision identifier. It does not replace the approved specification and does not re-own a rule assigned to a narrower contract.
+This record preserves the approved specification's original cross-domain subway product decisions verbatim so later artifacts can reference stable decision identifiers. SPD-01–SPD-14 retain their historical Phase 0 approval, but the material addition of SPD-15 returns this artifact version to **Draft** under the review policy. This record does not replace the approved specification and does not re-own a rule assigned to a narrower contract.
 
 ## Decision record
 
@@ -33,6 +33,17 @@ This approved record preserves the approved specification's cross-domain subway 
 | SPD-12 | Subway crowding is absent until authoritative car-level data exists. | Crowding |
 | SPD-13 | Commute notifications are disruption-only and segment-aware. | Commute alerts |
 | SPD-14 | Trust and accessibility errors are release-blocking quality failures. | Quality and release governance |
+| SPD-15 | No routine all-clear push is sent. A recovery push is eligible only when a prior disruption alert needs a meaningful recovery update. | Commute recovery notifications |
+
+## SPD-15 scope and governance lifecycle
+
+SPD-15 is necessary but not sufficient for a recovery push. Restoration remains Off by default. Later recovery consideration requires a prior push for the same relevant disruption episode and commute impact, a meaningful recovery that would correct or materially update the rider's decision, and permission under the [commute window product contract](../commute/commute-window-contract.md) and the future Task 5 timing and recovery policies. No prior relevant disruption push means no recovery push.
+
+SPD-15 applies approved specification §§25.2, 25.5, and 33.5 and commute-plan Task 1 Step 8. It is a new workstream decision and is not represented as a fifteenth item in the approved specification §34's original fourteen decisions.
+
+The Phase 0 governance approval remains immutable historical evidence for the unchanged SPD-01–SPD-14 text. It does not approve SPD-15 or this materially revised artifact version. This version remains **Draft**, approval and scenario evidence remain **Pending**, and Product, Accessibility, Data Quality, Content, Privacy, and Operations must all decide on the same fixed version before approval.
+
+The [product artifact index](../artifact-index.md) still records this artifact's historical Approved state and narrower §34 provenance. Product Governance Lead reconciliation of status, provenance, approval evidence, and scenario state remains **Pending** and is outside this task's authorized file scope.
 
 ## Application rules
 
