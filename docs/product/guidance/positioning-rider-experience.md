@@ -259,3 +259,22 @@ A hard conflict on either leg preserves the Task 8 suppression behavior and exac
 Offline preserves the trip context and may retain only an explicitly historical likelihood with its original claim-specific last-checked time. Static walking or positioning may remain only as verified reference with a verification date. Do not calculate, rank, or activate a next option offline. Reconnection reevaluates positioning and transfer context only at stage 4 after accessible path and equipment, service-change, and arrival recovery; a returned snapshot never restores prior Likely automatically. The Release 1 offline card remains complete without positioning or current likelihood when legitimately unavailable.
 
 All Task 9 actual results, visible and assistive observations, reviewer decisions, evidence attachments, corrections, reruns, approvals, and release dispositions are **Pending** or **Not run — Pending** in the transfer artifact. No real station, platform, walk, path, connection, coverage, run, capture, reviewer, approval, or release authorization is claimed. The authoritative **NO-GO — GATE 0 NOT PASSED**, public-arrival-board block, **NO-GO — REQUIRED ACCESSIBILITY EVIDENCE AND COVERAGE ARE NOT DEMONSTRATED**, and Task 12 Steps 5–13 **Pending** status remain unchanged.
+
+## Task 11 append-only crowding and safety precedence
+
+Task 11 adds no positioning objective and changes none of the Task 8 or Task 9 certainty, reversal, conflict, transfer, accessibility, offline, fixture, copy, or evidence rules above. It applies approved specification §24.3; the accessibility and platform-guidance plan `Product artifact map` and full Task 11 `Product artifacts`, `Dependencies`, `Produces for later tasks`, `Ordered steps`, and `Evidence and acceptance checks`; accepted Task 8 commit `0fcb00265a23ea859681dfef7b6edad213c674df`; accepted Task 9 commit `8e27ae2bd3b69c3946a9aba41adf7c76f36e00a5` with this file's accepted pre-append blob `8a6dfb8a844fb71118576ca46abf7d71fa52fb88`; and accepted Task 10 commit `ed09425cd6d5a8e9341beff82364065a4d6cf312`.
+
+The separate [subway crowding enablement gate](../crowding/subway-crowding-enablement-gate.md) owns launch-wide omission, source re-audit, future eligibility, full-module failure, and any conditional crowding labels. It is Draft and unapproved; all crowding audits, sources, real trains, coverage, results, reviewers, and Task 12 decisions remain **Pending**, absent, or **Not run — Pending**.
+
+Crowding never overrides a verified accessible boarding or exit zone, Accessible Route Only, or safe platform advice.
+
+If a less-crowded position conflicts with an accessible or safe instruction:
+
+1. keep the accessible or safe instruction as the visible and assistive primary guidance;
+2. do not recommend, rank, or activate the conflicting crowding position;
+3. never relax or turn off Accessible Route Only; and
+4. keep safety and accessibility first in visual order, focus order, reading order, and assistive wording.
+
+Crowding convenience cannot repair an unverified accessible path, uncertain platform, service or track conflict, unsafe movement, unavailable positioning, or failed transfer gate. Full crowding omission remains a complete surface; never add a shell, placeholder, badge, stale diagram, or grey/Unknown car row to fill the gap.
+
+This positioning artifact retains its existing Product, Accessibility, Data Quality, Content, and Operations reviewer set; Operations is also mandatory for the separate crowding gate. Both artifacts remain **Draft**, approval evidence remains **Pending**, and Task 12 alone owns any later crowding decision. The authoritative **NO-GO — GATE 0 NOT PASSED**, public-arrival-board block, **NO-GO — REQUIRED ACCESSIBILITY EVIDENCE AND COVERAGE ARE NOT DEMONSTRATED**, and Task 12 Steps 5–13 **Pending** posture remain unchanged.
