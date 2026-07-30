@@ -39,7 +39,7 @@ For an **unplanned** case, capture the ordered decisions exactly:
 
 In every case, record route identity separately from service pattern and put the rider explanation beside the affected row, suppression, or unavailable state.
 
-## Scenario 6 — F trains run via the E
+## Scenario 6 — One F train runs via the E
 
 **Setup**
 
@@ -56,11 +56,11 @@ Retain route identity **F** and treat **Via E line** as the service-pattern expl
 
 **Visible result**
 
-The original F-stop board has no row for this train and shows **F trains are running via the E line and are not stopping here.** beside the suppression state. The verified E-stop board shows an **F** arrival with **Via E line** beside its actual destination.
+The original F-stop board has no row for this train and shows **This F train is running via the E line and is not stopping here.** beside the suppression state. The verified E-stop board shows an **F** arrival with **Via E line** beside its actual destination.
 
 **Prohibited outcome**
 
-Do not show the F at the omitted original stop, relabel the train as E, admit an E station-complex or opposite-direction match, rely on a prediction without supporting reroute evidence, or place the explanation only on a generic alert page.
+Do not show the F at the omitted original stop, relabel the train as E, admit an E station-complex or opposite-direction match, rely on a prediction without supporting reroute evidence, widen this one-train fixture to all F service, or place the explanation only on a generic alert page.
 
 ## Scenario 7 — Local train runs express
 

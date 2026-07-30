@@ -62,14 +62,14 @@ This walkthrough applies the same evidence order to the approved F-via-E example
 
 1. Keep the route identity **F** throughout the decision. The changed service pattern does not turn the train into an E.
 2. Resolve the current reroute evidence and compare the F train's coherent live remaining-stop sequence with the effective pattern.
-3. At an original F exact directional stop absent from the live sequence, suppress the arrival. Place **F trains are running via the E line and are not stopping here.** beside the affected suppression state.
+3. At an original F exact directional stop absent from the live sequence, suppress the arrival. Place **This F train is running via the E line and is not stopping here.** beside the affected suppression state.
 4. At an exact E-line station-direction present in the coherent live sequence, admit the F only when supporting change evidence resolves the path and no bypass, suspension, closure, planned-pattern, or track contradiction applies.
 5. On an admitted rerouted row, retain the **F** route identity and place **Via E line** beside the actual destination.
 6. If the exact E station-direction is absent, the route direction is wrong, the live sequence is incoherent, or current evidence contradicts the stop, suppress the F there. A predicted time cannot restore it.
 
 | Board claim | Required decision | Rider treatment beside the affected state |
 |---|---|---|
-| Original F stop omitted by the rerouted live pattern | Suppress the F at that exact directional stop. | **F trains are running via the E line and are not stopping here.** |
+| Original F stop omitted by the rerouted live pattern | Suppress the F at that exact directional stop. | **This F train is running via the E line and is not stopping here.** |
 | Exact E station-direction present with coherent live sequence and supporting uncontradicted reroute evidence | If every other admission gate passes, keep route **F** and admit the current stop call. | **Via E line** beside the actual destination on the F arrival row. |
 | Proposed E stop missing exact-direction or supporting path evidence, or contradicted by a current veto | Suppress; do not downgrade to a weaker arrival. | **Service change—this arrival is not verified for this stop.** |
 
