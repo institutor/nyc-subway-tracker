@@ -4,7 +4,7 @@
 |---|---|
 | Source sections | Approved specification §§27.2–27.4, 31.1, and 31.3; arrival-truth and service-changes plan Task 11 `Artifacts` and `Ordered steps` |
 | Owner | Release Quality Lead |
-| Required reviewers | Product, Data Quality, Operations |
+| Required reviewers | Product, Accessibility, Data Quality, Content, Operations |
 | Status | Draft |
 | Last validation date | 2026-07-30 |
 | Supersedes | None |

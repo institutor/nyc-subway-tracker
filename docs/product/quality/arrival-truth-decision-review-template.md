@@ -4,7 +4,7 @@
 |---|---|
 | Source sections | Approved specification §§27.1 and 27.4; arrival-truth and service-changes plan Task 11 `Artifacts` and `Ordered steps` |
 | Owner | Release Quality Lead |
-| Required reviewers | Product, Data Quality, Operations |
+| Required reviewers | Product, Accessibility, Data Quality, Content, Operations |
 | Status | Draft |
 | Last validation date | 2026-07-30 |
 | Supersedes | None |
@@ -220,6 +220,33 @@ Complete one row per candidate update. Do not combine nonconsecutive updates or 
 | Reversal recorded as a new linked decision? | _Yes / No / Not applicable_ |
 
 Any correction that manufactures positive evidence is forbidden and blocks approval regardless of whether the resulting train later arrived.
+
+### Equipment-restoration audit
+
+Complete this branch whenever the reviewed decision claims or could cause elevator or escalator restoration, restores an equipment-dependent path, or reverses an equipment-outage consequence. Mark it not applicable only when the decision has no equipment-restoration effect and record why.
+
+This audit records evidence; it does not authorize an operational claim, define an accessibility threshold, or replace the eventual controlling equipment-status policy. That policy owns equipment freshness, matching, confirmation, and restoration. Until its requirements and authoritative evidence pass, the audit conclusion remains **No** and the restoration-dependent public claim remains blocked.
+
+| Restoration-audit field | Review entry |
+|---|---|
+| Audit applicable? | _Yes / No; if No, record why the reviewed decision cannot restore equipment or an equipment-dependent path_ |
+| Equipment identity | _Required when applicable; exact elevator or escalator identity, not a station-wide inference_ |
+| Exact affected path and scope | _Required when applicable; entrance, fare-control or mezzanine connection, passage, platform, direction, exit, and dependent route claim as applicable_ |
+| Prior accepted outage state | _Required when applicable; evidence reference, authoritative source time, effective period, and public consequence_ |
+| Authoritative restoration source | _Required when applicable; source type and evidence reference governed by the controlling equipment policy_ |
+| Restoration source timestamp and effective period | _Required when applicable_ |
+| Current accepted snapshot | _Required when applicable; evidence reference, authoritative comparison time, and acceptance result_ |
+| Relevant equipment-population completeness | _Complete / Incomplete / Unknown, with evidence_ |
+| Relevant equipment-population health | _Healthy / Not healthy / Unknown, with evidence_ |
+| Current operational state is unambiguous | _Yes / No, with the exact accepted state; missing, stale, contradictory, or unmatched evidence is No_ |
+| Governing confirmation observations | _Every observation required by the eventual controlling equipment policy, with authoritative times and acceptance results; otherwise Missing_ |
+| Did any correction supply or manufacture a positive equipment-operation claim? | _Must be No_ |
+| Public result | _Restoration-dependent claim shown or withheld, exact freshness, path consequence, and rider wording_ |
+| Did elevator or escalator restoration arrive from a complete healthy snapshot? | _Yes / No; No or missing evidence blocks restoration_ |
+| Restoration conclusion | _Yes / No; Yes requires every applicable field above to pass the controlling equipment policy_ |
+| Blocking reason when conclusion is No | _Required; identify missing, incomplete, unhealthy, ambiguous, stale, unmatched, contradictory, or insufficient confirmation evidence_ |
+
+A **Yes** conclusion is permitted only when the authoritative restoration evidence arrived in a current accepted snapshot that is complete and healthy for the relevant equipment population, the exact equipment and affected path are matched, current operational state is unambiguous, and every confirmation observation required by the controlling equipment policy passes. Any **No**, **Incomplete**, **Not healthy**, **Unknown**, **Missing**, or omitted required entry blocks the restoration conclusion. A correction cannot change that result, count as a confirmation observation, or declare equipment operational.
 
 ## 10. Non-personal calibration slice
 
