@@ -2,7 +2,7 @@
 
 | Governance field | Value |
 |---|---|
-| Source sections | Approved specification §§19.1, 20.2, 21, and 33.3; accessibility and platform-guidance plan `Product artifact map` and Task 1 `Product artifacts`, `Dependencies`, `Produces for later tasks`, `Ordered steps`, and `Evidence and acceptance checks` |
+| Source sections | Approved specification §§19.1–19.2, 20.2, 21, 31.5, and 33.3; accessibility and platform-guidance plan `Product artifact map`; Task 1 `Product artifacts`, `Dependencies`, `Produces for later tasks`, `Ordered steps`, and `Evidence and acceptance checks`; Task 2 `Product artifacts`, `Dependencies`, `Produces for later tasks`, `Ordered steps`, and `Evidence and acceptance checks` |
 | Owner | Accessibility Product Lead |
 | Required reviewers | Product, Accessibility, Data Quality, Content |
 | Status | Draft |
@@ -13,13 +13,13 @@
 
 ## Purpose and authority
 
-This checklist applies the [complete accessible-path contract](complete-path-contract.md) to one fixed candidate chain. It gives reviewers a deterministic **Pass**, **Fail**, or **Unknown** decision for every required evidence field and for the complete street-to-street chain.
+This checklist applies the [complete accessible-path contract](complete-path-contract.md) to one fixed candidate chain. It gives reviewers a deterministic **Pass**, **Fail**, or **Unknown** decision for every required evidence field and for the complete street-to-street chain. Task 2 extends the instrument with the atomic record and non-inheritance checks used by the [station-direction coverage register](station-direction-coverage-register.md) and [station-direction review guide](station-direction-review-guide.md).
 
 The [approved product specification](../../superpowers/specs/2026-07-30-nyc-subway-train-time-tracker-design.md) controls every conflict. Shared terms retain the meanings in the [approved transit product glossary](../contracts/transit-product-glossary.md), public wording remains governed by the [approved rider language rules](../contracts/rider-language-rules.md), and review decisions must follow the [product artifact review and approval policy](../review-and-approval-policy.md).
 
 This checklist is an unpopulated review instrument. It contains no real station, entrance, route, direction, platform, path, equipment identity, verification date, fixed product version, observed result, approval, or reviewer decision.
 
-This artifact is **Draft**. All four required representative traps are **Not run — Pending**.
+This artifact is **Draft**. All four required Task 1 representative traps and all seven Task 2 directional-coverage fixtures are **Not run — Pending**.
 
 The authoritative release decision remains:
 
@@ -29,9 +29,11 @@ Public arrival boards remain blocked.
 
 Task 1 neither passes Gate 0 nor makes an accessibility release decision.
 
+Task 2 preserves that boundary. It does not approve a station-direction row, pass Gate 0, or make the Release 1 accessibility decision.
+
 ## Governance provenance reconciliation
 
-The [artifact index](../artifact-index.md) currently cites specification §§19.1 and 21 for this checklist. The Task 1 brief requires the broader §§19.1, 20.2, 21, and 33.3 provenance above because the checklist also reviews escalator substitution, current-owner separation, and fail-closed completeness risk. Product Governance Lead reconciliation is **Pending** before advancement from **Draft**. This task does not edit the index or treat the mismatch as approved.
+The [artifact index](../artifact-index.md) currently cites specification §§19.1 and 21 for this checklist. The Task 1 brief requires the broader §§19.1, 20.2, 21, and 33.3 provenance because the checklist also reviews escalator substitution, current-owner separation, and fail-closed completeness risk. Task 2 additionally applies specification §§19.2 and 31.5 and the plan's Task 2 provenance without erasing the accepted Task 1 history. Product Governance Lead reconciliation is **Pending** before advancement from **Draft**. This task does not edit the index or treat the mismatch as approved.
 
 ## Review dispositions
 
@@ -65,6 +67,8 @@ Complete this record before evaluating edges. Blank, placeholder, or unversioned
 | Rerun | Rerun version, date, result, and evidence link, or **Not run** |
 
 An expected result is not an actual result. A documentation commit, blank template, meeting, owner label, or unversioned screenshot is not evidence.
+
+For Task 2 application, expected result, prohibited result, actual result, fixed product version, evidence link, reviewer and review date, disposition, correction, and rerun remain separate fields. None may be combined, inferred from another, or replaced by a coverage-register disposition.
 
 ## Exact path-scope inventory
 
@@ -101,6 +105,30 @@ Inventory every edge in travel order. Repeat the transfer passage → directiona
 
 Any Fail or Unknown in this table invalidates the chain for an accessible-now claim.
 
+## Task 2 atomic station-direction application
+
+Apply these checks to every proposed row in the [station-direction coverage register](station-direction-coverage-register.md). One row represents one exact structural combination; a changed constituent, line, direction, entrance, corner, platform, boarding area, service pattern, required edge, equipment chain, restriction, or path scope requires a separate row.
+
+| Application check | Pass | Fail | Unknown |
+|---|---|---|---|
+| Stable record identity and version | One stable coverage ID and immutable version identify this exact combination. | An ID is reused for another scope or evidence crosses versions. | Identity, version, or version linkage is missing. |
+| Station complex and exact constituent | Both official identities are recorded and every edge belongs to the exact constituent scope. | Complex-level or another-constituent evidence is substituted. | Constituent relationship is missing, ambiguous, or unreviewed. |
+| Exact route or line | One official route or line is recorded and supported by the path. | Another line or matching route color is substituted. | Route identity or served scope is unresolved. |
+| Normalized rider direction | One normalized direction and its source mapping are fixed for the row. | The opposite direction or a different direction is substituted. | Direction is absent, ambiguous, raw-code-only, or unreviewed. |
+| Exact entrance and street corner | Official entrance identity, description, and exact corner match the first or final edge. | A nearby staircase, wrong corner, different entrance, or same-name station is substituted. | Entrance identity, corner, or edge relationship is unresolved. |
+| Exact directional platform and boarding area | The chain reaches the exact platform and verified boarding area for the recorded route and direction. | General, opposite, ordinary, rerouted, or replacement-platform access substitutes. | Platform, route-direction relationship, or boarding-area scope is unresolved. |
+| Complete chain and ordered edge IDs | The complete street-to-street chain and every stable edge ID are recorded in order without a gap. | A partial chain or discontinuous edge list is presented. | Any required edge, endpoint, or chain position is unresolved. |
+| Required official equipment identities | Every equipment-dependent edge has the exact official identity; a no-machine chain records reviewed **Not applicable** with reason. | Presence, description, similar name, or neighboring equipment substitutes. | An applicable identity is missing, unmatched, duplicated, or unjoinable. |
+| Official accessible-path membership | Every required edge has an explicit same-scope official membership decision. | Geometry or equipment presence is treated as membership. | Membership is missing, inherited, ambiguous, or unreviewed. |
+| Operating restrictions | Every applicable direction, time, gate, access, boarding, rider-use, and service-pattern restriction permits the row's scope. | A restriction conflicts with the scope. | Restrictions are absent, stale under their owner rule, contradictory, or unreviewed. |
+| Evidence, verification date, and verifier | Named sources, durable references, a valid structural verification date, and named verifier and role support this exact version. | Evidence establishes a different scope or the date fails an accepted owner rule. | Any source, reference, date, verifier, or currency decision is missing. |
+| Required reviewer decisions and dates | Product, Accessibility, Data Quality, Content, and Operations decide on the same fixed row version and record dates. | Any required reviewer records **Changes required**. | A reviewer, decision, date, or same-version relationship is missing. |
+| Explicit unsupported scope | Unsupported lines, directions, entrances, platforms, service patterns, and path scopes are each stated. | The row claims or implies a broader scope than its evidence. | Any unsupported-scope category is silent or unresolved. |
+| Rerouted or replacement platform | The platform has its own complete row and every current owner confirms the same scope. | Ordinary-platform coverage is transferred to the replacement platform. | Replacement-platform coverage or current scope is missing or unresolved. |
+| Structural/current separation | Structural disposition contains no runtime equipment, freshness, outage, restoration, route, or service state. | Current state is written into structural eligibility or an outage erases a structural row. | The layer or authoritative owner is unresolved. |
+
+Any Fail or Unknown in this table makes the proposed row ineligible and blocks an accessible-now claim.
+
 ## Seven-field edge review
 
 Complete this review separately for every required edge. Evidence from one edge, entrance, direction, path, or machine cannot fill another edge's row.
@@ -129,6 +157,24 @@ These checks do not collapse into the seven-field table.
 | Current route, direction, and platform scope | Current owners confirm that the journey still uses the reviewed relationship. | Current evidence establishes another scope. | Reroute, platform, route, or direction scope is unresolved. |
 
 Equipment presence, an empty outage response, a station badge, a neighboring path, a similar name, or a documentation record cannot pass current availability.
+
+## Task 2 no-inheritance review
+
+| Exact scope boundary | Required result | Prohibited inheritance |
+|---|---|---|
+| Complex | Require one complete atomic row; a complex badge supplies none. | Complex badge to any constituent, line, direction, entrance, platform, or path |
+| Constituent station | Keep every official constituent separate. | One constituent to another constituent in the same complex |
+| Route or line | Review each exact line independently. | One accessible line to every line in the complex, or matching route color to identity |
+| Direction | Keep one normalized rider direction per row. | One direction to the opposite or an ambiguous direction |
+| Platform and boarding area | Require the exact directional platform and exact boarding area. | One platform, general platform access, or ordinary platform to another platform |
+| Entrance and corner | Require exact official entrance identity and street corner. | Accessible entrance to a nearby staircase, wrong corner, different entrance, or same-name station |
+| Passage membership | Require explicit official accessible-path membership for the exact edge and scope. | Step-free geometry to official membership |
+| Equipment and chain | Require official identity, endpoints, ordered edges, membership, restrictions, and verification. | Equipment presence to membership or a complete chain |
+| Reroute scope | Require a complete replacement-platform row and current same-scope decisions. | Ordinary-platform coverage to a rerouted or replacement platform |
+| Identity | Use official stable identities. | Shared name, description, proximity, or route color to station, entrance, route, platform, or equipment identity |
+| Completeness | Require every atomic field, reviewer decision, and unsupported-scope statement. | Partial, missing, stale-under-owner-rule, or unreviewed evidence to eligibility |
+
+The review must record each boundary separately. A pass at one boundary cannot compensate for a Fail or Unknown at another.
 
 ## Final path decision
 
@@ -219,6 +265,20 @@ Apply this decision in order:
 | Rerun | Not run |
 | Evidence status | **Not run — Pending** |
 
+## Task 2 directional and partial-coverage fixtures
+
+The detailed abstract records and pass/fail branches are in the [station-direction review guide](station-direction-review-guide.md). Each later execution must use the separate fixed review-package fields above.
+
+| Fixture | Expected result | Prohibited result | Current state |
+|---|---|---|---|
+| Direction-specific coverage | Accept only the independently complete covered direction; reject the other | Complex or line badge covers both directions | **Not run — Pending** |
+| Partial complex | Accept only the exact constituent and line combination with a complete row | One accessible line covers the whole complex | **Not run — Pending** |
+| Mezzanine-only elevator | Reject because the chain does not reach the correct platform and boarding area | Elevator presence creates coverage | **Not run — Pending** |
+| Same-name stations with different corners | Keep records separate by official station and entrance identity | Name or proximity merges coverage | **Not run — Pending** |
+| Wrong or nearby entrance | Reject the substituted entrance | Nearest staircase or corner inherits the accessible entrance | **Not run — Pending** |
+| Rerouted train on unverified platform | Reject accessible routing for the replacement platform | Ordinary-platform coverage transfers to the reroute | **Not run — Pending** |
+| Step-free but non-official passage | Reject official accessible-path membership and the complete chain | Geometry alone proves an official accessible path | **Not run — Pending** |
+
 ## Review completion checklist
 
 - [ ] The review package identifies one immutable product and contract version.
@@ -231,15 +291,27 @@ Apply this decision in order:
 - [ ] Every required edge has all seven evidence fields.
 - [ ] Every edge-to-edge endpoint is continuous at the same physical location and level.
 - [ ] Exact constituent station, entrance, route, direction, platform, boarding area, exit, and street scope are preserved.
+- [ ] The coverage record uses one stable ID and one immutable version for exactly one atomic station-direction combination.
+- [ ] Station complex and exact constituent station are both recorded without complex-level inheritance.
+- [ ] Route or line and normalized rider direction are exact and independently supported.
+- [ ] Exact entrance identity and street corner are preserved; nearby, wrong-corner, and same-name substitutions are rejected.
+- [ ] Exact directional platform and boarding area are supported; rerouted or replacement platforms require their own complete row.
+- [ ] The ordered complete chain and all edge IDs are recorded with no gap.
 - [ ] Every required movement passes the step-free test.
 - [ ] Every required edge has accepted official accessible-path membership.
+- [ ] Every required official equipment identity is recorded without name, description, presence, or proximity inference.
 - [ ] Current availability comes only from its later authoritative owner.
 - [ ] Restrictions and verification date pass their owner rules.
+- [ ] Evidence sources, durable references, verifier, and all required same-version reviewer decisions and dates are complete.
+- [ ] Unsupported lines, directions, entrances, platforms, service patterns, and path scopes are explicit.
+- [ ] All complex, constituent, line, direction, platform, entrance, same-name-station, equipment, passage, and reroute non-inheritance checks pass.
+- [ ] Structural eligibility contains no current runtime status, and an outage does not erase a structural row.
 - [ ] No equipment presence, escalator, station badge, empty outage response, similar name, or neighboring chain supplies missing evidence.
 - [ ] A failed or Unknown required edge invalidates its chain.
 - [ ] Every alternate chain is reviewed independently without inherited evidence.
 - [ ] Evidence link, reviewer, date, disposition, correction, and rerun fields are complete.
 - [ ] Every required representative trap retains its actual evidence state; until observed, that state is **Not run — Pending**.
+- [ ] Every Task 2 directional and partial-coverage fixture retains its actual evidence state; all seven are **Not run — Pending**.
 - [ ] No real station, path, equipment, availability, approval, Gate 0 passage, or accessibility release claim has been fabricated.
 
-Every unchecked required item blocks review completion. A completed checklist is still not approval until all mandatory reviewers decide on the same fixed evidence package and every blocking scenario passes.
+Every unchecked required item blocks review completion. Any missing, Unknown, wrong-scope, unreviewed, contradictory, or stale-under-owner-rule required fact fails closed for an accessible-now claim. A completed checklist is still not approval until all mandatory reviewers decide on the same fixed evidence package and every blocking scenario passes.
