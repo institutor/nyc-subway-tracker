@@ -53,7 +53,7 @@ Tasks 1–3 establish the product contract. Tasks 4–7 turn that contract into 
 
 **Steps**
 
-1. Define a commute window as a rider-selected set of active weekdays, local start time, local end time, origin station or saved origin, destination station or saved destination, intended direction, and primary route or route set.
+1. Define a commute window as a rider-selected set of active weekdays, local start time, local end time, origin station and preferred entrance, destination station and preferred exit, intended direction, primary route, acceptable alternate routes, optional transfer preference, preparation lead time, and Accessible Route Only or Avoid Stairs preference.
 2. State that a commute window creates a disruption watch, not a scheduled departure alarm.
 3. Record the default of one alert per materially distinct disruption episode.
 4. Define the rider-controlled states: active, paused, expired because required context is missing, and deleted.
@@ -61,6 +61,7 @@ Tasks 1–3 establish the product contract. Tasks 4–7 turn that contract into 
 6. Define which fields are required, which may be inferred from a saved trip, and which must be reconfirmed when route or station relationships change.
 7. Record the subway-only launch boundary and the explicit exclusion of routine crowding notifications.
 8. Add a decision entry stating that no “all clear” push is sent unless a prior disruption alert needs a meaningful recovery update.
+9. State that the product may suggest setting up a commute after repeated use but never activates notifications without explicit rider confirmation.
 
 **Acceptance evidence**
 
@@ -68,6 +69,7 @@ Tasks 1–3 establish the product contract. Tasks 4–7 turn that contract into 
 - The contract distinguishes a direction from a terminal label and handles stations with more than two passenger-serving directions.
 - An overnight window has a single, documented service-day interpretation.
 - No field requires an account to save locally.
+- A suggested commute remains inactive until the rider explicitly confirms it.
 - All terms match the approved specification.
 
 **Commit checkpoint**
@@ -98,8 +100,9 @@ Tasks 1–3 establish the product contract. Tasks 4–7 turn that contract into 
 5. Suppress notifications for route-wide alerts that do not intersect the rider’s travel segment or direction.
 6. Suppress notifications when the only evidence is stale, unresolved, internally conflicting, or below the documented delay threshold.
 7. Suppress routine schedule variance and minor spacing changes.
-8. Define conservative behavior when the preferred route is disrupted but a materially equivalent subway option remains available.
-9. Include examples for an F train rerouted via the E line, an origin bypass, a downstream-only delay, a direction-specific suspension, and an alert with ambiguous stop impact.
+8. Suppress a generic data outage unless the rider has explicitly opted into data-health notices.
+9. Define conservative behavior when the preferred route is disrupted but a materially equivalent subway option remains available.
+10. Include examples for an F train rerouted via the E line, an origin bypass, a downstream-only delay, a direction-specific suspension, and an alert with ambiguous stop impact.
 
 **Acceptance evidence**
 
@@ -130,14 +133,20 @@ Tasks 1–3 establish the product contract. Tasks 4–7 turn that contract into 
 
 **Steps**
 
-1. Copy the approved material-delay threshold and its comparison rule exactly from the specification.
-2. Define the comparison baseline and forbid silently switching between schedule deviation, expected headway, and published incident severity.
-3. Document the behavior exactly below, exactly at, and exactly above every threshold.
-4. Define whether multiple moderate impacts combine into a meaningful commute disruption and, if so, the approved rule.
-5. Specify New York local-time handling for overnight windows, the fall-back repeated hour, the spring-forward missing hour, and service-day rollovers.
-6. Define the behavior when a disruption begins before a window, during a window, or immediately after its end.
-7. Define the behavior when evidence becomes stale immediately before delivery.
-8. Require a test case for a delayed train whose origin stop is subsequently removed by a service change.
+1. Set the default rider tolerance to more than five added journey minutes and permit rider-selected ten- or fifteen-minute tolerances.
+2. Treat a current official active delay alert affecting the saved segment as actionable according to its resolved impact.
+3. Treat the absence of a verified arrival within the greater of twelve minutes or twice the current planned headway as a qualifying delay signal.
+4. Treat an observed gap as qualifying only when it reaches at least twice the planned headway and is at least six minutes longer than planned.
+5. Treat an expected journey-time increase as qualifying only when it exceeds the rider’s configured five-, ten-, or fifteen-minute tolerance.
+6. Treat a normally viable transfer becoming Tight or Uncertain as a qualifying decision change.
+7. Require inferred delay or gap evidence to persist for at least two coherent updates spanning sixty seconds; allow a current confirmed suspension, closure, bypass, short turn, or blocking accessible-path outage to qualify after one coherent snapshot.
+8. Define the comparison baseline and forbid silently switching among schedule deviation, planned headway, expected journey time, transfer viability, and published incident severity.
+9. Document the behavior exactly below, exactly at, and exactly above every threshold, including the distinction between “at least” and “exceeds.”
+10. Define whether multiple moderate impacts combine into a meaningful commute disruption and, if so, the approved rule.
+11. Specify New York local-time handling for overnight windows, the fall-back repeated hour, the spring-forward missing hour, and service-day rollovers.
+12. Define the behavior when a disruption begins before a window, during a window, or immediately after its end.
+13. Define the behavior when evidence becomes stale immediately before delivery.
+14. Require a test case for a delayed train whose origin stop is subsequently removed by a service change.
 
 **Acceptance evidence**
 
@@ -146,6 +155,8 @@ Tasks 1–3 establish the product contract. Tasks 4–7 turn that contract into 
 - A missing spring-forward clock interval does not create a phantom alert opportunity.
 - Final eligibility is rechecked against current evidence before delivery.
 - Arrival presence never overrides a stop-impact veto.
+- A one-update inferred fluctuation never sends a push.
+- The five-minute default requires an increase beyond five minutes, while the observed-gap rule permits equality at its “at least” boundaries.
 
 **Commit checkpoint**
 
@@ -208,14 +219,18 @@ Tasks 1–3 establish the product contract. Tasks 4–7 turn that contract into 
 
 **Steps**
 
-1. Define the lead period in which a qualifying notification may be delivered.
-2. Require a final relevance and freshness check immediately before the delivery decision.
-3. Define message fields: affected trip, plain-language impact, relevant station or segment, timing, credible alternative when available, and an explicit invitation to open current details.
-4. Separate planned-change, active-delay, suspension, skipped-stop, accessibility-path, and recovery message patterns.
-5. Use certainty language that matches the underlying evidence; do not convert “may be affected” into a definitive bypass.
-6. Keep the most decision-relevant text visible without opening the app.
-7. Define when a recovery update is helpful enough to send, and suppress it when the commute window has ended or the rider was never notified about the incident.
-8. For overnight changes, make the applicable calendar date and commute window understandable without exposing service-day jargon.
+1. Define the rider-selected preparation lead period in which a qualifying notification may be delivered.
+2. For planned work, notify once before the preparation lead time or at the start of the commute window, whichever preserves useful action time.
+3. For unplanned disruption, notify promptly after the required persistence or authoritative confirmation.
+4. Require a final relevance and freshness check immediately before the delivery decision.
+5. Define message fields: affected trip, plain-language impact, relevant station or segment, timing, credible alternative when available, and an explicit invitation to open current details.
+6. Separate planned-change, active-delay, suspension, skipped-stop, accessibility-path, and recovery message patterns.
+7. Use certainty language that matches the underlying evidence; do not convert “may be affected” into a definitive bypass.
+8. Keep the most decision-relevant text visible without opening the app.
+9. Permit an escalation only when added journey time worsens by at least five more minutes, a newly affected origin, transfer, or destination appears, severity increases, the active period extends at least thirty minutes farther into the commute window, or the recommended alternative changes.
+10. Keep restoration silent by default and make recovery updates an explicit per-commute choice; suppress recovery when the rider was never notified about the incident.
+11. For repeated multi-day planned work, send one useful summary and a reminder only when the rider has not seen it or the plan changes.
+12. For overnight changes, make the applicable calendar date and commute window understandable without exposing service-day jargon.
 
 **Acceptance evidence**
 
@@ -224,6 +239,7 @@ Tasks 1–3 establish the product contract. Tasks 4–7 turn that contract into 
 - Accessibility messages identify the affected path role rather than naming unrelated equipment.
 - A stale alert cannot produce a freshly worded definitive message.
 - Recovery messages can be paired with the disruption episode that caused them.
+- Copy edits, renewed timestamps, and unchanged repeated planned work never create another message.
 
 **Commit checkpoint**
 
@@ -249,7 +265,7 @@ Tasks 1–3 establish the product contract. Tasks 4–7 turn that contract into 
 1. Define a disruption episode using the smallest stable combination of affected service, direction, segment, impact type, and effective time.
 2. Define which alert edits belong to the same episode and which constitute a materially new rider impact.
 3. Prevent duplicate messages caused by repeated source snapshots, wording-only alert updates, feed recovery, or a changing estimated end time.
-4. Permit a second message only when the rider’s action meaningfully changes, such as a new origin bypass, full suspension, newly unavailable accessible path, or useful recovery.
+4. Permit a second disruption message only for higher severity, a newly affected station or direction, a changed recommended alternative, at least five additional expected journey minutes, or an active-period extension of at least thirty minutes farther into the commute window; treat an opted-in recovery as a separate recovery state.
 5. Define precedence when one incident appears through both a service alert and live-trip degradation.
 6. Define behavior for overlapping incidents and multiple saved commute windows that share the same rider journey.
 7. Record a bounded quiet-period policy without suppressing a genuinely new severe impact.

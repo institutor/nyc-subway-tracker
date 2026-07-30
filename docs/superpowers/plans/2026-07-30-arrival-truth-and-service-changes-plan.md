@@ -58,17 +58,17 @@ Section 31.8 scenarios 45–48 and 51 belong to the accessibility, transfer, com
 **Artifacts**
 
 - Create: `docs/product/arrival-truth/core-arrival-contract.md`
-- Create: `docs/product/arrival-truth/arrival-truth-glossary.md`
+- Update: `docs/product/contracts/transit-product-glossary.md`
 
 **Dependencies**
 
-- None.
+- Master delivery Phase 0 Task 0.2 has created and approved `docs/product/contracts/transit-product-glossary.md`.
 
 **Ordered steps**
 
 1. Copy the seven arrival-board admission conditions from section 3.1 into a single normative checklist without weakening or combining them.
 2. State the conservative-error policy and the defensible guarantee, including the rule that an unknown required condition cannot receive an exact countdown.
-3. Define station complex, directional stop and platform, train instance, stop call, service pattern, and alert impact as separate rider-facing concepts.
+3. Confirm in the common transit-product glossary that station complex, directional stop and platform, train instance, stop call, service pattern, and alert impact remain separate concepts; add only arrival-specific clarifications that do not fork their shared definitions.
 4. Define the difference between a positive live-arrival claim, a negative veto, a degraded status, quarantine, and suppression.
 5. Add an ownership note that raw directional codes must be normalized before they can be compared or translated into rider-facing language.
 6. Review every glossary definition against sections 3 and 4 and record any wording clarification without creating a new behavior.

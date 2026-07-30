@@ -57,15 +57,19 @@ Arrival-truth contract work and static Nearby interaction design may proceed in 
 The four workstream plans create the authoritative product artifacts beneath:
 
 - `docs/product/contracts/`
+- `docs/product/arrival-truth/`
+- `docs/product/nearby-offline/`
 - `docs/product/data/`
 - `docs/product/ux/`
 - `docs/product/content/`
 - `docs/product/accessibility/`
 - `docs/product/guidance/`
+- `docs/product/crowding/`
 - `docs/product/commute/`
 - `docs/product/privacy/`
 - `docs/product/measurement/`
 - `docs/product/operations/`
+- `docs/product/quality/`
 - `docs/product/test-cases/`
 - `docs/product/release/`
 - `docs/product/decisions/`
@@ -308,6 +312,24 @@ Before each release gate, run the following joins rather than reviewing features
 | 43–51: currency and threshold boundaries | Arrival truth, accessibility/guidance, commute, and nearby/offline according to subject | Operations |
 
 No scenario may be marked passed solely by a written assertion. Results must show the input conditions, expected rider-visible outcome, actual reviewed outcome, evidence reference, reviewer, and date.
+
+## Original-request traceability
+
+| Requested capability | Owning plan and task |
+|---|---|
+| GTFS-RT countdown priority with static GTFS only as fallback | Arrival truth Tasks 2, 5, and 10 |
+| Supplemented GTFS and Service Alerts for weekend and planned changes | Arrival truth Tasks 2, 6, 7, and 10 |
+| Never show a train at a bypassed station | Arrival truth Tasks 1, 2, 5, 6, 7, 12, and 13 |
+| Ghost-train detection, holding treatment, suppression, and recovery | Arrival truth Tasks 4, 8, 9, 11, and 13 |
+| Zero-tap nearby stations and next three arrivals in all directions | Nearby and offline Tasks 2–4 |
+| Dark-default, high-contrast, official-color recognition | Nearby and offline Task 6 |
+| Bottom-third, one-handed core navigation | Nearby and offline Tasks 5–6 |
+| Stored day/night vector maps, saved stations, and offline routing | Nearby and offline Tasks 7–12 |
+| Front/middle/back platform and transfer guidance | Accessibility and guidance Tasks 7–10 |
+| Complete-path accessibility and live elevator/escalator status | Accessibility and guidance Tasks 1–6 |
+| Accessible Route Only warnings and rerouting | Accessibility and guidance Tasks 3–6 |
+| Car-level crowding only where authoritative current data exists | Accessibility and guidance Task 11 |
+| Disruption-only recurring commute windows | Commute alerts Tasks 1–10 |
 
 ## Program measurement
 
