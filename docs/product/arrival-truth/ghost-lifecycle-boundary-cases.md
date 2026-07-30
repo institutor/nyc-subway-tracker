@@ -107,15 +107,15 @@ Do not keep a frozen exact minute on the Uncertain row, place it in the primary 
 
 **Setup**
 
-Repeat M4 in two runs. In run A, current evidence resolves that the exact displayed stop is absent or a non-terminal actual-versus-scheduled-track conflict invalidates the path. In run B, provide independent current high-impact change evidence but leave station, segment, exact-stop, train, or path scope materially unresolved.
+Repeat M4 in three runs. In run A, current evidence resolves that the exact displayed stop is absent or a non-terminal actual-versus-scheduled-track conflict invalidates the path. In run B, provide independent current high-impact change evidence but leave station, segment, exact-stop, train, or path scope materially unresolved. In run C, provide missing, ambiguous, or contradictory stop/path evidence without an independent current high-impact basis and without evidence that resolves a veto.
 
 **Expected result**
 
-In run A, suppress the affected row and show the narrowest supported resolved service-change or track consequence. In run B, withhold only the affected scope as Task 6 **arrival claim unavailable**, preserve the official message in details, and do not label it resolved suppression.
+In run A, suppress the affected row and show the narrowest supported resolved service-change or track consequence. In run B, withhold only the affected scope as Task 6 **arrival claim unavailable**, preserve the official message in details, keep unrelated service eligible, and do not label it resolved suppression. In run C, fail admission and follow the governing quarantine or limitation path; do not invent either resolved suppression or Task 6 unavailability.
 
 **Prohibited result**
 
-Do not show **Arrival uncertain**, a lower-confidence or frozen countdown, a Scheduled replacement, or dependent platform guidance. Do not call materially unresolved high-impact scope a resolved bypass or resolved suppression. Stopping-pattern or track uncertainty is never merely Uncertain.
+Do not show **Arrival uncertain**, a lower-confidence or frozen countdown, a Scheduled replacement, or dependent platform guidance. Do not call materially unresolved high-impact scope a resolved bypass or resolved suppression. Do not turn run C into suppression or unavailability merely because confirmation failed. Stopping-pattern or track uncertainty is never merely Uncertain.
 
 ## Due and no-progress boundary cases
 
@@ -173,7 +173,7 @@ Remove any remaining exact arrival-event treatment from the primary next-three. 
 
 **Prohibited result**
 
-Do not preserve or reintroduce the exact event in primary, keep Holding when movement age is beyond 180 seconds, delete the train solely because 120 seconds elapsed, or confuse the Due/no-progress timer with feed age. Suppress rather than show Uncertain if exact stop service or track/path becomes uncertain.
+Do not preserve or reintroduce the exact event in primary, keep Holding when movement age is beyond 180 seconds, delete the train solely because 120 seconds elapsed, or confuse the Due/no-progress timer with feed age. If exact stop/path confirmation fails, do not show Uncertain: resolved ineligibility suppresses, independent current high-impact evidence with materially unresolved scope produces Task 6 **arrival claim unavailable**, and other failed confirmation follows its governing quarantine or limitation path without inventing either outcome.
 
 ### Case D5 — Prediction changes without progress
 
@@ -197,7 +197,7 @@ Run the same Current-feed fixture three times with uninterrupted Due/no-progress
 
 **Expected result**
 
-In run A, the Due floor already prohibits Due or Live, and movement age beyond 180 seconds is stricter than Holding. Show secondary **Uncertain** with **Arrival uncertain** and no exact minute. In run B, suppress the affected row and show only the narrowest supported resolved service-change or track consequence. In run C, withhold the affected scope as Task 6 **arrival claim unavailable** with the official message in details.
+In run A, the Due floor already prohibits Due or Live, and movement age beyond 180 seconds is stricter than Holding. Show secondary **Uncertain** with **Arrival uncertain** and no exact minute. In run B, suppress the affected row and show only the narrowest supported resolved service-change or track consequence. In run C, withhold the affected scope as Task 6 **arrival claim unavailable** with the governed official/unavailable explanation, keep the scope narrow, and preserve unrelated service.
 
 **Prohibited result**
 
@@ -229,7 +229,7 @@ Retain the train as secondary **Uncertain** context with **Arrival uncertain** a
 
 **Prohibited result**
 
-Do not silently delete the train, keep it Holding with an exact time beyond the movement boundary, return it to the primary next-three, or infer cancellation. If its stopping pattern or track becomes uncertain, suppress rather than retain it as Uncertain.
+Do not silently delete the train, keep it Holding with an exact time beyond the movement boundary, return it to the primary next-three, or infer cancellation. If exact stop/path confirmation fails, do not retain Uncertain: resolved ineligibility suppresses, independent current high-impact evidence with materially unresolved scope produces Task 6 **arrival claim unavailable** with the official message and unrelated service preserved, and other failed confirmation follows its governing quarantine or limitation path without inventing either outcome.
 
 ## Long valid origin-terminal hold
 
@@ -328,12 +328,12 @@ Do not show Live, Holding, Uncertain, Scheduled, or dependent guidance; do not c
 | Live, Expected, Holding, Uncertain, Scheduled | Evidence inputs, primary eligibility, board area, precision, exact rider treatment, and prohibited treatments for every state | Pending |
 | Exactly 90 / just over 90 seconds | Live at exactly 90; frozen non-primary Holding immediately above 90 | Pending |
 | Exactly 180 / just over 180 seconds | Holding at exactly 180; confirmed-pattern Uncertain without an exact minute immediately above 180 | Pending |
-| Stop-pattern or track uncertainty | Resolved ineligibility suppresses; materially unresolved current high-impact scope is arrival claim unavailable; no Arrival uncertain treatment survives | Pending |
+| Stop-pattern or track uncertainty | Resolved ineligibility suppresses; materially unresolved current high-impact scope is arrival claim unavailable with official details and unrelated service preserved; other failed confirmation follows governed quarantine or limitation without inventing either outcome; no Arrival uncertain treatment survives | Pending |
 | Due exactly 60 / just over 60 seconds | Due allowed through exactly 60 only with movement age no more than 90 seconds; immediately above 60, the tested movement age no more than 180 seconds produces Holding and an age beyond 180 would require Uncertain | Pending |
-| No progress exactly 120 / just over 120 seconds | At exactly 120, movement age no more than 180 seconds produces secondary Holding and an age beyond 180 produces secondary Uncertain; above 120 no exact primary event survives; no valid train is silently deleted | Pending |
-| Overlapping Due and movement clocks | At 91 seconds Due elapsed and 181 seconds movement age, confirmed stop/track evidence produces secondary Uncertain without an exact minute; invalid stop/track evidence suppresses the row | Pending |
+| No progress exactly 120 / just over 120 seconds | At exactly 120, movement age no more than 180 seconds produces secondary Holding and an age beyond 180 produces secondary Uncertain only with confirmed exact stop/path; above 120 no exact primary event survives; failed stop/path confirmation uses the three-way disposition; no valid train is silently deleted | Pending |
+| Overlapping Due and movement clocks | At 91 seconds Due elapsed and 181 seconds movement age, run A with confirmed stop/track evidence produces secondary Uncertain without an exact minute; run B with resolved invalid stop/path evidence suppresses; run C with independent current high-impact evidence and materially unresolved scope produces arrival claim unavailable with the governed official/unavailable explanation, narrow scope, and unrelated service preserved | Pending |
 | Scenario 13 | Current feed and 100-second movement age produce Holding for that train only | Pending |
-| Scenario 14 | Several-minute valid held train remains secondary without an exact minute and is not silently deleted | Pending |
+| Scenario 14 | Current coherent feed, coherent identity, confirmed exact stop/path, and movement age strictly greater than 180 seconds produce secondary Uncertain with exact rider copy **Arrival uncertain**, no exact minute, and no silent deletion | Pending |
 | Long valid origin-terminal hold | Qualifying assigned origin train remains Expected without invented movement or deletion | Pending |
 | Unusual dwell | Greater-value comparison uses no invented calibration; equality does not flag; exceedance flags but never deletes by itself | Pending |
 | Feed/movement separation | Current feed remains Current while only the old-movement train changes state | Pending |
