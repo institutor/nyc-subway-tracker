@@ -2,14 +2,14 @@
 
 | Governance field | Value |
 |---|---|
-| Source sections | Approved specification §§2.4–5, 14.5, 16.3–16.4, 19.1–19.3, 23, 25.7, 34; master delivery plan Task 0.2 `Artifacts` and `Steps` |
+| Source sections | Approved specification §§2.4–5, 14.5, 16.3–16.4, 19.1–19.3, 23, 25.7, 34; master delivery plan Task 0.2 `Artifacts` and `Steps`; Task 0.3 brief |
 | Owner | Product Governance Lead |
 | Required reviewers | Product, Accessibility, Data Quality, Content, Privacy, Operations |
-| Status | Draft |
+| Status | In review |
 | Last validation date | 2026-07-30 |
 | Supersedes | None |
-| Approval evidence | Pending |
-| Scenario results | Pending |
+| Approval evidence | [Phase 0 governance approval record](../release/phase-0-governance-approval.md) |
+| Scenario results | Not applicable — this Phase 0 artifact governs vocabulary, ownership, lifecycle, and review, not rider-visible operational behavior; this cannot waive later rider-behavior acceptance evidence. |
 
 ## Purpose and authority
 

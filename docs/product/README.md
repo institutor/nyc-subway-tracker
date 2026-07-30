@@ -2,12 +2,14 @@
 
 | Governance field | Value |
 |---|---|
-| Source sections | Approved specification §§3.1–3.3, 31, 34; Task 0.1 brief |
+| Source sections | Approved specification §§3.1–3.3, 31, 34; Task 0.1 brief; Task 0.3 brief |
 | Owner | Product Governance Lead |
 | Required reviewers | Product, Data Quality |
-| Status | Draft |
+| Status | In review |
 | Last validation date | 2026-07-30 |
 | Supersedes | None |
+| Approval evidence | [Phase 0 governance approval record](release/phase-0-governance-approval.md) |
+| Scenario results | Not applicable — this Phase 0 artifact governs vocabulary, ownership, lifecycle, and review, not rider-visible operational behavior; this cannot waive later rider-behavior acceptance evidence. |
 
 This directory is the governed home for product documentation derived from the [approved product specification](../superpowers/specs/2026-07-30-nyc-subway-train-time-tracker-design.md). It is limited to product contracts, decision rules, review evidence, and release records.
 

@@ -2,12 +2,14 @@
 
 | Governance field | Value |
 |---|---|
-| Source sections | Approved specification §§3.1–3.3, 27, 28, 31–34; Task 0.1 brief |
+| Source sections | Approved specification §§3.1–3.3, 27, 28, 31–34; Task 0.1 brief; Task 0.3 brief |
 | Owner | Product Governance Lead |
 | Required reviewers | Product, Accessibility, Data Quality, Content, Privacy, Operations |
-| Status | Draft |
+| Status | In review |
 | Last validation date | 2026-07-30 |
 | Supersedes | None |
+| Approval evidence | [Phase 0 governance approval record](release/phase-0-governance-approval.md) |
+| Scenario results | Not applicable — this Phase 0 artifact governs vocabulary, ownership, lifecycle, and review, not rider-visible operational behavior; this cannot waive later rider-behavior acceptance evidence. |
 
 ## Purpose
 
@@ -91,4 +93,3 @@ Scenario result records must preserve failures and reruns. A later passing run d
 - A superseded or retired artifact must begin with a visible notice stating that it is not current guidance.
 - Links to superseded guidance must be updated or explicitly labeled historical.
 - When two approved artifacts overlap, the authority and precedence rules in the artifact index apply. If those rules do not resolve the conflict, the specification controls and both artifacts return to **Draft** for the full applicable review path.
-

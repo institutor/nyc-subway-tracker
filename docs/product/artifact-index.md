@@ -2,20 +2,20 @@
 
 | Governance field | Value |
 |---|---|
-| Source sections | Approved specification §§2.4, 3.1–3.3, 14.5, 16.3–16.4, 19, 23, 31, 34; master delivery plan Task 0.2 `Artifacts` and `Steps`; all `Product artifact map` and `Artifacts` sections in the four workstream plans; Task 0.1 brief |
+| Source sections | Approved specification §§2.4, 3.1–3.3, 14.5, 16.3–16.4, 19, 23, 31, 34; master delivery plan Task 0.2 `Artifacts` and `Steps`; all `Product artifact map` and `Artifacts` sections in the four workstream plans; Task 0.1 brief; Task 0.3 brief |
 | Owner | Product Governance Lead |
 | Required reviewers | Product, Accessibility, Data Quality, Content, Privacy, Operations |
-| Status | Draft |
+| Status | In review |
 | Last validation date | 2026-07-30 |
 | Supersedes | None |
-| Approval evidence | Pending |
-| Scenario results | Pending |
+| Approval evidence | [Phase 0 governance approval record](release/phase-0-governance-approval.md) |
+| Scenario results | Not applicable — this Phase 0 artifact governs vocabulary, ownership, lifecycle, and review, not rider-visible operational behavior; this cannot waive later rider-behavior acceptance evidence. |
 
 ## How to read this index
 
-This index catalogs every unique planned path from the four workstream inventories and the cross-domain rider-language contract created by master delivery Task 0.2. An artifact listed as **Draft** may still be planned rather than written; the date validates its inventory metadata against the named plan, not the artifact's future content.
+This index catalogs every unique planned path from the four workstream inventories, the cross-domain rider-language contract created by master delivery Task 0.2, and the four Phase 0 governance records that make those inventories reviewable. An artifact listed as **Draft** may still be planned rather than written; the date validates its inventory metadata against the named plan, not the artifact's future content.
 
-Reviewer codes are **P** Product, **A** Accessibility, **D** Data Quality, **C** Content, **R** Privacy, and **O** Operations. **A: Pending; S: Pending** means approval evidence and scenario-result evidence have not yet been produced. **None** in the supersession column means no superseded document is identified.
+Reviewer codes are **P** Product, **A** Accessibility, **D** Data Quality, **C** Content, **R** Privacy, and **O** Operations. **A: Pending; S: Pending** means approval evidence and scenario-result evidence have not yet been produced. A linked Phase 0 approval record with an **In review** state fixes evidence for review but is not approval. **None** in the supersession column means no superseded document is identified.
 
 ## Authority and precedence
 
@@ -28,6 +28,20 @@ Reviewer codes are **P** Product, **A** Accessibility, **D** Data Quality, **C**
 
 A train must never be shown at a bypassed stop. Any decision that weakens this rule returns to fresh Product and Data Quality review under the [review and approval policy](review-and-approval-policy.md).
 
+## Phase 0 governance and terminology
+
+Source inventory: master delivery plan Tasks 0.1–0.3 and the Task 0.3 brief.
+
+| Artifact | Single purpose and authority boundary | Source sections | Owner | Required reviewers | State | Validated | Supersedes | Evidence |
+|---|---|---|---|---|---|---|---|---|
+| `docs/product/README.md` | Provide the governed entry point, authority summary, and current-guidance rule for product artifacts. | Approved specification §§3.1–3.3, 31, 34; Task 0.1 brief; Task 0.3 brief | Product Governance Lead | P, D | In review | 2026-07-30 | None | A: [Phase 0 governance approval record](release/phase-0-governance-approval.md); S: Not applicable — governs vocabulary, ownership, lifecycle, and review, not rider-visible operational behavior; cannot waive later rider-behavior tests. |
+| `docs/product/artifact-index.md` | Inventory product artifacts and own their authority, ownership, review-path, lifecycle, evidence, and precedence metadata. | Approved specification §§2.4, 3.1–3.3, 14.5, 16.3–16.4, 19, 23, 31, 34; master delivery plan Task 0.2 `Artifacts` and `Steps`; all `Product artifact map` and `Artifacts` sections in the four workstream plans; Task 0.1 brief; Task 0.3 brief | Product Governance Lead | P, A, D, C, R, O | In review | 2026-07-30 | None | A: [Phase 0 governance approval record](release/phase-0-governance-approval.md); S: Not applicable — governs vocabulary, ownership, lifecycle, and review, not rider-visible operational behavior; cannot waive later rider-behavior tests. |
+| `docs/product/review-and-approval-policy.md` | Own product-artifact lifecycle, mandatory review, approval evidence, scenario linkage, and supersession controls. | Approved specification §§3.1–3.3, 27, 28, 31–34; Task 0.1 brief; Task 0.3 brief | Product Governance Lead | P, A, D, C, R, O | In review | 2026-07-30 | None | A: [Phase 0 governance approval record](release/phase-0-governance-approval.md); S: Not applicable — governs vocabulary, ownership, lifecycle, and review, not rider-visible operational behavior; cannot waive later rider-behavior tests. |
+| `docs/product/contracts/transit-product-glossary.md` | Own shared transit-product term definitions. | Approved specification §§2.4–5, 14.5, 16.3–16.4, 19.1–19.3, 23, 25.7, 34; master delivery plan Task 0.2 `Artifacts` and `Steps`; Task 0.3 brief | Product Governance Lead | P, A, D, C, R, O | In review | 2026-07-30 | None | A: [Phase 0 governance approval record](release/phase-0-governance-approval.md); S: Not applicable — governs vocabulary, ownership, lifecycle, and review, not rider-visible operational behavior; cannot waive later rider-behavior tests. |
+| `docs/product/contracts/rider-language-rules.md` | Own cross-domain rider-facing direction, certainty, accessibility, guidance, and route-recognition language. | Approved specification §§2.4, 3, 10.1, 11.4, 14.5, 16.3–16.4, 18.3, 19–20, 23, 25.7, 34; master delivery plan Task 0.2 `Artifacts` and `Steps`; Task 0.3 brief | Content Lead | P, A, D, C, O | In review | 2026-07-30 | None | A: [Phase 0 governance approval record](release/phase-0-governance-approval.md); S: Not applicable — governs vocabulary, ownership, lifecycle, and review, not rider-visible operational behavior; cannot waive later rider-behavior tests. |
+| `docs/product/decisions/subway-product-decisions.md` | Record cross-domain subway product decisions not owned by a narrower artifact. | Approved specification §34; master delivery plan Task 0.2 `Artifacts` and `Steps`; Task 0.3 brief | Product Governance Lead | P, A, D, C, R, O | In review | 2026-07-30 | None | A: [Phase 0 governance approval record](release/phase-0-governance-approval.md); S: Not applicable — governs vocabulary, ownership, lifecycle, and review, not rider-visible operational behavior; cannot waive later rider-behavior tests. |
+| `docs/product/release/phase-0-governance-approval.md` | Record the fixed Phase 0 review set, dependency evidence, reviewer decisions, and lifecycle gate. | Approved specification §§2.4–5, 10.1, 11.4, 14.5, 16.3–16.4, 18.3, 19–20, 23, 25.7, 27–28, 31–34; master delivery plan Tasks 0.1–0.3; Task 0.3 brief | Product Governance Lead | P, A, D, C, R, O | In review | 2026-07-30 | None | A: [Phase 0 governance approval record](release/phase-0-governance-approval.md); S: Not applicable — governs vocabulary, ownership, lifecycle, and review, not rider-visible operational behavior; cannot waive later rider-behavior tests. |
+
 ## Arrival truth and service changes
 
 Source inventory: `docs/superpowers/plans/2026-07-30-arrival-truth-and-service-changes-plan.md`, each named Task `Artifacts` section.
@@ -35,8 +49,6 @@ Source inventory: `docs/superpowers/plans/2026-07-30-arrival-truth-and-service-c
 | Artifact | Single purpose and authority boundary | Source sections | Owner | Required reviewers | State | Validated | Supersedes | Evidence |
 |---|---|---|---|---|---|---|---|---|
 | `docs/product/arrival-truth/core-arrival-contract.md` | Own the arrival-board eligibility invariant and conservative guarantee. | Arrival plan Task 1 `Artifacts`; spec §§3–4, 34 | Product Truth Lead | P, D | Draft | 2026-07-30 | None | A: Pending; S: Pending |
-| `docs/product/contracts/transit-product-glossary.md` | Own shared transit-product term definitions. | Master delivery plan Task 0.2 `Artifacts` and `Steps`; arrival plan Task 1 `Artifacts`; spec §§2.4–5, 14.5, 16.3–16.4, 19, 23, 25.7, 34 | Product Governance Lead | P, A, D, C, R, O | Draft | 2026-07-30 | None | A: Pending; S: Pending |
-| `docs/product/contracts/rider-language-rules.md` | Own cross-domain rider-facing direction, certainty, accessibility, guidance, and route-recognition language. | Master delivery plan Task 0.2 `Artifacts` and `Steps`; spec §§2.4, 3, 14.5, 16.3–16.4, 19, 23, 34 | Content Lead | P, A, D, C, O | Draft | 2026-07-30 | None | A: Pending; S: Pending |
 | `docs/product/arrival-truth/source-role-and-precedence-matrix.md` | Own source roles and conflict precedence. | Arrival plan Task 2 `Artifacts`; spec §6 | Product Truth Lead | P, D | Draft | 2026-07-30 | None | A: Pending; S: Pending |
 | `docs/product/arrival-truth/evidence-veto-catalog.md` | Own the catalog of negative evidence that vetoes a prediction. | Arrival plan Task 2 `Artifacts`; spec §§3.2–3.3, 6, 8 | Product Truth Lead | P, D | Draft | 2026-07-30 | None | A: Pending; S: Pending |
 | `docs/product/arrival-truth/source-evidence-register.md` | Record approved source evidence, role, and review currency. | Arrival plan Task 2 `Artifacts`; spec §§6, 12 | Data Quality Lead | P, D, O | Draft | 2026-07-30 | None | A: Pending; S: Pending |
@@ -123,7 +135,6 @@ Source inventory: `docs/superpowers/plans/2026-07-30-commute-alerts-and-launch-q
 |---|---|---|---|---|---|---|---|---|
 | `docs/product/commute/commute-window-contract.md` | Own the commute-window product promise and behavior. | Commute/launch plan Task 1 `Artifacts`; spec §§25.1–25.2, 34 | Commute Product Lead | P, A, D, C, R, O | Draft | 2026-07-30 | None | A: Pending; S: Pending |
 | `docs/product/commute/commute-window-field-dictionary.md` | Own commute-window field meanings and allowed values. | Commute/launch plan Task 1 `Artifacts`; spec §25.1 | Commute Product Lead | P, A, D, C, R, O | Draft | 2026-07-30 | None | A: Pending; S: Pending |
-| `docs/product/decisions/subway-product-decisions.md` | Record cross-domain subway product decisions not owned by a narrower artifact. | Master delivery plan Task 0.2 `Artifacts` and `Steps`; commute/launch plan Task 1 `Artifacts`; spec §34 | Product Governance Lead | P, A, D, C, R, O | Draft | 2026-07-30 | None | A: Pending; S: Pending |
 | `docs/product/commute/notification-eligibility-contract.md` | Own disruption-only, segment-aware notification eligibility. | Commute/launch plan Task 2 `Artifacts`; spec §25.3 | Commute Product Lead | P, A, D, C, O | Draft | 2026-07-30 | None | A: Pending; S: Pending |
 | `docs/product/commute/notification-suppression-matrix.md` | Apply mandatory notification suppression outcomes. | Commute/launch plan Task 2 `Artifacts`; spec §§25.3, 31.6 | Commute Product Lead | P, A, D, C, O | Draft | 2026-07-30 | None | A: Pending; S: Pending |
 | `docs/product/commute/disruption-relevance-examples.md` | Prove whether disruptions affect a saved commute segment. | Commute/launch plan Task 2 `Artifacts`; spec §§25.3, 31.6 | Release Quality Lead | P, A, D, C, O | Draft | 2026-07-30 | None | A: Pending; S: Pending |
@@ -157,11 +168,11 @@ Source inventory: `docs/superpowers/plans/2026-07-30-commute-alerts-and-launch-q
 
 ## Inventory totals
 
-| Workstream | Unique planned artifacts |
+| Inventory group | Unique indexed artifacts |
 |---|---:|
-| Arrival truth and service changes | 31 |
+| Phase 0 governance and terminology | 7 |
+| Arrival truth and service changes | 30 |
 | Nearby station and offline experience | 16 |
 | Accessibility and platform guidance | 18 |
-| Smart commute alerts and launch quality | 33 |
-| Master delivery cross-domain language | 1 |
-| **Total** | **99** |
+| Smart commute alerts and launch quality | 32 |
+| **Total** | **103** |
