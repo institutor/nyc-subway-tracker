@@ -13,7 +13,7 @@
 
 ## Purpose and authority
 
-These cases define acceptance evidence for the [schedule fallback and currency policy](schedule-fallback-and-currency-policy.md). They test fallback entry, source ordering, service-date coverage, edition supersession, age anchors, exact currency boundaries, rider wording, and service-change veto ordering. The [feed health policy](feed-health-policy.md), [source role and precedence matrix](source-role-and-precedence-matrix.md), [evidence veto catalog](evidence-veto-catalog.md), [service-change impact and resolution policy](service-change-impact-and-resolution-policy.md), and [arrival admission and ordering contract](arrival-admission-and-ordering-contract.md) continue to govern their respective decisions. The [approved product specification](../../superpowers/specs/2026-07-30-nyc-subway-train-time-tracker-design.md) controls every conflict.
+These cases define acceptance evidence for the [schedule fallback and currency policy](schedule-fallback-and-currency-policy.md). They test fallback entry, source ordering, service-date coverage, edition supersession, age anchors, exact currency boundaries, rider wording, service-change veto ordering, and hard-suppression release carryover. The [feed health policy](feed-health-policy.md), [source role and precedence matrix](source-role-and-precedence-matrix.md), [evidence veto catalog](evidence-veto-catalog.md), [service-change impact and resolution policy](service-change-impact-and-resolution-policy.md), [suppression, grace, and recovery policy](suppression-grace-and-recovery-policy.md), [time and train continuity policy](time-and-train-continuity-policy.md), and [arrival admission and ordering contract](arrival-admission-and-ordering-contract.md) continue to govern their respective decisions. The [approved product specification](../../superpowers/specs/2026-07-30-nyc-subway-train-time-tracker-design.md) controls every conflict.
 
 Every case is **Pending** until its setup is exercised against a fixed reviewed product version, the actual result and prohibited-result checks are recorded, and the Truth Gate accepts the evidence. An expected result written here is not a passing result.
 
@@ -41,7 +41,7 @@ Provide evidence that the exact relevant route/feed group is genuinely **Unavail
 
 **Expected state**
 
-Select the supplemented edition before regular GTFS. In a separate fallback board, show a scheduled New York clock time with **Scheduled**, persistent **Live data unavailable**, successful retrieval age, and effective service date. Keep the unrelated healthy group in its independently supported live state.
+Select the supplemented edition before regular GTFS. In a separate fallback board, show a scheduled New York clock time with **Scheduled**, persistent **Live data unavailable**, currency age with its truthful publication/first-retrieval anchor, latest successful retrieval age, and effective service date. If currency and latest-retrieval ages differ, show both. Keep the unrelated healthy group in its independently supported live state.
 
 **Prohibited outcome**
 
@@ -79,7 +79,7 @@ Do not borrow a trip from another service date, infer service from topology, mov
 
 **Setup**
 
-Prove the relevant route/feed group Unavailable. Provide a validated recent supplemented edition whose effective coverage or horizon does not include the proposed departure. Provide regular GTFS that validly covers the operating service date and departure.
+Prove the relevant route/feed group Unavailable. Provide a validated recent supplemented edition whose effective coverage or horizon does not include the proposed departure, and provide no other departure-eligible supplemented edition for that claim. Provide regular GTFS that validly covers the operating service date and departure.
 
 **Expected state**
 
@@ -87,7 +87,7 @@ Treat the supplement as **Topology only** for that claim and continue to regular
 
 **Prohibited outcome**
 
-Do not extend the supplemented horizon, use its apparent youth to override coverage, return to another superseded supplement, or stop before evaluating eligible regular GTFS.
+Do not extend the supplemented horizon, use its apparent youth to override coverage, reactivate an edition superseded for that claim, or stop before evaluating eligible regular GTFS.
 
 ## Edition identity, supersession, and age-anchor cases
 
@@ -95,7 +95,7 @@ Do not extend the supplemented horizon, use its apparent youth to override cover
 
 **Setup**
 
-Provide two distinct validated supplemented editions with retained source-supported edition order and overlapping effective/service-date coverage. The later edition changes or removes at least one departure from the earlier edition. Both would otherwise be Current by age.
+Provide two independently validated supplemented currency editions with changed canonical schedule content, retained source-supported edition chronology, and overlapping effective/service-date coverage. The later edition changes or removes at least one departure from the earlier edition. Both would otherwise be Current by age.
 
 **Expected state**
 
@@ -103,41 +103,55 @@ Mark the later validated edition as the only non-superseded supplemented candida
 
 **Prohibited outcome**
 
-Do not merge editions, select by the more favorable time, retain both as current, use retrieval order alone to invent version order, or silently roll back to the earlier edition.
+Do not merge editions, cherry-pick the more favorable time from the earlier edition inside the overlap, retain both as current for the same overlapping claim, use retrieval order alone to invent version order, or silently roll back to the earlier edition.
 
-### Case S7 — Later validated edition is not departure-eligible
+### Case S7A — Later overlapping edition ages beyond 24 hours
 
 **Setup**
 
-After Scenario 43 establishes supersession over overlapping coverage, make the later edition non-departure-eligible for the claim because it is older than 24 hours or outside effective coverage. Provide an eligible regular-GTFS departure.
+After Scenario 43 establishes that a later validated edition superseded an earlier edition for one claim inside their overlap, advance authoritative comparison time until the later edition is older than 24 hours. Keep the claim inside the original overlap and provide an eligible regular-GTFS departure.
 
 **Expected state**
 
-Do not reactivate the superseded earlier edition. Continue to regular GTFS as the next candidate.
+Classify the later edition **Topology only** by age. Keep the earlier edition superseded for this overlapping claim and continue to regular GTFS as the next candidate.
 
 **Prohibited outcome**
 
-Do not roll back to the earlier supplemented edition, erase the supersession edge, or show a departure from either Topology-only edition.
+Do not roll back to the earlier supplemented edition, erase the overlap-specific supersession edge, cherry-pick its more favorable departure, or show a departure from either supplemented edition.
+
+### Case S7B — Claim outside overlap remains eligible under earlier edition
+
+**Setup**
+
+Provide an earlier and later validated supplemented currency edition with changed canonical schedule content and source-supported chronology. Their effective coverage overlaps for some claims, but the proposed claim is outside that overlap and inside only the earlier edition's own still-valid effective and service-date coverage. Keep the earlier edition within 24 hours and make it pass every other departure gate.
+
+**Expected state**
+
+Record that the later edition never superseded the earlier edition for this claim. Treat the earlier edition as the newest eligible supplement for this non-overlapping claim and evaluate its scheduled departure before regular GTFS.
+
+**Prohibited outcome**
+
+Do not extend supersession beyond the overlap, classify the earlier edition Topology only merely because a later edition exists elsewhere, skip directly to regular GTFS, or use the earlier edition for any claim inside the area where the later edition superseded it.
 
 ### Scenario 49 — Identical edition retrieved repeatedly
 
 **Setup**
 
-Provide one distinct validated supplemented edition with a retained content identity and age anchor. Retrieve identical content successfully one or more times, including a retrieval after the edition crosses the 2-hour boundary.
+Provide one validated supplemented currency edition with retained canonical semantic schedule content and an accepted age anchor. Retrieve the same canonical trips, stop times, service calendars, and effective schedule semantics one or more times, including after the edition crosses the 2-hour boundary. Change transport wrapper, source label or version wrapper, publication wrapper metadata, filename, and retrieval observation while leaving canonical schedule content unchanged.
 
 **Expected state**
 
-Retain one edition identity and its original publication-time anchor, or its original first-successful-retrieval anchor when publication time is unavailable. The later retrieval observation does not reset currency; the edition becomes **Stale reference** after 2 hours. Rider details may truthfully update “last retrieved,” while preserving the original age basis.
+Retain one currency-edition identity and its original accepted publication-time anchor, or its original first-successful-retrieval anchor when publication time is genuinely unavailable. Treat every changed wrapper as an observation of that same edition. The later retrieval does not reset currency or create supersession; the edition becomes **Stale reference** after 2 hours. Show both the older currency age and fresher **Last retrieved** age when they differ, plus effective service date and **Stored schedule—service changes may differ**.
 
 **Prohibited outcome**
 
-Do not create a new edition, reset age, relabel the edition Current, erase its first retrieval, or infer a publication time.
+Do not create a new currency edition or supersession edge from wrapper/version/publication metadata alone, reset age, relabel the edition Current, erase its original anchor, let fresh **Last retrieved** hide older currency age, or infer a publication time.
 
 ### Case S9 — Failed distinct new edition
 
 **Setup**
 
-Retain one validated supplemented edition, then receive a distinct purported later edition that fails validation. Advance decision time while the failed edition is retried.
+Retain one validated supplemented edition, then receive purported changed canonical schedule content with purported later source chronology that fails validation. Advance authoritative comparison time while the failed edition is retried.
 
 **Expected state**
 
@@ -151,7 +165,7 @@ Do not erase the retained copy, reset its age, validate the new edition by assum
 
 **Setup**
 
-Provide a distinct validated edition with no supplied source publication time and a recorded first successful retrieval. Retrieve the same content again later.
+Provide a distinct validated currency edition with changed canonical schedule content, source-supported chronology, no supplied source publication time, and a recorded first successful retrieval against authoritative comparison time. Retrieve the same canonical content again later.
 
 **Expected state**
 
@@ -159,7 +173,35 @@ Use the first successful retrieval as the edition's age anchor. Retain subsequen
 
 **Prohibited outcome**
 
-Do not invent a publication time, use the latest identical retrieval as the anchor, or treat validation time, device time, or file modification time as source publication time without approved evidence.
+Do not invent a publication time, use the latest identical retrieval as the anchor, or treat validation time, device time, phone clock, or file modification time as source publication time without approved evidence.
+
+### Case S10B — Publication timestamp impermissibly future
+
+**Setup**
+
+Provide changed canonical schedule content with source-supported edition chronology and a supplied publication timestamp. Against authoritative comparison time, prove that the timestamp is future beyond the approved small skew allowance. Supply a later successful retrieval and an eligible regular-GTFS departure. Do not assign a numeric value to the skew allowance.
+
+**Expected state**
+
+Reject the negative age and quarantine the supplemented edition from departure eligibility without assigning Current, Stale reference, or Topology only. Do not substitute retrieval time for the supplied unusable timestamp. Continue to regular GTFS as the next candidate.
+
+**Prohibited outcome**
+
+Do not use the phone or device clock, invent a skew threshold, classify negative age Current, reset the anchor to latest retrieval, show the supplemented departure, or treat the bad timestamp as genuinely unavailable.
+
+### Case S10C — Publication timestamp regressed or contradictory
+
+**Setup**
+
+Retain accepted source-supported publication chronology for validated schedule content. Then provide a purported distinct changed-content edition whose supplied publication timestamp regresses against that chronology or contradicts its source-supported edition order. Provide a successful retrieval and test both an eligible regular-GTFS branch and a branch with no valid regular trip.
+
+**Expected state**
+
+Quarantine the purported supplemented edition from departure eligibility and record the timestamp conflict. Do not substitute retrieval time or infer corrected chronology. Select regular GTFS in the eligible branch; show no estimate in the other branch.
+
+**Prohibited outcome**
+
+Do not classify the edition Current, silently repair or ignore the regression, use retrieval order as edition chronology, show its departure, roll back a superseded overlapping edition, or invent publication time, validity, or service.
 
 ## Exact currency-boundary cases
 
@@ -167,7 +209,7 @@ Do not invent a publication time, use the latest identical retrieval as the anch
 
 **Setup**
 
-Provide a validated, non-superseded supplemented edition whose authoritative edition age is exactly 2 hours and whose effective and service-date coverage include the departure.
+Provide a validated, non-superseded supplemented edition whose accepted age anchor compared with authoritative comparison time produces an age of exactly 2 hours and whose effective and service-date coverage include the departure.
 
 **Expected state**
 
@@ -181,11 +223,11 @@ Do not classify exactly 2 hours as Stale reference or Topology only, round it up
 
 **Setup**
 
-Use the same qualifying conditions as S11, but make age the smallest representable positive duration greater than 2 hours.
+Use the same qualifying conditions as S11, but make authoritative age the smallest representable positive duration greater than 2 hours.
 
 **Expected state**
 
-Classify it **Stale reference**. If no veto applies, show the scheduled clock time with persistent **Live data unavailable**, retrieval age, effective service date, and exactly **Stored schedule—service changes may differ**.
+Classify it **Stale reference**. If no veto applies, show the scheduled clock time with persistent **Live data unavailable**, currency age and truthful anchor, latest retrieval age, effective service date, and exactly **Stored schedule—service changes may differ**.
 
 **Prohibited outcome**
 
@@ -195,11 +237,11 @@ Do not classify it Current schedule, wait until 3 hours to mark it stale, show a
 
 **Setup**
 
-Provide a validated, non-superseded supplemented edition exactly 3 hours old that covers the service date and departure and has no applicable veto.
+Provide a validated, non-superseded supplemented edition whose accepted age anchor is exactly 3 hours behind authoritative comparison time, covers the service date and departure, and has no applicable veto.
 
 **Expected state**
 
-Classify it **Stale reference** and show only a scheduled clock time with **Scheduled**, persistent **Live data unavailable**, retrieval age, effective service date, and **Stored schedule—service changes may differ**.
+Classify it **Stale reference** and show only a scheduled clock time with **Scheduled**, persistent **Live data unavailable**, currency age and truthful anchor, latest retrieval age, effective service date, and **Stored schedule—service changes may differ**.
 
 **Prohibited outcome**
 
@@ -209,7 +251,7 @@ Do not call the edition Current schedule or Topology only; show a countdown, **o
 
 **Setup**
 
-Provide a validated, non-superseded supplemented edition whose authoritative age is exactly 24 hours and whose effective and service-date coverage include the departure.
+Provide a validated, non-superseded supplemented edition whose accepted age anchor compared with authoritative comparison time produces an age of exactly 24 hours and whose effective and service-date coverage include the departure.
 
 **Expected state**
 
@@ -223,7 +265,7 @@ Do not classify exactly 24 hours as Topology only, round it beyond the boundary,
 
 **Setup**
 
-Use the same coverage conditions as S14, but make age the smallest representable positive duration greater than 24 hours.
+Use the same coverage conditions as S14, but make authoritative age the smallest representable positive duration greater than 24 hours.
 
 **Expected state**
 
@@ -239,15 +281,19 @@ Do not show its clock time, a countdown, a stale departure, **on time**, Live, o
 
 **Setup**
 
-Prove the route/feed group Unavailable and provide an otherwise departure-eligible schedule. Provide a current service change whose material effect on the proposed arrival remains unresolved for one exact affected scope. Include unrelated scheduled service outside that scope.
+Prove the route/feed group Unavailable and provide an otherwise departure-eligible schedule. In the qualifying branch, provide independent current high-impact evidence of a governed possible bypass, reroute, short turn, suspension, closure, or invalidating track/path change, plus unresolved station, direction, segment, exact-stop, train, or path scope that materially affects the proposed claim. Include unrelated scheduled service outside that materially uncertain scope.
+
+Run four control branches in which the only change evidence is, respectively, a delay-only alert, generic **Affected** metadata, missing scope metadata, or contradiction. Do not add independent current high-impact evidence to any control branch.
 
 **Expected state**
 
-Apply unresolved negative evidence before the scheduled time. For the affected scope, replace the schedule with exactly **Service change—arrival unavailable** and show no optimistic clock time. Preserve unrelated eligible scheduled service and the official change message where required.
+In the qualifying branch, apply unresolved negative evidence before the scheduled time. For only the materially affected scope, replace the schedule with exactly **Service change—arrival unavailable** and show no optimistic clock time. Preserve unrelated eligible scheduled service and the official change message where required.
+
+In each control branch, the lone condition neither creates arrival unavailability nor proves normal service. Continue only from the remaining independently supported fallback, veto, or no-estimate evidence; do not manufacture either a positive or negative service claim.
 
 **Prohibited outcome**
 
-Do not show the affected scheduled time beside the replacement, guess a stopping pattern, call the change a resolved bypass, widen unavailability to unrelated service, clear the change because static data contains the trip, or use alternate wording for the required replacement.
+Do not show the affected scheduled time beside the replacement, guess a stopping pattern, call the change a resolved bypass, widen unavailability to unrelated service, clear the high-impact risk because static data contains the trip, or use alternate wording for the required replacement. Do not use a delay-only alert, generic **Affected** marker, missing metadata, or contradiction alone to show **Service change—arrival unavailable**; do not use any of them as proof that service is normal.
 
 ### Case S17 — Known active veto during fallback
 
@@ -263,6 +309,20 @@ Apply the veto before schedule selection can produce a visible departure for the
 
 Do not let supplemented or regular GTFS override the veto, downgrade the affected claim to a stale scheduled row, imply normal service, widen suppression, or use the vetoed trip as a fallback departure.
 
+### Case S18 — Cleared hard veto without two-update recovery
+
+**Setup**
+
+Begin with a current resolved catalog veto that hard-suppresses one exact arrival claim. Then end the alert or clear the adverse condition, but make the relevant route/feed group **Unavailable** before current coherent evidence can satisfy the row-specific release prerequisite or any later fresh coherent accepted train update can arrive. Provide a supplemented or regular static trip for the previously suppressed claim and independently eligible unrelated fallback claims.
+
+**Expected state**
+
+Keep the previously hard-suppressed claim suppressed because zero qualifying recovery updates exist. Static, supplemented, and regular schedule records and an Unavailable feed do not count as recovery update one or two. Show persistent **Live data unavailable** and only a neutral evidence-supported no-arrival treatment for that claim. Keep the ended service-change cause out of rider copy. Exact countdown, primary eligibility, guidance, and Scheduled arrival remain absent. Evaluate unrelated claims independently and allow their eligible fallback results.
+
+**Prohibited outcome**
+
+Do not restore the claim from static data; count feed unavailability, alert clearance, or schedule retrieval as a recovery update; show a Scheduled clock time, exact countdown, primary row, or stale service-change explanation for the claim; imply cancellation; or keep unrelated claims suppressed. Do not permit readmission until two consecutive fresh coherent accepted updates newer than the adverse evidence collectively prove stable identity, plausible stop order, current movement or stop progress, continued target service, and no unresolved service or track conflict, followed by every Live gate.
+
 ## Truth Gate result record
 
 | Case | Required actual-result evidence | Status |
@@ -272,15 +332,19 @@ Do not let supplemented or regular GTFS override the veto, downgrade the affecte
 | S3 — Regular GTFS next | Supplement ineligibility recorded; eligible regular schedule selected without live treatment | Pending |
 | S4 — No service-date coverage | Both sources rejected for the service date; no estimate or invented service | Pending |
 | S5 — Outside supplement horizon/coverage | Supplement Topology only; eligible regular GTFS evaluated next | Pending |
-| Scenario 43 | Later validated overlapping edition wins; every earlier overlapping edition remains superseded | Pending |
-| S7 — No rollback | Superseded supplement stays ineligible; regular GTFS becomes next candidate | Pending |
-| Scenario 49 | Identical retrieval preserves one identity and original age anchor; currency does not reset | Pending |
+| Scenario 43 | Later validated edition wins for each claim inside overlap; earlier edition remains superseded only there | Pending |
+| S7A — No rollback inside overlap | Later edition beyond 24 hours; earlier remains superseded for the claim; regular GTFS next | Pending |
+| S7B — Outside overlap | Earlier edition remains eligible only within its own non-overlapping still-valid coverage | Pending |
+| Scenario 49 | Canonically unchanged content with changed wrappers preserves one identity and original age anchor; currency does not reset | Pending |
 | S9 — Failed edition | Failed edition excluded; retained validated copy persists and continues aging | Pending |
 | S10 — No publication time | First successful retrieval anchors age; no invented timestamp | Pending |
+| S10B — Future timestamp | Negative age rejected; supplement quarantined; regular GTFS next; no numeric skew invented | Pending |
+| S10C — Regressed/contradictory timestamp | Supplement quarantined; regular GTFS or no estimate selected without retrieval substitution | Pending |
 | S11 / S12 — 2-hour pair | Exactly 2 hours Current; first positive duration beyond 2 hours Stale; no gap or overlap | Pending |
 | Scenario 44A | 3-hour edition visibly Stale reference with exact warning and no live treatment | Pending |
 | S14 / Scenario 44B — 24-hour pair | Exactly 24 hours Stale; first positive duration beyond 24 hours Topology only with no departure | Pending |
-| Scenario 20 | Affected optimistic time replaced by exact unavailable copy; unrelated service preserved | Pending |
+| Scenario 20 | Independent current high-impact evidence plus material scope uncertainty required; control branches create neither unavailability nor normal-service proof | Pending |
 | S17 — Known veto | Veto defeats schedule in exact scope before presentation | Pending |
+| S18 — Cleared hard veto | No schedule restoration without two qualifying live recovery updates; unrelated fallback preserved | Pending |
 
 The result record remains Pending until it links durable observed evidence for a fixed reviewed version. Every prohibited-result check must be recorded. A failure remains in the record and must link its correction and rerun.
