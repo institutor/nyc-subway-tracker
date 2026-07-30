@@ -2,7 +2,7 @@
 
 | Governance field | Value |
 |---|---|
-| Source sections | Approved specification §§19–20, 21.10, 31.5, and 33.3; accessibility and platform-guidance plan `Product artifact map` and Task 3 `Product artifacts`, `Dependencies`, `Produces for later tasks`, `Ordered steps`, and `Evidence and acceptance checks` |
+| Source sections | Approved specification §§19–20, 21.9–21.10, 29.1, 31.5, 31.8, and 33.3; accessibility and platform-guidance plan `Product artifact map`, Task 3 `Product artifacts`, `Dependencies`, `Produces for later tasks`, `Ordered steps`, and `Evidence and acceptance checks`, and Task 4 `Product artifacts`, `Dependencies`, `Produces for later tasks`, `Ordered steps`, and `Evidence and acceptance checks` |
 | Owner | Content Lead |
 | Required reviewers | Product, Accessibility, Data Quality, Content |
 | Status | Draft |
@@ -13,11 +13,11 @@
 
 ## Purpose and authority
 
-This catalog owns the exact Task 3 rider-facing accessibility messages and their evidence boundaries. It synchronizes copy with the [Accessible Route Only state matrix](accessible-route-only-state-matrix.md), [complete accessible-path contract](complete-path-contract.md), [path-edge review checklist](path-edge-review-checklist.md), [station-direction coverage register](station-direction-coverage-register.md), and [station-direction review guide](station-direction-review-guide.md).
+This catalog owns the exact Task 3 rider-facing accessibility messages, the exact Task 4 equipment-status messages and patterns, and their evidence boundaries. It synchronizes copy with the [Accessible Route Only state matrix](accessible-route-only-state-matrix.md), [complete accessible-path contract](complete-path-contract.md), [path-edge review checklist](path-edge-review-checklist.md), [station-direction coverage register](station-direction-coverage-register.md), [station-direction review guide](station-direction-review-guide.md), [equipment status policy](equipment-status-policy.md), and [equipment-status acceptance table](equipment-status-acceptance-table.md).
 
 The [approved product specification](../../superpowers/specs/2026-07-30-nyc-subway-train-time-tracker-design.md) controls every conflict. Shared terms retain the meanings in the [approved transit product glossary](../contracts/transit-product-glossary.md), the [approved rider language rules](../contracts/rider-language-rules.md) control evidence and certainty, and all decisions follow the [product artifact review and approval policy](../review-and-approval-policy.md).
 
-This artifact is **Draft**. It contains no real station, entrance, route, direction, platform, path, equipment, outage, restoration, journey, observed copy result, approval, or reviewer evidence. The Task 3 copy fixtures are linked to 16 abstract scenarios, all **Not run — Pending**.
+This artifact is **Draft**. It contains no real station, entrance, route, direction, platform, path, equipment, outage, restoration, journey, observed copy result, approval, reviewer, production-cadence, or threshold-calibration evidence. The Task 3 copy fixtures are linked to 16 abstract scenarios and the Task 4 copy fixtures to 13 synthetic scenarios; all are **Not run — Pending**.
 
 The authoritative release decision remains:
 
@@ -25,11 +25,11 @@ The authoritative release decision remains:
 
 Public arrival boards remain blocked.
 
-Task 3 does not approve rider-facing accessibility copy for release, pass Gate 0, authorize an accessible-now claim, or make the Release 1 accessibility decision.
+Tasks 3 and 4 do not approve rider-facing accessibility copy for release, pass Gate 0, authorize an accessible-now claim, or make the Release 1 accessibility decision.
 
 ## Governance provenance reconciliation
 
-The [artifact index](../artifact-index.md) cites specification §§19–20 for this catalog. Task 3 additionally applies acceptance case §21.10, accessibility scenarios §31.5, completeness risk §33.3, and the plan's full Task 3 provenance, as recorded above. Product Governance Lead reconciliation of the index and this metadata is **Pending** before this artifact may advance from **Draft**. This task does not edit the index or treat the mismatch as approved.
+The [artifact index](../artifact-index.md) cites specification §§19–20 for this catalog. Task 3 additionally applies acceptance case §21.10, accessibility scenarios §31.5, completeness risk §33.3, and the plan's full Task 3 provenance. Task 4 additionally applies acceptance case §21.9, accessibility target §29.1, cross-feature scenario §31.8, and the plan's full Task 4 provenance. Product Governance Lead reconciliation of the narrower index citation and this metadata is **Pending** before this artifact may advance from **Draft**. This task does not edit the index or treat the mismatch as approved.
 
 ## Copy-use contract
 
@@ -110,9 +110,9 @@ Official authorship, an accessibility symbol, equipment presence, route similari
 | Wording or treatment | Why prohibited in this state | Required treatment |
 |---|---|---|
 | **Accessible**, **Accessible route**, or **Accessible now** without a complete current pass | Converts partial, stale, offline, or wrong-scope evidence into a current trip claim. | Use the exact applicable Task 3 phrase or make no positive claim. |
-| **Working** for equipment | Unconditional equipment availability is not supported by the approved evidence model. | Task 4 wording is Pending. |
+| **Working** or **Available** for equipment | Unconditional equipment availability is not supported by the approved evidence model. | Use the exact applicable Task 4 state; a qualifying healthy non-empty target-absence branch or confirmed global-empty sequence uses **No official outage reported**, never a working claim. |
 | **Probably accessible**, **Likely accessible**, or equivalent hedging | Makes a positive accessibility inference from incomplete evidence. | Use A11Y-T3-03 for an unverified disclosed official alternative; otherwise do not invent a positive claim. |
-| **All elevators working** or equivalent | Equipment presence, an empty response, or missing outage data does not prove complete path availability. | Task 4 wording is Pending. |
+| **All elevators working** or equivalent | Equipment presence, an empty response, or missing outage data does not prove complete path availability. | Use exact machine-scoped Task 4 states and let the complete-path owner decide the journey; never synthesize an all-equipment claim. |
 | **Station accessible** based on a complex badge | Conceals constituent, line, direction, entrance, platform, boarding-area, passage, equipment, or exit differences. | Name only exact reviewed scope when a later approved experience requires it. |
 | **Accessible bus alternative** before separate choice and complete review | Blends an unrequested mode and unverified path into the subway result. | Keep A11Y-T3-01 and the separate explicit-choice boundary. |
 | Error styling or copy for no verified route | Misstates a supported no-result state and may pressure the rider to relax the setting. | Use A11Y-T3-01 without implying rider fault. |
@@ -123,7 +123,7 @@ Equivalent synonyms, abbreviations, icons, audio tones, notifications, summaries
 
 ## Presentation and assistive equivalence
 
-For all three exact phrases:
+For every exact Task 3 phrase and Task 4 equipment message or pattern:
 
 - show the complete phrase without truncating the evidence qualifier;
 - announce the complete phrase in the same interaction context;
@@ -135,30 +135,70 @@ For all three exact phrases:
 
 If space cannot hold the phrase, the surface must provide an immediately available full-text presentation and full assistive label. Space pressure is never authority to shorten the copy.
 
-## Pending Task 4 copy — do not populate in Task 3
+## Exact Task 4 equipment-status copy
 
-**Status: Pending — Task 4**
+**Status: Draft — approval evidence Pending; 13 fixtures Not run — Pending**
 
-Task 4 owns all exact wording and presentation rules for:
+The [equipment status policy](equipment-status-policy.md) supplies the trigger. This catalog supplies the exact rider-visible and assistive wording. These strings do not make a snapshot Current, complete an empty-response sequence, repair an inventory join, prove operation, clear an outage, or make a path accessible.
 
-- current equipment states;
-- freshness and age;
-- first-empty and confirmed-empty responses;
-- failed, malformed, partial, unmatched, and anomalous responses;
-- stale last-known outage or availability;
-- inventory matching and currency;
-- estimated return treatment; and
-- restoration and status-recheck treatment.
+| Catalog ID | Exact visible copy | Exact assistive copy | Authorized trigger | Required consequence |
+|---|---|---|---|---|
+| A11Y-T4-01 | **No official outage reported** | **No official outage reported** | Either a healthy accepted Current non-empty complete same-scope snapshot contains valid other-ID outages but no exact target-ID outage, current reviewed inventory covers the target, no prior target outage awaits restoration, and no veto applies; or two accepted coherent Current globally zero-outage snapshots are at least one authoritative minute apart with coherent surrounding population, current inventory, and no stronger veto. | State only the accepted official-outage result for the exact target or supported scope; never imply Working, Available, observed operation, restoration, or complete-path accessibility. |
+| A11Y-T4-02 | **Out of service** | **Out of service** | An accepted, coherent, Current official record for the exact official equipment identifier reports a present outage. | Preserve the adverse state for that machine until qualifying restoration. |
+| A11Y-T4-03 | **Planned outage** | **Planned outage** | An accepted, coherent, Current official record describes a future planned outage and no accepted current outage controls. | Keep future timing separate from current state; do not infer a current outage, availability, or restoration. |
+| A11Y-T4-04 | **Unknown** | **Unknown** | Equipment evidence is Degraded, Unavailable, Provisional empty, inventory-cutoff affected, unmatched, conflicting, or otherwise insufficient for the exact machine. | Fail closed for every route-critical decision; do not substitute a former positive state. |
+| A11Y-T4-05 | **Out of service—status being rechecked** | **Out of service—status being rechecked** | A prior accepted outage is omitted once, becomes stale, or lacks qualifying restoration while status is rechecked. | Preserve the last-known adverse state; never imply restoration or availability. |
 
-No Task 4 equipment, freshness, empty-response, anomaly, estimated-return, or restoration wording is approved here. A11Y-T3-02 does not fill those gaps.
+The em dash and lack of surrounding spaces in A11Y-T4-05 are part of the exact message. The five phrases appear exactly as written. Machine identity or separately reviewed context may appear adjacent to a phrase, but no words may be inserted into, removed from, or used to strengthen the phrase.
 
-| Pending catalog area | Owner | Task 3 state |
+### Snapshot and response-state mapping
+
+| Evidence state | Required rider treatment | Copy that must not appear |
 |---|---|---|
-| Equipment state names and qualifiers | Task 4 equipment-status artifacts and Content review | **Pending — no copy recorded** |
-| Freshness and status age | Task 4 equipment-status artifacts and Content review | **Pending — no copy recorded** |
-| Empty, malformed, partial, unmatched, or anomalous retrieval | Task 4 equipment-status artifacts and Content review | **Pending — no copy recorded** |
-| Last-known outage and recheck | Task 4 equipment-status artifacts and Content review | **Pending — no copy recorded** |
-| Restoration and estimated return | Task 4 equipment-status artifacts and Content review | **Pending — no copy recorded** |
+| Healthy accepted Current non-empty complete same-scope snapshot has valid outages for other official IDs but no exact target-ID outage; current inventory covers the target; no prior target outage awaits restoration; no veto applies | A11Y-T4-01 may appear for the exact target only. | Working, Available, all equipment clear, restoration, guaranteed accessibility |
+| First accepted Current coherent zero-outage snapshot | Keep internal **Provisional empty**; use A11Y-T4-04 for every route-critical machine. | A11Y-T4-01, Working, Available, all elevators working, accessible now |
+| Confirmed empty after the qualifying second Current coherent snapshot | A11Y-T4-01 may appear for the exact supported scope. | Working, Available, observed operation, guaranteed accessibility |
+| Degraded age or suspicious but structurally usable population | Use A11Y-T4-04 for affected route-critical machines, except preserve A11Y-T4-05 when a prior adverse state applies. | A11Y-T4-01, positive availability, restoration |
+| Unavailable, failed, malformed, structurally incomplete, unjoinable, or invalid response | Use A11Y-T4-04 for affected route-critical machines, except preserve A11Y-T4-05 when a prior adverse state applies. | A11Y-T4-01, positive availability, restoration |
+| Prior outage omitted in only one qualifying Current snapshot | Use A11Y-T4-05. | Restored, Working, Available, A11Y-T4-01 |
+| Explicit accepted Current official restoration or two qualifying Current omissions at least one authoritative minute apart | Clear A11Y-T4-02 or A11Y-T4-05 for the exact matched machine and reevaluate its next state from current evidence. | All elevators restored, route accessible, another machine restored |
+| Inventory has no successful accepted refresh for exactly seven days or longer | Use A11Y-T4-04 for route-critical machines dependent on that inventory. | Freshly reviewed, positive availability, accessible now |
+
+**Provisional empty**, **Current**, **Degraded**, and **Unavailable** are internal evidence states, not positive rider-facing equipment claims. A raw empty response never authorizes A11Y-T4-01. The healthy non-empty target-absence branch never clears a prior target outage; the restoration sequence and A11Y-T4-05 continue to control.
+
+### Freshness pattern
+
+The exact pattern is:
+
+**Checked _accepted relative age_ ago**
+
+Every route-critical equipment-status presentation shows this complete visible pattern and announces the same complete pattern and value. For example, when accepted authoritative timestamps and their declared precision support it, both show and announce **Checked 2 min ago**.
+
+The value is computed only from the accepted authoritative source timestamp and governed decision time. Its unit and value cannot be more precise than the source. Do not use device, retrieval, render, retry, cache-write, or inventory-refresh-attempt time, and do not round into a younger or safer-looking age. Use a source-supported less-precise value or interval when necessary; never manufacture whole-second precision.
+
+If the accepted values or their precision cannot support any truthful relative-age value, use this exact visible and assistive fallback:
+
+**Checked time unavailable**
+
+The fallback requires snapshot **Unavailable** and machine A11Y-T4-04 **Unknown**. Silent freshness omission is prohibited for route-critical equipment.
+
+### Estimated-return pattern
+
+When an accepted official source supplies an estimate, the exact pattern is:
+
+**Estimated return: _official estimate_**
+
+The assistive message uses the same complete label and value. The estimate remains adjacent to, but separate from, the exact current equipment state. It is never rendered or announced as a reopening countdown. A planned end, estimate, operator confidence statement, or elapsed time does not prove a current outage, availability, restoration, or accessible path.
+
+### Equipment presentation boundary
+
+- Show and announce the same exact machine state before freshness or estimate context.
+- Keep the exact official equipment-identifier scope in the underlying accessibility label or adjacent reviewed context; nearby equipment cannot inherit it.
+- Do not rely on green, red, gray, an elevator icon, a map marker, animation, haptics, or tone.
+- Do not replace A11Y-T4-05 with A11Y-T4-04 when doing so would hide a last-known adverse outage.
+- Do not retain a former positive state after freshness expires; the route-critical machine becomes A11Y-T4-04.
+- Do not combine A11Y-T4-01 with Working, Available, accessible, all clear, or equivalent positive wording.
+- Do not let one machine's restoration, no-outage result, planned outage, freshness, or estimate describe another machine or the complete path.
 
 ## Pending Task 5 copy — do not populate in Task 3
 
@@ -207,13 +247,34 @@ The detailed fixed-version, input, expected, prohibited, actual, reviewer, date,
 | ARO-15 | Visible and assistive path order follows the exact lexicographic result. | **Not run — Pending** |
 | ARO-16 | Do not call the faster, less resilient path best. | **Not run — Pending** |
 
+## Task 4 fixture traceability
+
+The detailed synthetic inputs and required execution records are in the [equipment-status acceptance table](equipment-status-acceptance-table.md). This catalog records the copy consequence without converting an expected phrase into observed evidence.
+
+| Fixture | Copy consequence under review | Current state |
+|---|---|---|
+| EQ-01 | At exactly five minutes, use only the exact machine state supported after every Current check; never strengthen Current into Working or accessible. | **Not run — Pending** |
+| EQ-02 | Just over five minutes, affected route-critical equipment uses A11Y-T4-04 or preserves applicable A11Y-T4-05; no positive state. | **Not run — Pending** |
+| EQ-03 | At exactly fifteen minutes, affected route-critical equipment uses A11Y-T4-04 or preserves applicable A11Y-T4-05; do not label the snapshot Unavailable solely by age. | **Not run — Pending** |
+| EQ-04 | Just over fifteen minutes, affected route-critical equipment uses A11Y-T4-04 or preserves applicable A11Y-T4-05; no positive state. | **Not run — Pending** |
+| EQ-05 | First Current coherent zero-outage snapshot remains internal Provisional empty and uses A11Y-T4-04, never A11Y-T4-01. | **Not run — Pending** |
+| EQ-06 | A second zero-outage snapshot at 59 seconds cannot authorize A11Y-T4-01; the qualifying 60-second branch may. | **Not run — Pending** |
+| EQ-07 | A 51% unexplained outage disappearance cannot produce restoration, availability, or A11Y-T4-01. | **Not run — Pending** |
+| EQ-08 | An 11% malformed, duplicated, or unmatched population uses A11Y-T4-04 for the affected route-critical machine. | **Not run — Pending** |
+| EQ-09 | Six-day inventory records a daily-review breach without inventing freshness or applying the seven-day cutoff solely by age. | **Not run — Pending** |
+| EQ-10 | At exactly seven days and beyond, affected route-critical equipment uses A11Y-T4-04 and no accessible-now wording. | **Not run — Pending** |
+| EQ-11 | One omission of a prior outage uses A11Y-T4-05 visibly and assistively. | **Not run — Pending** |
+| EQ-12 | Qualifying restoration clears the adverse state for the exact matched machine only; no all-equipment or complete-path claim. | **Not run — Pending** |
+| EQ-13 | A healthy accepted Current non-empty complete same-scope snapshot with valid other-ID outages and no target-ID outage may use A11Y-T4-01 for that exact target only when current inventory covers it, no prior target outage awaits restoration, and no veto applies. | **Not run — Pending** |
+
 ## Ownership and downstream use
 
 | Copy decision | Authoritative owner | Catalog boundary |
 |---|---|---|
 | Exact no-verified-subway, offline structural, and unverified-official-alternative phrases | This catalog, subject to mandatory review | Own only A11Y-T3-01 through A11Y-T3-03 and their evidence scopes. |
 | Hard-constraint and route-state trigger | Accessible Route Only state matrix | Consume its decision; copy cannot change it. |
-| Equipment state, freshness, anomaly, and restoration copy | Task 4 equipment artifacts plus catalog update | **Pending**; do not infer or preapprove. |
+| Exact equipment state phrases, freshness and estimated-return patterns, and response-state presentation | This catalog, subject to the equipment status policy and mandatory review | Own A11Y-T4-01 through A11Y-T4-05 and the two cataloged patterns; Draft approval evidence and all 13 fixture results remain **Pending**. |
+| Equipment freshness, anomaly, inventory, empty-response, and restoration trigger | Equipment status policy | Consume its exact-machine decision; copy cannot make evidence valid or clear an adverse state. |
 | Outage impact, reroute, and underway warning copy | Task 5 impact and warning artifacts plus catalog update | **Pending**; do not infer or preapprove. |
 | Release approval | Release governance | This Draft supplies no approval or observed evidence. |
 
@@ -229,9 +290,20 @@ The detailed fixed-version, input, expected, prohibited, actual, reviewer, date,
 - [ ] Bus inclusion requires a separate explicit choice; declining or not choosing it preserves subway truth.
 - [ ] Offline copy never implies current equipment availability, accessible now, or restoration.
 - [ ] Accessible, Working, Probably accessible, and complex-level badge inferences remain prohibited without their full evidence contracts.
-- [ ] Task 4 equipment and freshness sections remain clearly **Pending** with no invented wording.
+- [ ] A11Y-T4-01 through A11Y-T4-05 are exact and appear only for their equipment-policy triggers.
+- [ ] The first Current coherent zero-outage response remains Provisional empty and uses A11Y-T4-04, not A11Y-T4-01.
+- [ ] A healthy accepted Current non-empty complete same-scope snapshot may use A11Y-T4-01 for the exact absent target only with valid other-ID outages, current inventory coverage, no prior target outage awaiting restoration, and no veto.
+- [ ] A globally empty response still requires two qualifying Current snapshots at least one authoritative minute apart before A11Y-T4-01.
+- [ ] A prior target outage never uses the non-empty absence branch to bypass A11Y-T4-05 or the restoration sequence.
+- [ ] A11Y-T4-01 never becomes Working, Available, observed operation, or a complete-path claim.
+- [ ] A11Y-T4-05 preserves the last-known adverse state until qualifying restoration for the exact machine.
+- [ ] Degraded, Unavailable, malformed, incomplete, unjoinable, anomalous, inventory-cutoff, and insufficient evidence never produce positive equipment copy.
+- [ ] Every route-critical status uses **Checked _accepted relative age_ ago** from accepted authoritative time without false precision, or **Checked time unavailable** with an Unavailable and Unknown decision.
+- [ ] Estimated return is explicitly labeled with **Estimated return: _official estimate_** and never presented as a reopening countdown.
+- [ ] Task 4 visible and assistive equipment outputs carry equivalent machine scope, age, state, and certainty without color-only treatment.
 - [ ] Task 5 impact and underway-warning sections remain clearly **Pending** with no invented wording.
 - [ ] All 16 Task 3 fixtures remain **Not run — Pending** until fixed evidence is recorded.
-- [ ] No real accessibility, equipment, outage, restoration, observed result, approval, Gate 0 passage, or release evidence is claimed.
+- [ ] All 13 Task 4 fixtures remain **Not run — Pending** until fixed reviewed build, artifact, output, reviewer, date, and durable evidence records exist.
+- [ ] No real accessibility, equipment, outage, restoration, observed result, production cadence, threshold calibration, approval, Gate 0 passage, or release evidence is claimed.
 
 Every unchecked required item blocks copy approval. Content review cannot approve a phrase unless Product, Accessibility, and Data Quality approve the same fixed evidence scope and every blocking scenario passes.
