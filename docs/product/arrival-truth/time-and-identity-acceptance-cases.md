@@ -27,7 +27,7 @@ An earlier candidate disappears and a replacement with a different published tri
 
 **Expected state**
 
-Treat the records as one continuous train instance. Show at most one arrival row, preserve chronological progress and the original service date, and evaluate its current evidence state normally. The identifier change itself is not rider-facing.
+Treat the records as one continuous train instance and show exactly one continuous arrival row in its independently supported state. Preserve chronological progress and the original service date. The old and replacement records together can never produce more than one row, and the identifier change itself is not rider-facing.
 
 **Prohibited outcome**
 
@@ -107,7 +107,7 @@ Do not use the phone clock, phone date, manual time setting, or device time zone
 
 | Case | Required actual-result evidence | Status |
 |---|---|---|
-| Scenario 4 | One continuous row; every continuity condition evidenced; exclusive one-to-one join recorded | Pending |
+| Scenario 4 | Exactly one continuous row in its independently supported state; every continuity condition evidenced; exclusive one-to-one join recorded; no visible identifier change or duplicate | Pending |
 | Scenario 5 | Ambiguity preserved; weaker candidate excluded from the primary board; no unsupported merge | Pending |
 | Scenario 40 | Service date retained across midnight and for the pre-nominal-date start; `>24:00` order and local display verified | Pending |
 | Scenario 41A | Repeated local labels preserve authoritative order and correct train cardinality | Pending |

@@ -30,16 +30,22 @@ A station-complex match, route identity, static stop entry, opposite-direction c
 Admission must finish before ranking. Complete the following decision in order for each train:
 
 1. **Generate the candidate set.** Consider current relevant real-time train instances for the routes that can serve the requested station and direction. Do not generate live candidates from regular or supplemented static schedules.
-2. **Require the exact remaining stop.** Confirm that the exact directional stop appears as a future call in the train's ordered remaining-stop sequence. A past call, station-complex match, opposite direction, normal route pattern, or reconstructed static call fails this requirement.
-3. **Resolve destination and direction.** Derive the actual destination and normalized rider-facing direction from the ordered remaining pattern. Both must agree with that pattern and with the board. Raw compass suffixes, numeric direction codes, route color, and scheduled destination are insufficient.
-4. **Apply the service-change gate.** Reject a bypass, suspension, closure, planned-pattern exclusion, unresolved reroute, or any current evidence that materially leaves stop service unresolved. Negative evidence vetoes a positive prediction.
-5. **Apply the track gate.** Reject a non-terminal actual-versus-scheduled-track conflict that makes the target or downstream prediction unreliable. Normal terminal behavior does not fail this gate by itself.
+2. **Require the exact remaining stop.** Confirm that the exact directional stop appears as a future call in the train's ordered remaining-stop sequence. A past call, station-complex match, opposite direction, normal route pattern, or reconstructed static call fails this requirement. Record whether current evidence resolves the stop as ineligible or merely fails to confirm it; the distinction controls disposition after admission fails.
+3. **Resolve destination and direction.** Derive the actual destination and normalized rider-facing direction from the ordered remaining pattern. Both must agree with that pattern and with the board. Raw compass suffixes, numeric direction codes, route color, and scheduled destination are insufficient. Record resolved ineligibility separately from missing, ambiguous, or contradictory evidence.
+4. **Apply the service-change gate.** Reject a resolved bypass, suspension, closure, planned-pattern exclusion, or other current evidence that resolves the target service as ineligible. Independently reject a candidate when current high-impact evidence materially leaves route, direction, station, segment, exact-stop, train, or path scope unresolved, without relabeling that candidate rejection as a resolved veto. Other unconfirmed service-change evidence also fails admission under its governing quarantine or limitation rule. Negative evidence vetoes a positive prediction.
+5. **Apply the track gate.** Reject a non-terminal actual-versus-scheduled-track conflict that current evidence resolves as invalidating the target or downstream prediction. A materially unresolved path supported by independent current high-impact evidence, and other track evidence that merely fails confirmation, also fail admission but retain their distinct post-gate dispositions. Normal terminal behavior does not fail this gate by itself.
 6. **Apply the freshness gate.** Require current, coherent evidence from the relevant route or feed group. Degraded, unavailable, anomalous, regressed, malformed, or otherwise quarantined evidence cannot authorize a primary arrival.
 7. **Apply the identity gate.** Require one coherent current train instance. An ambiguous, duplicate, one-to-many, many-to-one, or otherwise unresolved identity cannot consume a next-three slot.
 8. **Apply the movement and time gate.** Require a plausible arrival given current movement and stop progress. Recent movement or stop progress can support **Live**. A physical train assigned at its origin, not materially overdue, and stable across two updates can support **Expected** before movement begins. Old or contradictory movement evidence cannot keep an exact advancing countdown.
-9. **Assign the disposition.** Only after all preceding evidence is evaluated, assign the strongest supported state and board area under the disposition table below.
+9. **Assign the disposition.** Only after all preceding evidence is evaluated, classify every failed gate and assign the strongest supported state, internal treatment, and rider-visible board area under the disposition table below.
 
-A failed or unknown exact-stop, direction, destination, service-change, or track decision suppresses the arrival claim for that board. A freshness, identity, or movement failure produces only the separately governed quarantine, frozen, uncertain, unavailable, or suppressed treatment supported by the evidence; it never becomes a weaker invented arrival.
+A failed exact-stop, direction, destination, service-change, or track gate rejects the candidate from arrival and confidence admission; that candidate rejection does not by itself determine the public or internal disposition. Classify it as follows:
+
+1. Current evidence that resolves exact-stop, direction, destination, service, or track/path ineligibility produces scoped suppression and only the narrowest supported resolved rider consequence.
+2. Independent current high-impact evidence plus materially unresolved route, direction, station, segment, exact-stop, train, or path scope produces Task 6 **arrival claim unavailable** with the governed explanation, original official details, narrowest affected scope, and unrelated service preserved.
+3. Other missing, ambiguous, or contradictory evidence without that independent current high-impact basis fails admission and follows its governing quarantine or limitation treatment. It proves neither resolved suppression nor Task 6 unavailability.
+
+A freshness, identity, or movement failure follows only its separately governed evidence disposition; it never becomes a weaker invented arrival. Holding and Uncertain remain possible only when their own evidence requirements and every exact-stop and track/path confirmation gate pass.
 
 ## Disposition before ordering
 
@@ -49,10 +55,12 @@ A failed or unknown exact-stop, direction, destination, service-change, or track
 | **Expected** | Primary | Yes | Show the approved Expected range. A qualifying assigned terminal train may enter here before movement and is reevaluated as Live only after current movement or stop progress supports that state. |
 | **Holding** | Separate warning row | No | Freeze the time and state the location or last movement evidence. Do not silently delete the train and do not let it displace a moving option. |
 | Confirmed-pattern **Uncertain** | Expandable secondary area | No | Show **Arrival uncertain** without an exact minute only when the evidence still confirms service at the exact directional stop. |
-| Quarantined or suppressed | No arrival row | No | Withhold the candidate. Show only the narrowest supported rider consequence; never expose the internal disposition as rider certainty. |
+| Quarantined or limited | No arrival row; only a governing board-level limitation when supported | No | Fail admission and follow the owning quarantine or limitation treatment. Do not invent a resolved veto, Task 6 unavailability, or rider certainty from missing, ambiguous, or contradictory evidence alone. |
+| Resolved suppression | No arrival row | No | Suppress only the scope that current evidence resolves as ineligible. Show only the narrowest supported resolved service-change or track consequence. |
+| **Arrival claim unavailable** | Governed unavailable explanation beside only the affected scope | No | Show **Service change—arrival information is unavailable for this service.**, preserve the original official message in details, keep the scope narrow, and preserve unrelated service. Do not label the outcome resolved suppression. |
 | **Scheduled** | Clearly separated fallback state | No | Use only when the relevant real-time feed is genuinely unavailable and the schedule is eligible. Show a clock time and **Live data unavailable**; never mix it into or use it to fill the live next-three list. |
 
-Holding and Uncertain treatments do not weaken the exact-stop rule. If the stopping pattern, destination, direction, service change, or track is materially unresolved, suppress the arrival row instead.
+Holding and Uncertain treatments do not weaken the exact-stop rule and never survive failed stop/path confirmation. Resolved current ineligibility suppresses; independent current high-impact evidence with materially unresolved scope produces **arrival claim unavailable** with its governed treatment; and other failed confirmation follows the governing quarantine or limitation path without inventing either outcome.
 
 ## Chronological next-three ordering
 
@@ -76,11 +84,12 @@ Use the most specific supported explanation:
 
 | Cause of the gap | Exact message |
 |---|---|
-| Live evidence is limited because freshness, identity, movement, or other required evidence excludes possible candidates without establishing a service change. | **Live arrival information is limited.** |
-| A current service change, unresolved reroute, bypass, closure, suspension, planned-pattern exclusion, or invalidating track conflict hides one or more affected arrivals. | **Service change—some arrivals hidden.** |
+| Live evidence is limited because freshness, identity, movement, or other required evidence excludes possible candidates without resolving a service change or supplying independent current high-impact evidence for Task 6 unavailability. | **Live arrival information is limited.** |
+| A current resolved bypass, closure, suspension, planned-pattern exclusion, invalidating track conflict, or other resolved service veto suppresses one or more affected arrivals. | **Service change—some arrivals hidden.** |
+| Independent current high-impact service-change evidence leaves material scope unresolved and makes only the affected arrival claim unavailable. | **Service change—arrival information is unavailable for this service.** Preserve the original official message in details and unrelated service outside the scope. |
 | The healthy live horizon contains no additional verified train after all candidates are evaluated, and no exclusion above better explains the gap. | **No additional verified trains in the live horizon.** |
 
-If a service-change exclusion and a general evidence limitation both contribute, the service-change message is the more specific explanation for the hidden arrivals. A message explains an honest gap; it does not authorize a replacement row.
+Use the disposition-specific explanation for each affected scope. A resolved service-change exclusion is more specific than a general evidence limitation, while materially unresolved current high-impact scope retains the governed unavailable explanation rather than resolved-suppression copy. A message explains an honest gap; it does not authorize a replacement row.
 
 ## Review record
 
@@ -92,7 +101,7 @@ For every board decision, preserve:
 4. The result of the service-change, track, freshness, identity, and movement gates.
 5. The assigned disposition and board area.
 6. For every primary train, the evidence-supported range, best current estimate, overlap decision, and final chronological position.
-7. The displayed next-three rows, any separate Holding warning or Uncertain secondary row, and any fewer-than-three explanation.
-8. Every suppressed, quarantined, or static record that was prohibited from backfilling the board.
+7. The displayed next-three rows, any separate Holding warning, Uncertain secondary row, scoped unavailable explanation, and any fewer-than-three explanation.
+8. Every suppressed, unavailable, quarantined, limited, or static record that was prohibited from backfilling the board, with candidate rejection and public/internal disposition recorded separately.
 
 Unknown, stale, contradictory, scheduled-only, or materially unresolved evidence cannot be converted into admission, a stronger state, or a next-three slot.
