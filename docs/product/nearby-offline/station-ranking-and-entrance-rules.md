@@ -15,11 +15,24 @@
 
 This contract owns practical-walk ranking of nearby station complexes, entrance eligibility, constituent-station grouping, application of supplied accessible-path truth, and transparent personalization. It does not own location permission, arrival admission, service-change resolution, complete-path validity, equipment state, journey planning, platform positioning, or release approval.
 
-The [zero-tap startup and location-permission flow](zero-tap-startup-and-permission-flow.md) supplies only the location precision the rider permitted. The [nearby and offline experience contract](experience-contract.md) owns preserved context and prohibits a ranking refresh from silently replacing the rider's selected station or direction. The [Nearby card and direction contract](nearby-card-and-direction-contract.md) consumes this contract's final ordered output without another ranking pass. Arrival and service-change decisions remain owned by the governed artifacts under `docs/product/arrival-truth/`; accessibility and guidance remain companion-owned.
+The [zero-tap startup and location-permission flow](zero-tap-startup-and-permission-flow.md) supplies only the location precision the rider permitted. The [nearby and offline experience contract](experience-contract.md) owns preserved context and prohibits a ranking refresh from silently replacing the rider's selected station or direction. The [saved stations and rider-controlled personalization contract](saved-station-and-personalization-contract.md), Task 11, supplies only explicit Active preference and optional explicit time-window inputs and owns their controls. The [Nearby card and direction contract](nearby-card-and-direction-contract.md) consumes this contract's final ordered output without another ranking pass. Arrival and service-change decisions remain owned by the governed artifacts under `docs/product/arrival-truth/`; accessibility and guidance remain companion-owned.
 
 The [approved product specification](../../superpowers/specs/2026-07-30-nyc-subway-train-time-tracker-design.md) controls every conflict. Shared concepts retain their meanings in the [transit product glossary](../contracts/transit-product-glossary.md), and public wording remains subject to the [rider language rules](../contracts/rider-language-rules.md).
 
 This artifact is **Draft**. The authoritative [Gate 0 exit record](../quality/gate-0-exit-record.md) is **NO-GO — GATE 0 NOT PASSED**, so public arrival boards remain blocked. Accessibility owner artifacts, observed scenario 21 evidence, and Release 1 approval are also absent. The cases below are expected review fixtures, not observed passes.
+
+## Governance and applying-provenance mismatch
+
+The [artifact index](../artifact-index.md) registers Product, Accessibility, Data Quality, and Content and names approved-specification §§14.3, 19.3–19.4, and §31.4 scenario 21 for this artifact. This contract also applies §26.2 whenever Task 11 supplies saved-personalization inputs, and the [review and approval policy](../review-and-approval-policy.md) requires Privacy review because explicit saved preferences, time windows, and permitted location are personal-data inputs to ranking.
+
+| Governance question | Current record | Required disposition |
+|---|---|---|
+| Registered reviewer set | Product, Accessibility, Data Quality, Content | Retain the index-aligned metadata above until governed reconciliation. |
+| Applicable reviewer minimum | Product, Accessibility, Data Quality, Content, Privacy | All five roles must review the same fixed version. Privacy reviews saved-preference, explicit-time-window, and permitted-location application. |
+| Registered source provenance | §§14.3, 19.3–19.4, and §31.4 scenario 21 | Record §26.2 as applying provenance through the Task 11 contract before advancement from **Draft**. Task 3 retains ranking ownership; Task 11 does not redefine eligibility or baseline order. |
+| Reconciliation and evidence | Pending | Product Governance Lead reconciliation of the index and artifact metadata, plus a Privacy decision on the same fixed version, are required. |
+
+This contract does not edit the index, invent Privacy approval, or treat either mismatch as waived.
 
 ## “Nearest” means nearest useful entrance
 
@@ -138,7 +151,7 @@ Re-ranking may update suggestion order. It may not navigate away from an explici
 
 ## Personalization
 
-Only explicit saved preferences and their permitted time-of-day context may influence presentation order.
+Only explicit saved preferences and their permitted time-of-day context supplied by the [saved stations and rider-controlled personalization contract](saved-station-and-personalization-contract.md) may influence presentation order. The record must be Active; a Paused record supplies no ordering or time-window influence. No optional time window may be inferred or applied outside the rider-entered window.
 
 When a farther but usable station is promoted:
 
@@ -149,7 +162,7 @@ When a farther but usable station is promoted:
 - never call the promoted result **nearest**; and
 - never alter arrival, service-change, closure, accessibility, or entrance truth.
 
-No inferred movement history, hidden habit model, account, or preference may override a hard exclusion. The saved-station owner later provides inspection, editing, pausing, deletion, and reset controls.
+No inferred movement history, hidden habit model, account, or preference may override a hard exclusion. Task 11 owns inspection, explicit editing and saving, pausing, station-specific reset, and deletion controls without changing this contract's baseline or final ranking authority.
 
 ## Task 4 handoff
 
@@ -240,4 +253,5 @@ Each case is an expected fixture. Its result remains **Not run — Pending** unt
 | Does Accessible Route Only reject Unknown without silently relaxing? | Yes. | Companion complete-path/equipment evidence and UR-C04 |
 | Can a preference hide or rewrite the closer workable result? | No. | UR-C05 and saved-state evidence |
 | Can ranking admit a train or clear a service-change veto? | No. | Upstream Gate 0 evidence and Task 14 integration review |
+| Has Privacy reviewed the same fixed version and has §26.2 applying provenance been reconciled with the index and metadata? | No. | Privacy decision and Product Governance Lead reconciliation |
 | Are current approval and scenario results claimed? | No. Gate 0 is a no-go; this artifact and every case remain Draft/Pending. | Required reviewer decisions and observed evidence |
