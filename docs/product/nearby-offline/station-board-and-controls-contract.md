@@ -13,11 +13,13 @@
 
 ## Purpose and authority
 
-This contract owns the contextual station board, compact header, bottom-third control behavior, decision-first row presentation, row disclosure, localized alert placement, rider-readable freshness, and cause-gated empty and degraded states. It does not own arrival admission or ordering, feed health, confidence classification, service-change resolution, track-conflict disposition, accessible-path truth, platform certainty, positioning guidance, saved-preference policy, visual conformance, or release approval.
+This contract owns the contextual station board, compact header, bottom-third control behavior, decision-first row presentation, row disclosure, localized alert placement, rider-readable freshness, and exactly five connected cause-gated empty and degraded states. It does not own arrival admission or ordering, feed health, confidence classification, service-change resolution, track-conflict disposition, accessible-path truth, platform certainty, positioning guidance, saved-preference policy, visual conformance, or release approval.
 
 The approved specification's §14.6 controls station-board refresh behavior and §16 supplies normative hierarchy, route-recognition, reach, accessibility, and motion constraints. The [underground visual and reachability standard](underground-visual-and-reachability-standard.md), Task 6, fixes the visual hierarchy, route-recognition, contrast, large-text, assistive-reading, target-size, reach, and motion criteria. This Task 5 contract consumes those criteria while retaining ownership of the defined control behavior, locations, and decision order below. The Draft standard is not measured proof; Nearby Task 14 still owns the observed rendered evidence.
 
 The [Approved artifact index](../artifact-index.md) currently registers §15 only for this artifact. Controlled governance reconciliation of the index with this contract's normative §§14.6 and 16 consumption is **Pending** before any lifecycle advancement. This Task 5 fix does not edit the index, reinterpret its approval, or advance this artifact beyond **Draft**.
+
+The [offline, degraded, and reconnection states contract](offline-degraded-and-reconnection-states.md), Task 10, owns the global Offline entry and banner, cached-current treatment, preserved-screen behavior, ordered reconnection, and active-trip invalidation warning. Offline is not a sixth connected state and cannot be selected by any cause gate in this contract; Task 10 consumes the exact five messages, gates, and single in-state actions below without redefining them.
 
 The [Nearby card and direction contract](nearby-card-and-direction-contract.md) supplies the selected station complex, direction context, exact upstream arrival order, evidence states, and localized disruptions. The [nearby and offline experience contract](experience-contract.md) owns persistent destinations and cross-surface continuity. The [zero-tap startup and location-permission flow](zero-tap-startup-and-permission-flow.md) owns the foreground lifecycle trigger, location retry, and station-choice fallback.
 
@@ -182,6 +184,8 @@ A first fresh coherent recovery snapshot does not restore exact countdowns. The 
 
 Each rendered state contains exactly one in-state call to action. A cause gate may choose between mutually exclusive actions, but both never render together. Persistent navigation and separately governed global controls remain available, but they do not become extra CTAs inside the state.
 
+These are exactly the five cause-gated states available while connected. Global Offline remains the separate cross-surface state governed by Task 10; neither one unavailable route/feed group nor unavailable location activates it, and Offline does not recast one of these five states.
+
 | Exact state message | Required cause gate | Exact single in-state action | Result of action | Prohibited use |
 |---|---|---|---|---|
 | **No verified live arrivals in this direction.** | The exact direction has no admitted Live or Expected primary arrivals under Current accepted evidence; no stronger service-change, line-absence, scheduled-fallback, or location state controls. Count other current passenger-serving directions for the same complex after excluding the selected direction. | With exactly one or multiple alternatives, render only **View other direction**. With no alternative, render only **Open map**. Never render both. | Exactly one alternative is selected directly. Multiple alternatives open the preserved bottom-third direction chooser with no preselection or guessed opposite. With no alternative, **Open map** preserves the station and current scope. | Missing feed, unresolved stopping pattern, resolved line absence, row-count backfill, no useful action, both CTAs, direct selection when multiple alternatives exist, chooser preselection, guessed opposite, or loss of station or current scope. |
@@ -299,6 +303,7 @@ Every walkthrough is an expected product fixture. None is observed evidence.
 | Decision | Authoritative owner | Task 5 consumption | Current disposition |
 |---|---|---|---|
 | Station-board controls, continuity, placement, control labels, and five cause-gated state messages | This contract, Task 5 | Define expected product behavior without claiming measured conformance. | Draft; Task 14 Not run — Pending |
+| Global Offline entry and banner, cached-current treatment, preserved screen, ordered reconnection, and active-trip invalidation warning | [Offline, degraded, and reconnection states contract](offline-degraded-and-reconnection-states.md), Task 10 | Keep Offline outside the five connected cause gates and preserve their exact ownership. | Draft; OFF-T23 and Task 14 Not run — Pending |
 | Arrival admission, order, confidence, service change, track conflict, feed health, and their rider treatments | Linked Arrival Truth policies and contracts | Preserve exact supplied row, absence, state copy, scoped consequence, feed isolation, and recovery treatment. | **NO-GO — GATE 0 NOT PASSED**; public boards blocked |
 | Accessible-path and equipment state | Companion accessibility artifacts planned under `docs/product/accessibility/` | Preserve exact path scope and fail closed; do not infer a badge or current path. | Approval and observed evidence absent |
 | Platform and positioning guidance | Companion guidance artifacts planned under `docs/product/guidance/` | Show only verified supplied state and guidance; suppress during conflict or ambiguity. | Approval and observed evidence absent |
@@ -316,6 +321,6 @@ Every walkthrough is an expected product fixture. None is observed evidence.
 | Can a filter conceal an affected route's disruption? | No. | OH-03 observed result |
 | Do rows preserve upstream disposition, platform constraints, guidance limits, and track-conflict suppression? | Yes. | Arrival Truth and companion guidance evidence plus Task 14 |
 | Can a foreground event, Refresh tap, or gesture create freshness? | No. | FL-01, OH-04, and OH-05 observations |
-| Are there exactly five cause-gated state messages with one in-state action each? | Yes. | Task 14 degraded-state cases |
+| Are there exactly five connected cause-gated state messages with one in-state action each, with global Offline owned separately by Task 10? | Yes. | Task 10 OFF-T23 plus Task 14 degraded-state cases |
 | Are the seven one-handed walkthroughs observed or approved? | No. Every case remains Not run — Pending. | Required reviewer decisions on a fixed version |
 | Does this artifact claim Gate 0, accessibility, guidance, Task 6, Task 14, or release approval? | No. The decision remains **NO-GO — GATE 0 NOT PASSED**; public boards blocked. | Complete signed owner evidence |
