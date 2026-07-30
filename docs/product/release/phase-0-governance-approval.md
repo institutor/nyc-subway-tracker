@@ -9,7 +9,7 @@
 | Last validation date | 2026-07-30 |
 | Supersedes | None |
 | Approval evidence | [This Phase 0 governance approval record](phase-0-governance-approval.md) |
-| Scenario results | Not applicable — this Phase 0 artifact governs vocabulary, ownership, lifecycle, and review, not rider-visible operational behavior; this cannot waive later rider-behavior acceptance evidence. |
+| Scenario results | Not applicable — this Phase 0 artifact governs vocabulary, ownership, lifecycle, and review, not rider-visible operational behavior; this does not waive later operational, accessibility, offline, positioning, or notification acceptance evidence. |
 
 ## Gate purpose
 
@@ -41,9 +41,9 @@ The remaining non-blocking provenance minor was that the rider-language index ro
 
 ## Scenario determination and retained verification
 
-Section 31 operational scenarios are **Not applicable** to this gate only because these Phase 0 artifacts govern vocabulary, ownership, lifecycle, and review rather than rider-visible operational behavior. This determination cannot waive, replace, defer, or satisfy any later rider-behavior acceptance test. Every later behavior-owning artifact must attach its applicable Section 31 and workstream boundary evidence before approval.
+Section 31 operational scenarios are **Not applicable** to this gate only because these Phase 0 artifacts govern vocabulary, ownership, lifecycle, and review rather than rider-visible operational behavior. This determination does not waive, replace, defer, or satisfy later operational, accessibility, offline, positioning, or notification acceptance evidence. Every later behavior-owning artifact must attach its applicable Section 31 and workstream boundary evidence before approval.
 
-Focused document verification remains required for this review set: metadata/index agreement, one shared approval-record link, exact dependency SHAs and verdicts, rider-language source synchronization, specification precedence, the current-negative-evidence veto, the materially-unresolved bypass suppression rule, and the absence of premature **Approved** states.
+Focused document verification remains required for this review set: metadata/index agreement, one shared approval-record link, explicit operational, accessibility, offline, positioning, and notification acceptance-evidence non-waiver, exact dependency SHAs and verdicts, rider-language source synchronization, specification precedence, the current-negative-evidence veto, the materially-unresolved bypass suppression rule, and the absence of premature **Approved** states.
 
 ## Independent gate decisions
 
