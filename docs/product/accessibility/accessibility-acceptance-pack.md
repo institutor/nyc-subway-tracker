@@ -380,3 +380,103 @@ Task 12 Steps 5–13 remain **Pending — not evaluated at checkpoint 1**: Relea
 - [ ] No product run, station, path, equipment snapshot, source capture, warning, reviewer decision, approval, Gate 0 passage, or release evidence has been fabricated.
 
 Every unchecked required item blocks Task 6 acceptance. The current decision remains **NO-GO — GATE 0 NOT PASSED**, and public arrival boards remain blocked.
+
+## Append-only Release 2 positioning evidence definitions
+
+This Task 8 extension is a separate Release 2 evidence-definition namespace. It does not modify, merge, renumber, replace, or rerun `A11Y-R1-PACK-v1`; its 17 canonical Release 1 cases; its 54 Release 1 fixture definitions; its pack-local failed-response control; its zero-real-coverage statements; its accepted checkpoint handoff; or its distinct Release 1 accessibility no-go above.
+
+| Extension governance field | Value |
+|---|---|
+| Evidence-definition identifier | `A11Y-R2-POS-T8-v1` — documentation schema only, not a product/build, execution, approval, or release version |
+| Source sections | Approved specification §§23.1, 23.3, 23.5, 29.4, and §31.6 scenarios 33–35; accessibility and platform-guidance plan `Product artifact map` and Task 8 `Product artifacts`, `Dependencies`, `Produces for later tasks`, `Ordered steps`, and `Evidence and acceptance checks` |
+| Owner | Release Quality Lead |
+| Required reviewers | Product, Accessibility, Data Quality, Content, Operations |
+| Status | Draft |
+| Last validation date | 2026-07-30 |
+| Supersedes | None |
+| Approval evidence | Pending |
+| Scenario results | Three definitions; all **Not run — Pending** |
+
+The artifact index cites this pack only for Release 1 specification §§21, 31.5, and 32.2. Product Governance Lead reconciliation of this separate Release 2 Task 8 provenance with the index is **Pending**. This task does not edit the index or treat the mismatch as approved.
+
+The [Front, Middle, and Back positioning rider experience](../guidance/positioning-rider-experience.md) owns Task 8 presentation. The [platform guidance evidence standard](../guidance/platform-evidence-standard.md) and [platform state and positioning certainty matrix](../guidance/platform-state-and-certainty-matrix.md) retain Task 7 evidence, state, certainty, hard-conflict, recovery, and reevaluation authority. The [Accessible Route Only state matrix](accessible-route-only-state-matrix.md#aro-17-verified-accessible-zone-outranks-quickest-stairs) retains the appended hard-constraint priority definition.
+
+These definitions contain fixed synthetic inputs and expected outcomes only. They demonstrate no fixed reviewed executable product, real station, constituent, route, direction, platform, geometry, field check, actual-track observation, coverage, rendered visible or assistive result, attachment, named reviewer decision, approval, or release evidence. Every new actual result, attachment, reviewer decision, correction, rerun, and disposition remains **Pending** or **Not run — Pending**.
+
+### Release and checkpoint separation
+
+- The authoritative arrival-truth decision remains **NO-GO — GATE 0 NOT PASSED** and public arrival boards remain blocked.
+- The preserved Release 1 accessibility decision remains **NO-GO — REQUIRED ACCESSIBILITY EVIDENCE AND COVERAGE ARE NOT DEMONSTRATED**.
+- The separate Nearby/offline Release 1 no-go remains unchanged.
+- These three Release 2 definitions do not change the Release 1 census of 17 canonical cases, 54 fixture definitions, or one pack-local failed-response control.
+- They do not pass Gate 0, the Release 1 accessibility checkpoint, the Nearby/offline checkpoint, or a Release 2 checkpoint.
+- They may be evaluated only through Task 12's [later separate Release 2 decision](../quality/accessibility-and-guidance-release-gates.md#later-task-12-checkpoint-boundary) against one complete same-version package.
+
+Each attempt below must bind its immutable synthetic input package, exact timestamps, every controlling artifact version, expected visible result or omission, expected assistive result or omission, prohibited behavior, actual result, attachments, five same-version reviewer decisions, correction, rerun, and disposition. The initial attempts have not run.
+
+### A11Y-31-33 / A11Y-31-33-A01: direction reversal
+
+| Evidence field | Fixed Release 2 definition |
+|---|---|
+| Specification source, decision owners, and linked fixture | §31.6 scenario 33; Guidance Product Lead for positioning; Accessibility Product Lead for complete-path and hard-constraint decisions; Release Quality Lead for this evidence record; [positioning fixture POS-33](../guidance/positioning-rider-experience.md#pos-33-direction-reversal) |
+| Fixed versions | Immutable synthetic `A11Y-31-33-SRC-v1` consuming `POS-33-SRC-v1`; accepted Task 7 baseline commit `3d39129a58b497c92d0125569edebd894c47a71d`; `A11Y-R2-POS-T8-v1` and Task 8 definitions bound by the commit containing this extension; fixed product/build **Pending** |
+| Immutable inputs and authoritative relative times | Branch A: synthetic admitted direction `D-A` at `T0`; independently admitted reverse direction `D-B` with two qualifying exact platform updates and a complete current opposite-direction orientation, stopping, zone, and objective record at `T1−30s` and `T1`; evaluate at `T1+5s`. Branch B: at `T2`, the reverse or replacement orientation, stopping relationship, or objective evidence is missing or uncertain; evaluate at `T2+5s`. |
+| Expected visible output or omission | Branch A reverses Front and Back according to the complete current record and retains Middle only where independently supported. Branch B preserves independently valid arrival/platform context but shows no Front/Middle/Back claim because positioning is **Unavailable**. |
+| Expected assistive output or omission | Convey the same reversed zone, objective, certainty, and benefit in Branch A. In Branch B, convey no positioning recommendation and never retain the prior-direction label. |
+| Prohibited behavior | Mechanical word swap without complete evidence; old-direction inheritance; unsupported Middle; lower-certainty guess; car number; numeric confidence; visible/assistive mismatch |
+| Actual result | **Pending — not observed** |
+| Attachments and durable evidence | **Pending — none recorded** |
+| Five reviewer decisions | Product **Pending**; Accessibility **Pending**; Data Quality **Pending**; Content **Pending**; Operations **Pending** |
+| Correction | **Pending — none recorded** |
+| Rerun | **Pending — not run** |
+| Disposition and release effect | **Not run — Pending**; does not pass Gate 0, change Release 1 counts or decisions, or authorize Release 2 |
+
+### A11Y-31-34 / A11Y-31-34-A01: invalidating track conflict
+
+| Evidence field | Fixed Release 2 definition |
+|---|---|
+| Specification source, decision owners, and linked fixture | §31.6 scenario 34; arrival-truth owner for conflict and row suppression; Guidance Product Lead for positioning omission; Release Quality Lead for this evidence record; [positioning fixture POS-34](../guidance/positioning-rider-experience.md#pos-34-invalidating-track-conflict) |
+| Fixed versions | Immutable synthetic `A11Y-31-34-SRC-v1` consuming `POS-34-SRC-v1`; accepted Task 7 baseline commit `3d39129a58b497c92d0125569edebd894c47a71d`; `A11Y-R2-POS-T8-v1` and Task 8 definitions bound by the commit containing this extension; fixed product/build **Pending** |
+| Immutable inputs and authoritative relative times | At `T0−30s`, synthetic affected train `TR-A` and unrelated train `TR-U` are independently coherent. At `T0`, `TR-A` develops an explicit invalidating unresolved nonterminal actual-versus-scheduled-track conflict for the target downstream board; `TR-U` remains coherent. Evaluate at `T0+1s`. |
+| Expected visible output or omission | Suppress `TR-A`'s row and every dependent platform, positioning, accessibility, and transfer claim. Show exactly **Track change—check station signs** in station context and **Service change—this train's downstream stops are not verified.** in the affected board's suppression state. Preserve `TR-U` when independently admitted. Create no **Check station signs** row for `TR-A`. |
+| Expected assistive output or omission | Convey the same station-scoped context, affected-service suppression, dependent omission, and unrelated-service preservation without fabricating an affected train row. |
+| Prohibited behavior | Lower-confidence affected row; **Check station signs** row; Scheduled substitute; dependent platform/zone/accessibility/transfer claim; unrelated-service suppression; normal terminal variation treated as this conflict |
+| Actual result | **Pending — not observed** |
+| Attachments and durable evidence | **Pending — none recorded** |
+| Five reviewer decisions | Product **Pending**; Accessibility **Pending**; Data Quality **Pending**; Content **Pending**; Operations **Pending** |
+| Correction | **Pending — none recorded** |
+| Rerun | **Pending — not run** |
+| Disposition and release effect | **Not run — Pending**; does not pass Gate 0, change Release 1 counts or decisions, or authorize Release 2 |
+
+### A11Y-31-35 / A11Y-31-35-A01: accessible zone priority
+
+| Evidence field | Fixed Release 2 definition |
+|---|---|
+| Specification source, decision owners, and linked fixtures | §31.6 scenario 35; Accessibility Product Lead for Accessible Route Only and complete-path decisions; Guidance Product Lead for positioning presentation; Release Quality Lead for this evidence record; [positioning fixture POS-35](../guidance/positioning-rider-experience.md#pos-35-accessible-zone-outranks-quickest-stairs) and [Accessible Route Only fixture ARO-17](accessible-route-only-state-matrix.md#aro-17-verified-accessible-zone-outranks-quickest-stairs) |
+| Fixed versions | Immutable synthetic `A11Y-31-35-SRC-v1` consuming `POS-35-SRC-v1` and `ARO-17-SRC-v1`; accepted Task 7 baseline commit `3d39129a58b497c92d0125569edebd894c47a71d`; `A11Y-R2-POS-T8-v1` and Task 8 definitions bound by the commit containing this extension; fixed product/build **Pending** |
+| Immutable inputs and authoritative relative times | At `T0−30s` and `T0`, one admitted synthetic train has a complete quickest-stairs Front relationship and a separately complete current verified-accessible Middle relationship. The exact complete street-to-street path, equipment decisions, boarding/exit area, zone relationship, platform, direction, service pattern, and Task 7 evidence pass for Middle. Accessible Route Only is On at evaluation `T0+5s`; a convenience/crowding preference favors Front. |
+| Expected visible output or omission | Show **Middle—nearest elevator** as the primary recommendation and explain the verified accessible boarding/exit benefit. No Front stair-based or convenience recommendation overrides it. |
+| Expected assistive output or omission | Convey Middle, the verified accessible objective, certainty, Accessible Route Only priority, and the same benefit. Do not announce Front or a crowding/convenience zone as preferred. |
+| Prohibited behavior | Quickest stairs, faster transfer, crowding, travel time, or convenience overrides Middle; structural accessibility alone creates a zone; Accessible Route Only silently relaxes or turns Off; rerouted platform inherits the zone; car number; numeric confidence |
+| Actual result | **Pending — not observed** |
+| Attachments and durable evidence | **Pending — none recorded** |
+| Five reviewer decisions | Product **Pending**; Accessibility **Pending**; Data Quality **Pending**; Content **Pending**; Operations **Pending** |
+| Correction | **Pending — none recorded** |
+| Rerun | **Pending — not run** |
+| Disposition and release effect | **Not run — Pending**; does not pass Gate 0, change Release 1 counts or decisions, or authorize Release 2 |
+
+### Release 2 Task 8 evidence readout
+
+| Evidence category | Current Task 8 value | Gate consequence |
+|---|---|---|
+| Release 2 positioning definitions | 3 total; all **Not run — Pending** | Blocks Task 12 Release 2 consideration |
+| Fixed reviewed executable product/build | **Pending** | Blocks |
+| Immutable run-bound artifact, input, output, and reviewer package | **Pending** | Blocks |
+| Visible and assistive rendered evidence | **Pending — none recorded** | Blocks |
+| Product, Accessibility, Data Quality, Content, and Operations decisions | All **Pending** | Blocks |
+| Corrections and reruns | **Pending — none recorded** | Blocks |
+| Real geometry, route-direction coverage, stations, field checks, or actual-track observations | **None claimed or established** | No Release 2 coverage or result |
+| Release 1 census | Preserved at 17 canonical cases, 54 fixture definitions, and 1 pack-local control | Unchanged; every original result remains **Not run — Pending** |
+| Release decisions | Gate 0 no-go, Release 1 accessibility no-go, and Nearby/offline no-go remain active; Release 2 not evaluated | No release authorization |
+
+No expected definition is an actual result. A future correction or rerun must preserve these initial Pending attempts, use a new sequential attempt ID, bind a new fixed package, and attach separate durable evidence. A later Pass cannot erase an earlier failure, inconclusive result, or Pending definition.

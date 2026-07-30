@@ -465,3 +465,50 @@ Every fixture below must be executed against one immutable product version and t
 - [ ] No real accessibility, current equipment, observed result, approval, Gate 0 passage, or release evidence is claimed.
 
 Every unchecked required item blocks review completion. A completed matrix still does not authorize public accessibility behavior until all mandatory reviewers approve the same fixed version and all blocking scenarios pass.
+
+## Task 8 append-only Release 2 positioning priority
+
+This append-only Task 8 extension leaves every preceding Task 3 definition, all 16 original fixture records, their IDs, expected results, statuses, counts, wording, and evidence fields unchanged. It adds only the Release 2 positioning-priority boundary and fixture below. `ARO-17` is not part of the Release 1 inventory of 16 Task 3 ARO fixtures or the Release 1 acceptance pack's 54 fixture definitions.
+
+| Extension governance field | Value |
+|---|---|
+| Applying source and plan provenance | Approved specification §§23.1, 23.3, 23.5, 29.4, and §31.6 scenario 35; accessibility and platform-guidance plan Task 8 `Product artifacts`, `Dependencies`, `Produces for later tasks`, `Ordered steps`, and `Evidence and acceptance checks` |
+| Consumed Task 7 authority | [Platform guidance evidence standard](../guidance/platform-evidence-standard.md) and [platform state and positioning certainty matrix](../guidance/platform-state-and-certainty-matrix.md) |
+| Task 8 presentation owner | [Front, Middle, and Back positioning rider experience](../guidance/positioning-rider-experience.md) |
+| Required extension reviewers | Product, Accessibility, Data Quality, Content, Operations |
+| Status and approval | **Draft**; approval **Pending** |
+| Scenario result | **Not run — Pending** |
+
+The artifact index's narrower Task 3 provenance and four-role review remain unchanged. Product Governance Lead reconciliation of this append-only Task 8 provenance and Operations review with the index is **Pending**. This task does not edit the index or treat the mismatch as approved.
+
+Task 7 continues to own **Platform confirmed**, **Expected platform**, **Check station signs**, **Verified**, **Expected**, **Unavailable**, the hard actual-versus-scheduled-track conflict, recovery, and independent guidance reevaluation. This extension consumes those decisions and does not redefine them.
+
+### Positioning-priority matrix
+
+| Condition | Required Accessible Route Only result | Prohibited behavior |
+|---|---|---|
+| A verified complete accessible boarding and exit path maps to a different supported zone than a shorter stair-based or convenience objective | Make the accessible zone primary and preserve its supported benefit and certainty. | Let quickest stairs, faster transfer, travel time, crowding, or convenience override it. |
+| The route is structurally step-free but the Front/Middle/Back relationship has not independently passed Task 7 for the exact scope | Preserve the route decision but show and announce no positioning claim. | Infer a zone from structural accessibility, elevator presence, a station badge, or entrance coordinates. |
+| Positioning is **Unavailable** while Accessible Route Only remains On | Keep the hard constraint On and omit positioning. | Silently relax Accessible Route Only to show an ordinary zone. |
+| A replacement platform or rerouted orientation lacks its own complete accessible-zone evidence | Reject inherited accessible positioning for that platform and preserve only independently supported state. | Borrow the ordinary platform's accessible zone, boarding area, exit, elevator chain, or geometry. |
+| Task 7 reports an invalidating unresolved nonterminal actual-versus-scheduled-track conflict | Suppress the affected arrival and every dependent accessible-positioning instruction; preserve unrelated service that independently passes. | Convert the conflict to a lower-certainty accessible recommendation or a **Check station signs** row. |
+
+An available complete accessible path does not automatically create a positioning claim. The exact station, constituent, route, direction, service-pattern variation, platform, orientation, stopping relationship, objective, boarding/exit area, and zone relationship must independently pass Task 7. Positioning omission never changes Accessible Route Only to Off and never makes a stair-based recommendation eligible.
+
+### ARO-17: verified accessible zone outranks quickest stairs
+
+| Evidence field | Record |
+|---|---|
+| Fixed source and policy versions | Synthetic `ARO-17-SRC-v1`; accepted Task 7 baseline commit `3d39129a58b497c92d0125569edebd894c47a71d`; Task 8 definitions bound by the commit containing this extension; fixed product/build **Pending** |
+| Immutable input paths and current decisions | At `T0−30s` and `T0`, one admitted synthetic train has a supported Front quickest-stairs objective and a separately supported Middle verified accessible objective. The exact complete street-to-street accessible boarding/exit chain, current route-critical equipment decisions, exact area-to-zone relationship, platform, direction, service pattern, and Task 7 evidence all pass for Middle. Accessible Route Only is On at evaluation `T0+5s`. |
+| Expected visible result | Present **Middle—nearest elevator** as the primary recommendation for the verified accessible boarding and exit path. No competing Front stair-based recommendation overrides it. |
+| Expected assistive result | Announce Middle, the verified accessible objective, its supported certainty and benefit, and Accessible Route Only priority. Do not announce Front or another convenience zone as preferred. |
+| Prohibited visible and assistive result | Quickest stairs, faster transfer, crowding, travel time, or convenience overrides Middle; structural accessibility creates a zone without Task 7 evidence; Accessible Route Only turns Off; an unverified reroute inherits Middle; a hard conflict becomes lower-certainty guidance. |
+| Actual visible, assistive, and decision result | **Pending — not observed** |
+| Required reviewer decisions and dates | Product **Pending**; Accessibility **Pending**; Data Quality **Pending**; Content **Pending**; Operations **Pending**; all dates **Pending** |
+| Durable evidence and attachments | **Pending — none recorded** |
+| Correction | **Pending — none recorded** |
+| Rerun | **Pending — not run** |
+| Status | **Not run — Pending** |
+
+This synthetic fixture defines an expected result only. It establishes no real path, zone, geometry, station, route-direction coverage, equipment state, actual-track observation, rendered result, reviewer approval, Gate 0 passage, Release 1 change, or Release 2 authorization. Evaluation belongs only to Task 12's later separate Release 2 decision.
