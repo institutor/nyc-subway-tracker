@@ -19,9 +19,11 @@ The [approved product specification](../../superpowers/specs/2026-07-30-nyc-subw
 
 The [zero-tap startup and location-permission flow](zero-tap-startup-and-permission-flow.md) fulfills the §§14.1–14.2 startup sequence and first-use permission experience, the §28.1 functional location fallback at startup, and scenario 22. It consumes this contract's context continuity and upstream truth; it does not take ownership of arrival truth, accessibility truth, broader privacy and retention rules, or Release 1 approval.
 
-The [station board and controls contract](station-board-and-controls-contract.md) owns the visible station-board application of §14.6 and §§15.1–15.5: compact station detail, bottom-third controls, refresh presentation, disclosures, scoped alerts, and cause-gated states. This experience contract retains cross-surface restore-first, refresh-second continuity, while Task 2 owns only the foreground lifecycle trigger. Supporting §16 visual, measured reach, contrast, assistive, and motion conformance remains with Task 6.
+The [station board and controls contract](station-board-and-controls-contract.md) owns the visible station-board application of §14.6 and §§15.1–15.5: compact station detail, bottom-third controls, refresh presentation, disclosures, scoped alerts, and cause-gated states. This experience contract retains cross-surface restore-first, refresh-second continuity, while Task 2 owns only the foreground lifecycle trigger. Supporting §16 visual, measured reach, contrast, assistive, and motion conformance remains with the [underground visual and reachability standard](underground-visual-and-reachability-standard.md), Task 6.
 
-This artifact is **Draft**. The authoritative [Gate 0 exit record](../quality/gate-0-exit-record.md) is **NO-GO — GATE 0 NOT PASSED**; public boards blocked. Every referenced planned artifact and scenario result remains **Pending** until its own required review and observed evidence are complete. Accessibility, guidance, and Task 6 evidence remain absent. This contract makes no launch, readiness, or approval claim.
+The [map modes and journey behavior contract](map-modes-and-journey-behavior.md), Task 7, owns the Map destination's independent appearance, service-meaning, spatial-view, and overlay axes; Actual-now and reference-layer rules; reroute visualization; interaction continuity inside Map; and journey planning and ranking. This experience contract continues to own exactly four persistent destinations and the restore-first boundary across them. The map contract records specification §17 and §31.4 scenario 25 as its source provenance and marks the artifact-index reconciliation **Pending** before lifecycle advancement.
+
+This artifact is **Draft**. The authoritative [Gate 0 exit record](../quality/gate-0-exit-record.md) is **NO-GO — GATE 0 NOT PASSED**; public boards blocked. Every absent planned artifact and scenario result remains **Pending** until its own required review and observed evidence are complete. Accessibility, guidance, Task 6 rendered/measured evidence, and Task 7 walkthrough evidence remain absent. This contract makes no launch, readiness, or approval claim.
 
 ## Experience architecture
 
@@ -30,7 +32,7 @@ This artifact is **Draft**. The authoritative [Gate 0 exit record](../quality/ga
 The persistent bottom navigation contains exactly four destinations, in this product order:
 
 1. **Nearby** — the default destination and zero-tap entry to nearby station boards.
-2. **Map** — actual-now, typical-weekday, and late-night service views.
+2. **Map** — **Actual now**, **Typical weekday**, and **Late night** service layers in independently selected appearance, spatial view, and overlays.
 3. **Commute** — saved commute windows and actionable disruptions governed by the companion commute workstream.
 4. **Saved** — stations and journeys available online or offline.
 
@@ -46,7 +48,7 @@ The four destinations do not transfer decision authority. In particular, the Com
 - Nearby exposes the initial useful station and arrival content without search, typing, direction switching, or expansion.
 - Map and Saved can open a contextual station detail without changing the selected persistent destination.
 - A destination change preserves the shared rider context below unless the rider explicitly changes or resets it.
-- A refresh may change evidence-supported content, but it may not silently change the rider's station, direction, filter, preference, trip progress, map view, or reading position.
+- A refresh may change evidence-supported content, but it may not silently change the rider's station, direction, filter, preference, trip progress, map appearance, service layer, spatial view, overlays, viewport, or reading position.
 
 ## Preserved rider context
 
@@ -61,7 +63,7 @@ Context is restored before any refresh result is applied. Refresh is second and 
 | Route filters | Preserve the rider's filters. A current disruption affecting a filtered route must remain visibly disclosed rather than silently hidden. | [Station board and controls contract](station-board-and-controls-contract.md), Task 5 |
 | Accessible Route Only | Keep the rider's hard accessibility constraint on or off as chosen. New evidence may invalidate an option, but must not turn the constraint off or substitute an unverified path. | `docs/product/nearby-offline/saved-station-and-personalization-contract.md`, Task 11; companion accessibility artifacts |
 | Positioning destination | Preserve the exit, transfer, or destination for which guidance was requested. Loss of guidance evidence removes the recommendation, not the rider's destination intent. | `docs/product/guidance/positioning-rider-experience.md`, companion accessibility/guidance workstream |
-| Map position and scale | Restore the same map position, scale, selected layer, highlighted route or station, and opened contextual detail. Recenter only when the rider requests it or on the defined initial Nearby-to-Map transition. | `docs/product/nearby-offline/map-modes-and-journey-behavior.md`, Task 7 |
+| Map state and viewport | Restore appearance, explicit service layer, Schematic/Geographic view, overlay choices, highlighted route, selected station, rider-facing direction, zoom, position, opened contextual board, and return focus independently. Recenter only when the rider requests it or on the defined initial Nearby-to-Map transition when no preserved Map state exists. | [Map modes and journey behavior contract](map-modes-and-journey-behavior.md), Task 7 |
 | Active-trip progress | Preserve the selected trip, current decision point, and rider-confirmed manual progress. Refresh may warn that the trip is invalid, but may not reset progress or silently replace the trip. | `docs/product/nearby-offline/offline-trip-card-and-progress-contract.md`, Task 9 |
 | Scroll and reading position | Restore the same reading position within the current station, direction, map detail, or trip instruction. Insertions, removals, or refreshed values must not jump the rider to the top. | [Station board and controls contract](station-board-and-controls-contract.md), Task 5; `docs/product/nearby-offline/offline-degraded-and-reconnection-states.md`, Task 10 |
 
@@ -70,7 +72,7 @@ Context is restored before any refresh result is applied. Refresh is second and 
 The sequence is mandatory:
 
 1. Reconstruct the preserved destination and contextual screen.
-2. Restore station, direction, filters, Accessible Route Only, positioning destination, map view, trip progress, and reading position.
+2. Restore station, direction, filters, Accessible Route Only, positioning destination, the complete map tuple of appearance/service layer/spatial view/overlays/selection/zoom/position/opened board, trip progress, and reading position.
 3. Show the last coherent content only with its governed evidence and freshness treatment.
 4. Request current truth from each authoritative owner.
 5. Apply current results inside the restored context.
@@ -106,6 +108,7 @@ Nearby, Map, Commute, Saved, station detail, and offline trip surfaces consume g
 |---|---|---|---|
 | Qualified and ordered arrivals | Arrival-truth contracts, policies, and evidence records under `docs/product/arrival-truth/` and `docs/product/quality/arrival-truth-acceptance-catalog.md` | Preserve exact directional-stop scope, route, destination, evidence state, time treatment, admission result, and upstream chronological order. Show fewer than three when fewer than three qualify. | Re-admit an excluded train; reorder admitted arrivals; promote a secondary state; fill a gap with static, ambiguous, cached, or weaker evidence; or upgrade Expected, Holding, Uncertain, Scheduled, cached, degraded, or unavailable evidence to Live. |
 | Service-change impact and veto | `docs/product/arrival-truth/service-change-impact-and-resolution-policy.md`, `docs/product/arrival-truth/reroute-and-track-conflict-playbook.md`, and upstream evidence | Preserve the narrowest route, direction, station, segment, train, entrance, transfer, or path scope; apply current negative evidence before positive presentation; retain the original official message where governed. | Show a train at a resolved bypassed stop; show it when stop service remains materially unresolved; widen a local impact; treat generic **Affected** as a bypass; or let a prediction, schedule, cache, or offline record clear a veto. |
+| Map service meaning and journey patterns | [Map modes and journey behavior contract](map-modes-and-journey-behavior.md), Task 7, consuming the linked current-service, service-date, source-precedence, and schedule-currency owners | For **Actual now**, show only supported scopes built from admitted current stopping patterns and resolved active changes; withhold unresolved scopes. For explicit reference or future planning, preserve layer-specific reference meaning, service date, effective horizon, confidence, currency, and all applicable owner-supplied vetoes. Preserve each map axis independently. | Fill an Actual-now gap with cached, regular, supplemented, stored, or reference geometry; convert Actual now to a reference layer on connectivity loss; select service meaning from phone clock, midnight, theme, or spatial view; clear a current veto; or rank an unsupported optimistic journey. |
 | Arrival confidence, degradation, and fallback | Upstream feed-health, ghost, suppression/recovery, and schedule-fallback owners | Preserve Live, Expected, Holding, Uncertain, Scheduled, degraded, unavailable, frozen-context, and arrival-claim-unavailable distinctions and their primary/secondary/separate-surface treatment. | Convert a non-Live state to Live through copy, animation, countdown, ordering, color, placement, or assistive language; keep a countdown advancing while Holding or degraded; or mix Scheduled into the live next-three. |
 | Accessible-path and equipment state | Companion accessibility policy, coverage, equipment, and acceptance artifacts | Treat Accessible Route Only as a hard constraint over the complete entrance-to-platform-to-destination-exit path; keep Unknown distinct from verified usable; invalidate or reroute when a required path is no longer supported. | Reduce accessibility to a station badge; turn stale, empty, failed, or missing equipment evidence into operational; disable Accessible Route Only automatically; or propose an unverified substitute. |
 | Platform and positioning guidance | Companion guidance evidence, state, experience, and coverage artifacts | Show front, middle, or back only at supported precision and retain verification and certainty. Remove guidance when direction, platform, geometry, or operational path is unresolved. | Invent a platform zone, treat scheduled platform data as confirmed, keep guidance through ambiguity, or jump to another station or destination merely because guidance disappeared. |
@@ -124,10 +127,12 @@ Nearby, Map, Commute, Saved, station detail, and offline trip surfaces consume g
 8. Guidance appears only at verified scope and disappears during operational or evidence ambiguity.
 9. Route identity remains understandable without color.
 10. Unresolved rights block public use of protected official maps, symbols, and brand assets.
+11. Map appearance, service meaning, spatial view, and overlays remain independent; changing one never silently changes another.
+12. Actual now never inherits cached or reference geometry when current evidence is absent or unresolved; a reference switch is deliberate.
 
 ## Cross-surface ownership
 
-The path column records planned artifacts as code text rather than links because most do not yet exist.
+Existing owned artifacts are linked. Planned artifacts remain code text until they exist and are reviewed.
 
 | Product decision or state | Authoritative owner | Applying surface or evidence owner | This contract's boundary |
 |---|---|---|---|
@@ -136,8 +141,8 @@ The path column records planned artifacts as code text rather than links because
 | Station and entrance ranking | `docs/product/nearby-offline/station-ranking-and-entrance-rules.md`, Task 3 | Nearby and Map | Cannot override accessibility, closure, or arrival truth. |
 | Nearby cards, directions, and next-three | `docs/product/nearby-offline/nearby-card-and-direction-contract.md`, Task 4 | Nearby | Applies upstream admission and ordering without backfill. |
 | Station detail, filters, and one-handed controls | [Station board and controls contract](station-board-and-controls-contract.md), Task 5 | Contextual station detail | Owns visible §14.6 and §§15.1–15.5 behavior, not cross-surface continuity or truth classification. |
-| Visual, route-recognition, reading, reach, and motion | `docs/product/nearby-offline/underground-visual-and-reachability-standard.md`, Task 6 | Every nearby/offline surface | Visual treatment cannot imply stronger evidence. |
-| Map layers, interactions, and journey ranking | `docs/product/nearby-offline/map-modes-and-journey-behavior.md`, Task 7 | Map | Must distinguish actual-now from reference patterns. |
+| Visual, route-recognition, reading, reach, and motion | [Underground visual and reachability standard](underground-visual-and-reachability-standard.md), Task 6 | Every nearby/offline surface | Visual treatment cannot imply stronger evidence. |
+| Map axes, service layers, interactions, reroutes, and journey ranking | [Map modes and journey behavior contract](map-modes-and-journey-behavior.md), Task 7 | Map | Owns behavior within Map while this experience contract retains the four-destination and cross-surface continuity boundary; must distinguish Actual now from explicit reference meaning without relabeling cached or reference content current. |
 | Stored content and validity | `docs/product/nearby-offline/offline-content-and-validity-contract.md`, Task 8 | Map, Saved, and offline planning | Structural reference never becomes current truth. |
 | Offline trip card and manual progress | `docs/product/nearby-offline/offline-trip-card-and-progress-contract.md`, Task 9 | Saved and active trip | Progress is rider state; current validity remains evidence-owned. |
 | Offline degradation and reconnection priority | `docs/product/nearby-offline/offline-degraded-and-reconnection-states.md`, Task 10 | Every preserved screen and active trip | Applies refreshed truth without context jumps. |
@@ -153,7 +158,7 @@ The path column records planned artifacts as code text rather than links because
 
 ## Source–product–delivery allocation
 
-This table is the complete source-to-task allocation for the approved specification scope named by the nearby/offline plan. “Product allocation” names the decision boundary; “Delivery allocation” names one authoritative artifact and numbered task. Planned paths are intentionally code text, not links.
+This table is the complete source-to-task allocation for the approved specification scope named by the nearby/offline plan. “Product allocation” names the decision boundary; “Delivery allocation” names one authoritative artifact and numbered task. Existing artifacts are linked; planned paths remain code text.
 
 | Specification source | Product allocation | Delivery allocation | Evidence or release allocation |
 |---|---|---|---|
@@ -165,8 +170,8 @@ This table is the complete source-to-task allocation for the approved specificat
 | §§14.4–14.5 | Initial cards, every passenger-serving direction, qualified next-three, and direction language | `docs/product/nearby-offline/nearby-card-and-direction-contract.md`, Task 4 | Task 14 scenarios 1–5 and Nearby coverage cases |
 | §14.6 | Non-disruptive refresh while preserving station, direction, filter, and reading context | [Station board and controls contract](station-board-and-controls-contract.md), Task 5, owns visible station-board refresh; Task 2 owns only the foreground lifecycle trigger and context-restoration invocation; this contract governs cross-surface continuity | Task 1 walkthrough and Task 14 refresh case |
 | §§15.1–15.5 | Station header, bottom-third controls, arrival rows, localized alerts, and honest empty/degraded states | [Station board and controls contract](station-board-and-controls-contract.md), Task 5 | Task 14 station-board and degraded-state cases |
-| §§16.1–16.6 | Decision-first hierarchy, dark-first appearance, redundant route recognition, accessible reading, reach, and motion | `docs/product/nearby-offline/underground-visual-and-reachability-standard.md`, Task 6 | Task 14 underground interaction cases |
-| §§17.1–17.5 | Appearance/service-pattern separation, explicit map layers, preserved interactions, geographic honesty, and journey ranking | `docs/product/nearby-offline/map-modes-and-journey-behavior.md`, Task 7 | Task 14 map, service-pattern, and scenario 25 cases |
+| §§16.1–16.6 | Decision-first hierarchy, dark-first appearance, redundant route recognition, accessible reading, reach, and motion | [Underground visual and reachability standard](underground-visual-and-reachability-standard.md), Task 6 | Task 14 underground interaction cases |
+| §§17.1–17.5 | Appearance/service-pattern separation, explicit map layers, preserved interactions, geographic honesty, and journey ranking | [Map modes and journey behavior contract](map-modes-and-journey-behavior.md), Task 7 | Task 14 map, service-pattern, and scenario 25 cases |
 | §18.1 | Always-available structural content and valid schedule reference | `docs/product/nearby-offline/offline-content-and-validity-contract.md`, Task 8 | Task 14 offline validity and currency cases |
 | §18.2 | Complete offline trip card and manual underground progress | `docs/product/nearby-offline/offline-trip-card-and-progress-contract.md`, Task 9 | Task 14 scenarios 24 and 51 |
 | §§18.3–18.4 | Explicit offline presentation, cached-value limits, prioritized reconnection, and invalidation warning | `docs/product/nearby-offline/offline-degraded-and-reconnection-states.md`, Task 10 | Task 14 scenario 23 and reconnection cases |
@@ -177,14 +182,14 @@ This table is the complete source-to-task allocation for the approved specificat
 | §29.2 | Warm-launch, nearby-result, immediate-control, offline-open, and useful-card targets | `docs/product/nearby-offline/measurement-plan.md`, Task 13 | Task 15 release readout |
 | §§30.1–30.3 | Trusted departure north star, supporting measures, and guardrails without rewarding false certainty | `docs/product/nearby-offline/measurement-plan.md`, Task 13 | Task 15 release readout and risk review |
 | §31.1 scenarios 1–5 | Apply upstream normal-service, identity, and no-static-backfill truth to Nearby | `docs/product/nearby-offline/nearby-card-and-direction-contract.md`, Task 4 | `docs/product/nearby-offline/acceptance-evidence.md`, Task 14, referencing upstream truth evidence |
-| §31.4 scenarios 21–25 | Useful entrance ranking, no-location fallback, stable tunnel state, complete offline trip, and pattern-transition explanation | Tasks 2, 3, 7, 9, and 10 in their named artifacts | `docs/product/nearby-offline/acceptance-evidence.md`, Task 14 |
+| §31.4 scenarios 21–25 | Useful entrance ranking, no-location fallback, stable tunnel state, complete offline trip, and pattern-transition explanation | Tasks 2, 3, 9, and 10 in their named artifacts; scenario 25 pattern selection and boundary explanation in the [map modes and journey behavior contract](map-modes-and-journey-behavior.md), Task 7, with trip-card application remaining Task 9 | `docs/product/nearby-offline/acceptance-evidence.md`, Task 14 |
 | §31.7 scenarios 40–42 | Preserve upstream service-day, daylight-saving, and authoritative-clock outcomes across Nearby and offline surfaces | Upstream arrival-truth time policy; applying nearby owners in Tasks 4, 8, 9, and 10 | `docs/product/nearby-offline/acceptance-evidence.md`, Task 14, referencing upstream truth evidence |
 | §31.8 scenario 51 | Offline trip completeness without unavailable exit or platform-zone guidance | `docs/product/nearby-offline/offline-trip-card-and-progress-contract.md`, Task 9 | `docs/product/nearby-offline/acceptance-evidence.md`, Task 14 |
 | §32.2 | Release 1 capability allocation and dependency boundaries | This contract, Task 1, allocates; Tasks 2–14 specify and evidence | `docs/product/nearby-offline/release-1-readiness.md`, Task 15 |
 | §33.1 | MTA-data risk: positive evidence, negative veto, fail-closed ambiguity, freshness, and correction | Upstream truth owners; `docs/product/nearby-offline/risk-register.md`, Task 15, records the experience dependency | Task 15 no-go effect |
-| §33.2 | Incomplete geometry: verified, versioned, station-scoped guidance or omission | `docs/product/nearby-offline/map-modes-and-journey-behavior.md`, Task 7, consumes companion guidance; Task 15 risk register records exposure | Task 14 guidance-omission cases and Task 15 no-go effect |
+| §33.2 | Incomplete geometry: verified, versioned, station-scoped guidance or omission | [Map modes and journey behavior contract](map-modes-and-journey-behavior.md), Task 7, consumes companion guidance; Task 15 risk register records exposure | Task 14 guidance-omission cases and Task 15 no-go effect |
 | §33.3 | Accessibility completeness: complete path, Unknown, no substitute, resilient alternative | Tasks 3, 8, 9, and 10 consume companion accessibility truth; Task 15 risk register records exposure | Task 14 accessibility/offline cases and Task 15 no-go effect |
-| §33.4 | Map and brand rights: permission before public use; text/shape independent of color | Tasks 6 and 7 constrain presentation; `docs/product/nearby-offline/risk-register.md`, Task 15, records rights | Unresolved rights block Task 15 |
+| §33.4 | Map and brand rights: permission before public use; text/shape independent of color | [Underground visual and reachability standard](underground-visual-and-reachability-standard.md), Task 6, and [map modes and journey behavior contract](map-modes-and-journey-behavior.md), Task 7, constrain presentation; `docs/product/nearby-offline/risk-register.md`, Task 15, records rights | Unresolved rights block Task 15 |
 | §33.5 | Notification-fatigue risk remains companion-owned; nearby/offline does not create alert eligibility | `docs/product/commute/notification-eligibility-contract.md` and `docs/product/commute/notification-suppression-matrix.md`; Task 15 records the dependency | Companion commute evidence; no nearby duplication |
 | §34 SPD-01 | The launch is subway-first | This contract, Task 1, owns the nearby/offline subway-first boundary | Task 15 binary readiness review |
 | §34 SPD-02 | Nearby station boards are the default home | This contract, Task 1; startup behavior in `docs/product/nearby-offline/zero-tap-startup-and-permission-flow.md`, Task 2 | Task 14 launch evidence |
@@ -193,8 +198,8 @@ This table is the complete source-to-task allocation for the approved specificat
 | §34 SPD-05 | Static schedules never masquerade as countdowns | Arrival Truth Task 10 owns schedule fallback, edition supersession, and currency | Nearby Tasks 4, 5, 8, and 10 preserve the supplied treatment; Task 14 references upstream evidence |
 | §34 SPD-06 | A held train freezes; it is not automatically deleted as a ghost | Arrival Truth Task 8 owns hold, confidence, ghost, and recovery presentation | Nearby Tasks 4, 5, 8, and 10 preserve the supplied state; Task 14 references upstream evidence |
 | §34 SPD-07 | Alerts are localized to rider consequence rather than reduced to a line-wide status | Arrival Truth Tasks 6 and 7 own narrow service-change impact and resolution | Nearby Tasks 4, 5, 7, and 10 preserve the supplied scope; Task 14 references upstream evidence |
-| §34 SPD-08 | Dark mode is default, and one-handed controls stay in the bottom third | [Station board and controls contract](station-board-and-controls-contract.md), Task 5, and `docs/product/nearby-offline/underground-visual-and-reachability-standard.md`, Task 6 | Task 14 underground interaction evidence |
-| §34 SPD-09 | Offline maps and saved trips remain navigable, with live status clearly unavailable | `docs/product/nearby-offline/map-modes-and-journey-behavior.md`, `offline-content-and-validity-contract.md`, `offline-trip-card-and-progress-contract.md`, and `offline-degraded-and-reconnection-states.md`, Tasks 7–10 | Task 14 map/offline evidence |
+| §34 SPD-08 | Dark mode is default, and one-handed controls stay in the bottom third | [Station board and controls contract](station-board-and-controls-contract.md), Task 5, and [underground visual and reachability standard](underground-visual-and-reachability-standard.md), Task 6 | Task 14 underground interaction evidence |
+| §34 SPD-09 | Offline maps and saved trips remain navigable, with live status clearly unavailable | [Map modes and journey behavior contract](map-modes-and-journey-behavior.md), `offline-content-and-validity-contract.md`, `offline-trip-card-and-progress-contract.md`, and `offline-degraded-and-reconnection-states.md`, Tasks 7–10 | Task 14 map/offline evidence |
 | §34 SPD-10 | Accessible Route Only validates the complete path and fails closed | Companion accessibility workstream | Nearby Tasks 3, 4, and 7–10 consume; Task 14 references companion evidence |
 | §34 SPD-11 | Platform guidance appears only at verified stations and is suppressed during operational ambiguity | Companion guidance workstream | Nearby Tasks 5, 7, and 9 consume; Task 14 references companion evidence |
 | §34 SPD-12 | Subway crowding is absent until authoritative car-level data exists | Excluded and deferred from the nearby/offline release contract; companion crowding work remains later-release scope | Task 15 records exclusion and prevents an unsupported claim |
@@ -214,7 +219,7 @@ This matrix names all Section 31 scenario groups so the nearby/offline plan neit
 | 22 | Nearby/offline Task 2, [zero-tap startup and location-permission flow](zero-tap-startup-and-permission-flow.md) | Own last-used, saved, and bottom-picker no-location fallback without a blank screen; does not own scenario 21 ranking or scenario 23 tunnel preservation. | Pending — Task 14 and Release 1 evidence |
 | 23 | Nearby/offline Task 10, `docs/product/nearby-offline/offline-degraded-and-reconnection-states.md` | Own stable tunnel entry and explicit offline state. | Pending — Task 14 |
 | 24 | Nearby/offline Task 9, `docs/product/nearby-offline/offline-trip-card-and-progress-contract.md` | Own retained trip content and manual progress. | Pending — Task 14 |
-| 25 | Nearby/offline Tasks 7 and 9 | Own pattern-transition explanation and trip continuity. | Pending — Task 14 |
+| 25 | [Map modes and journey behavior contract](map-modes-and-journey-behavior.md), Task 7, with offline-trip application in Task 9 | Task 7 owns source-supported pattern selection, one-itinerary continuity, and boundary explanation; Task 9 applies it to the offline trip card without redefining the decision. | Pending — Task 14 |
 | 26–32 | Companion accessibility workstream | Nearby Tasks 3, 4, 8, 9, and 10 consume exact direction/path/equipment outcomes and fail closed. | Pending — companion accessibility evidence |
 | 33–35 | Companion platform-guidance and accessibility workstreams | Nearby Tasks 5, 7, and 9 consume verified orientation and accessible priority; suppress guidance during ambiguity. | Pending — companion guidance/accessibility evidence |
 | 36–39 | Companion commute workstream | Commute destination consumes the companion decisions; nearby/offline does not duplicate notification logic. | Pending — companion commute evidence |
@@ -229,7 +234,7 @@ This matrix names all Section 31 scenario groups so the nearby/offline plan neit
 
 ### Starting context
 
-The rider is in **Nearby** with a contextual station detail open. They selected one station complex, one passenger-serving direction paired with its actual destination, a route filter, and Accessible Route Only. A verified positioning destination is selected. The Map retains a chosen layer, position, and scale. An active offline-capable trip has rider-confirmed progress. The rider has scrolled to a specific direction section and arrival row.
+The rider is in **Nearby** with a contextual station detail open. They selected one station complex, one passenger-serving direction paired with its actual destination, a route filter, and Accessible Route Only. A verified positioning destination is selected. The Map retains Dark/Light appearance, an explicit service layer, Schematic/Geographic view, overlays, highlighted route, selected station and direction, zoom, position, and contextual-board return state as independent values. An active offline-capable trip has rider-confirmed progress. The rider has scrolled to a specific direction section and arrival row.
 
 The app moves to the background. While it is away:
 
@@ -241,14 +246,14 @@ The app moves to the background. While it is away:
 ### Required return sequence
 
 1. Restore **Nearby** and the same contextual station detail before applying refreshed content.
-2. Restore the same station, direction, route filter, Accessible Route Only setting, positioning destination intent, map layer/position/scale, active-trip progress, and reading position.
+2. Restore the same station, direction, route filter, Accessible Route Only setting, positioning destination intent, complete independent map tuple, active-trip progress, and reading position.
 3. Keep the last coherent content only under its governed freshness treatment while current decisions arrive. Do not label preserved context Live.
 4. Apply the bypass veto to the exact affected train and stop. Remove that row rather than relabeling it Expected, Holding, Uncertain, Scheduled, cached, or degraded. Do not restore it from a schedule. Keep any remaining qualified arrivals in upstream order and show fewer than three honestly.
 5. Preserve the route filter while leaving the scoped service-change consequence visible. Keep unrelated routes, directions, stations, and trip steps unchanged.
 6. Keep Accessible Route Only enabled. Invalidate the former path, show the governed no-verified-path or verified-alternative result, and prioritize the active-trip warning. Do not jump to another station or silently substitute a staircase or unknown equipment path.
 7. Remove the unsupported positioning recommendation while preserving the rider's destination intent and station context. Offer the governed no-guidance or check-signs treatment only if its evidence owner permits it.
-8. Refresh remaining arrivals, service details, map overlays, and saved information without changing the rider's reading position or resetting manual trip progress.
-9. If connectivity is unavailable, preserve the same screen and context with the explicit offline treatment; cached values remain reference context and cannot clear the bypass, restore the path, restore guidance, or claim current service.
+8. Refresh remaining arrivals, service details, and supported map content inside the restored layer and viewport without changing appearance, spatial view, overlay choices, rider selection, reading position, or manual trip progress.
+9. If connectivity is unavailable while Actual now was selected, preserve that selection intent and the same screen, viewport, station, direction, route, and overlay choices, but withhold unsupported current operational geometry and claims. Cached or reference values cannot fill the Actual-now gap, clear the bypass, restore the path, restore guidance, or claim current service; a reference-layer change requires deliberate rider action and remains subject to Tasks 8 and 10.
 
 ### Required observed evidence
 
@@ -260,7 +265,7 @@ Task 14 must record, against a fixed reviewed version:
 - the preserved filter plus visible disruption consequence;
 - Accessible Route Only remaining enabled and the invalid path not being recommended;
 - positioning guidance removed without changing the destination or station;
-- unchanged map view, active-trip progress, and reading position;
+- unchanged map appearance, service-layer intent, spatial view, overlays, selection, viewport, contextual-board return state, active-trip progress, and reading position;
 - the exact rider-facing explanations and assistive equivalents; and
 - every prohibited-result check.
 
@@ -275,6 +280,7 @@ Until that observed record exists, this walkthrough remains an expected **Pendin
 | Is context restored before refresh, without silent station or direction changes? | Required by the deterministic sequence and walkthrough. | Return-from-background observed result |
 | Does any capability in the approved no-account list require an account? | No. | Task 14 no-account cases |
 | Can a surface re-admit, reorder, promote, backfill, or upgrade consumed truth? | No. | Task 14 truth-boundary cases and upstream evidence |
+| Does Map have one named authority for independent axes, Actual-now/reference meaning, reroutes, interaction continuity, and journey ranking while this contract retains exactly four destinations and cross-surface restoration? | Yes; see the linked Task 7 contract and ownership boundary. | Task 7 fixed state matrix, walkthroughs, and Task 14 observations |
 | Can offline context imply current arrivals, alerts, accessibility, equipment, or guidance? | No. | Task 14 offline and reconnection cases |
 | Can an accessibility preference be disabled or weakened automatically? | No. | Companion accessibility and Task 14 integration evidence |
 | Can unverified guidance or protected rights-blocked assets appear? | No. | Companion guidance evidence and Task 15 rights record |
