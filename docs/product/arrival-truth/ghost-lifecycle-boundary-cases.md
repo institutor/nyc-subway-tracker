@@ -37,9 +37,9 @@ Each run must record the actual inputs, authoritative timestamps, admission gate
 
 | State case | Required evidence | Primary next-three? | Required precision and rider result | Prohibited result |
 |---|---|---:|---|---|
-| Live | Healthy feed; assigned coherent train; movement or stop progress within 90 seconds; all admission gates pass. | Yes | Rounded countdown, such as **3 min · Live**. | Exact precision unsupported by evidence, Scheduled clock time, or a row admitted despite a stop or track veto. |
+| Live | Healthy feed; assigned coherent train; movement or stop progress within 90 seconds; all admission gates and the Due/no-progress rule pass. A Due episode beyond 60 seconds cannot remain Live. | Yes | Rounded countdown, such as **3 min · Live**. | Exact precision unsupported by evidence, Scheduled clock time, Live after more than 60 seconds Due without progress, or a row admitted despite a stop or track veto. |
 | Expected | Assigned physical train at origin; no movement yet; departure not materially overdue; stable across two updates; all other gates pass. | Yes | Evidence-supported range, such as **Expected in 6–8 min**. | Live or Due without movement, an exact live countdown, or exclusion merely because the train is Expected. |
-| Holding | Current feed but movement or stop progress is older than 90 seconds, or Due has lasted more than 60 seconds without progress. | No | Frozen time plus held evidence, such as **Holding near 14 St · last moved 2 min ago**, in a separate warning or secondary area. | Advancing countdown, a next-three slot, Due beyond its limit, or silent deletion. |
+| Holding | Current feed but movement or stop progress is older than 90 seconds through exactly 180 seconds, or Due has lasted more than 60 seconds without progress while movement age remains no more than 180 seconds. Due elapsed time is a degradation floor, so movement age beyond 180 seconds still escalates a stop-confirmed train to Uncertain. | No | Frozen time plus held evidence, such as **Holding near 14 St · last moved 2 min ago**, in a separate warning or secondary area. | Advancing countdown, a next-three slot, Due beyond its limit, Holding when movement age is beyond 180 seconds, or silent deletion. |
 | Confirmed-pattern Uncertain | No movement beyond 180 seconds, identity churn, implausible ETA jump, or degraded feed, while exact displayed stop service and track remain confirmed. | No | No exact minute; de-ranked secondary copy **Arrival uncertain**. | Primary placement, advancing/frozen exact minute on the Uncertain row, or Uncertain used to conceal stop-pattern or track uncertainty. |
 | Scheduled | Relevant live feed is genuinely unavailable; eligible schedule exists; no current veto applies. | No | Clearly separated fallback clock time, such as **Scheduled 10:42 · live data unavailable**. | Countdown, Live or Expected label, mixing with live next-three, or fallback that overrides a current veto. |
 
@@ -139,7 +139,7 @@ Repeat D1 at the first representable instant strictly greater than 60 seconds wi
 
 **Expected result**
 
-Freeze immediately as **Holding**, remove the train from the primary next-three, and retain it as a separate warning or secondary held-train status. Show no advancing or exact Due claim.
+The Due/no-progress floor prevents Due or Live. Because this continuation of D1 still has movement age no more than 180 seconds, freeze immediately as **Holding**, remove the train from the primary next-three, and retain it as a separate warning or secondary held-train status. Show no advancing or exact Due claim.
 
 **Prohibited result**
 
@@ -149,7 +149,7 @@ Do not continue Due, decrement the prior time, keep a next-three slot, relabel t
 
 **Setup**
 
-Continue the same valid train and uninterrupted Due/no-progress episode to exactly 120 seconds. Keep the feed Current, the identity coherent, and exact stop service confirmed.
+Continue a valid train and uninterrupted Due/no-progress episode to exactly 120 seconds. Keep movement age no more than 180 seconds, the feed Current, the identity coherent, and exact stop service and track/path confirmed.
 
 **Expected result**
 
@@ -157,7 +157,7 @@ The train remains secondary **Holding** context with no exact advancing minute. 
 
 **Prohibited result**
 
-Do not restore Due or Live, return the train to primary, refresh the frozen value from a prediction-only change, or silently delete the valid train.
+Do not restore Due or Live, return the train to primary, refresh the frozen value from a prediction-only change, or silently delete the valid train. This Holding result must not be generalized to movement age beyond 180 seconds.
 
 ### Case D4 — Just over 120 seconds without progress
 
@@ -167,11 +167,11 @@ Repeat D3 at the first representable instant strictly greater than 120 seconds.
 
 **Expected result**
 
-Remove any remaining exact arrival-event treatment from the primary next-three. Retain train-level held context in the secondary area while the entity, identity, and exact stopping pattern remain valid. Apply the movement-age state independently: Holding through exactly 180 seconds and Uncertain without an exact minute beyond 180 seconds.
+Remove any remaining exact arrival-event treatment from the primary next-three. Retain train-level context only while the entity, identity, exact stopping pattern, and track/path remain valid. Use the stricter supported movement state: Holding through exactly 180 seconds and Uncertain without an exact minute beyond 180 seconds.
 
 **Prohibited result**
 
-Do not preserve or reintroduce the exact event in primary, delete the train solely because 120 seconds elapsed, or confuse the Due/no-progress timer with feed age.
+Do not preserve or reintroduce the exact event in primary, keep Holding when movement age is beyond 180 seconds, delete the train solely because 120 seconds elapsed, or confuse the Due/no-progress timer with feed age. Suppress rather than show Uncertain if exact stop service or track/path becomes uncertain.
 
 ### Case D5 — Prediction changes without progress
 
@@ -181,11 +181,25 @@ During D1 through D4, update only the predicted arrival value. Provide no new au
 
 **Expected result**
 
-Keep the original Due/no-progress timer. Apply the same 60- and 120-second boundaries from the original Due start.
+Keep the original Due/no-progress timer. Apply the same 60- and 120-second boundaries from the original Due start, recompute movement age independently, and use the stricter supported state after the stop-pattern and track/path gates.
 
 **Prohibited result**
 
 Do not reset the timer, manufacture fresh movement, or extend Due because the predicted time changed.
+
+### Case D6 — Overlapping clocks: 91 seconds Due and 181 seconds movement age
+
+**Setup**
+
+Run the same Current-feed fixture twice with uninterrupted Due/no-progress elapsed time of exactly 91 seconds and train movement age of exactly 181 seconds. In run A, keep one coherent train context, the displayed exact directional stop in its coherent remaining pattern, and trustworthy track/path evidence. In run B, make either the exact displayed stop pattern or track/path materially uncertain.
+
+**Expected result**
+
+In run A, the Due floor already prohibits Due or Live, and movement age beyond 180 seconds is stricter than Holding. Show secondary **Uncertain** with **Arrival uncertain** and no exact minute. In run B, suppress the entire affected row and show only the narrowest supported service-change or track consequence.
+
+**Prohibited result**
+
+In neither run may the train remain Due, Live, Holding, or primary. Do not let Due elapsed time of no more than 120 seconds override movement age of more than 180 seconds. Do not use Uncertain to conceal an unresolved exact stop pattern or track/path.
 
 ## Acceptance Scenario 13 — Fresh feed, 100 seconds without movement
 
@@ -285,8 +299,9 @@ Do not use movement age as feed age, freeze unrelated trains, or use fresh feed 
 | Exactly 90 / just over 90 seconds | Live at exactly 90; frozen non-primary Holding immediately above 90 | Pending |
 | Exactly 180 / just over 180 seconds | Holding at exactly 180; confirmed-pattern Uncertain without an exact minute immediately above 180 | Pending |
 | Stop-pattern or track uncertainty | Entire affected row suppressed; no Arrival uncertain treatment survives | Pending |
-| Due exactly 60 / just over 60 seconds | Due allowed only through exactly 60 with fresh movement; Holding immediately above 60 | Pending |
-| No progress exactly 120 / just over 120 seconds | Secondary held context at 120; no exact primary event above 120; no silent deletion | Pending |
+| Due exactly 60 / just over 60 seconds | Due allowed through exactly 60 only with movement age no more than 90 seconds; immediately above 60, the tested movement age no more than 180 seconds produces Holding and an age beyond 180 would require Uncertain | Pending |
+| No progress exactly 120 / just over 120 seconds | At exactly 120, movement age no more than 180 seconds produces secondary Holding and an age beyond 180 produces secondary Uncertain; above 120 no exact primary event survives; no valid train is silently deleted | Pending |
+| Overlapping Due and movement clocks | At 91 seconds Due elapsed and 181 seconds movement age, confirmed stop/track evidence produces secondary Uncertain without an exact minute; invalid stop/track evidence suppresses the row | Pending |
 | Scenario 13 | Current feed and 100-second movement age produce Holding for that train only | Pending |
 | Scenario 14 | Several-minute valid held train remains secondary without an exact minute and is not silently deleted | Pending |
 | Long valid origin-terminal hold | Qualifying assigned origin train remains Expected without invented movement or deletion | Pending |
