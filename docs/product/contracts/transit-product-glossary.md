@@ -59,6 +59,23 @@ The following distinctions are mandatory in every workstream:
 - At complexes with multiple operational axes, represent every passenger-serving directional platform. Do not force all service into two Uptown/Downtown buckets.
 - A train must never be shown at a bypassed stop. It must also be suppressed when current data leaves materially unresolved the possibility that it will bypass the stop.
 
+## Arrival-truth ownership clarification
+
+The [core arrival contract](../arrival-truth/core-arrival-contract.md) owns the decision about whether current evidence admits a positive live-arrival claim. It applies, without redefining, the shared concepts in this glossary.
+
+Every shared-concept definition was reviewed against approved specification Sections 3–4. No shared definition required a wording change; the table records the arrival-specific application of the six concepts that those sections require the arrival contract to keep separate:
+
+| Shared concept | Arrival-specific application | Definition review result |
+|---|---|---|
+| **Station complex** | Identifies the rider-recognizable place, not the exact boarding location required for arrival admission. | Existing shared definition retained. |
+| **Directional stop** and **platform** | The exact directional stop must match the train's ordered remaining-stop sequence. A platform is the physical boarding area and is not interchangeable with that stop identity. | Existing shared definitions retained. |
+| **Train instance** | Supplies the coherent current train identity evaluated by the admission contract; it is not a published trip identifier. | Existing shared definition retained. |
+| **Stop call** | Supplies the current claim that the train will serve the exact directional stop. A normal static schedule cannot create a future live stop call. | Existing shared definition retained. |
+| **Service pattern** | Supplies the ordered stopping pattern used to resolve current stop service, destination, and direction. Route identity alone is insufficient. | Existing shared definition retained. |
+| **Alert impact** | Supplies the narrowest supported current rider consequence. A resolved or materially unresolved bypass can veto an arrival, while generic **Affected** does not by itself prove a bypass. | Existing shared definition retained. |
+
+This clarification adds no new term or behavior and does not change the glossary's **Approved** lifecycle. Raw directional codes remain subject to the normalization ownership rule above before comparison or rider-facing translation.
+
 ## Controlled usage
 
 Later artifacts may add domain-specific fields or evidence tests, but they must reuse these meanings rather than redefine them. Any material change returns this glossary to **Draft** and requires the review path in the [product artifact review and approval policy](../review-and-approval-policy.md).
