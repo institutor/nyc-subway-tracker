@@ -129,7 +129,7 @@ Do not choose a generic gap message when a narrower service-change explanation c
 
 Task 4's Nearby card remains the zero-tap initial view: every passenger-serving direction and operational axis stays visible without a switch or expansion. Task 5's direction switch belongs only to the expanded [station board and controls contract](station-board-and-controls-contract.md); it does not retroactively hide a direction on the Nearby card.
 
-Opening a direction heading or arrival row passes:
+A single tap on a direction heading or admitted arrival row opens the station board with that exact station complex and rider-facing direction and passes:
 
 - the same station complex and exact rider-facing direction;
 - the current constituent, useful entrance, practical-walk precision, accessible-path scope, and localized disruption;
@@ -137,7 +137,7 @@ Opening a direction heading or arrival row passes:
 - the exact upstream primary order and every separate Holding, Uncertain, Scheduled, suppression, unavailable, or limitation disposition; and
 - the current route filters, evidence-state labels, and reading context.
 
-A card-level open action uses the direction already selected in shared context. If no direction is selected, the card's visible direction choices establish it; the station board does not guess a direction or a multi-axis opposite.
+A generic card-level open action is permitted only when shared context already contains one exact selected direction. Without that selection, the generic action does not open the board; a single tap on a visible direction heading or admitted row establishes the direction and opens it. The station board never guesses a direction or a multi-axis opposite.
 
 Expansion may expose governed row detail and one-handed controls. It must not rerank stations or arrivals, collapse axes, re-admit a train, promote or relabel a disposition, use row count to backfill, clear a scoped disruption, hide an affected filtered route's warning, or replace the Task 4 initial all-directions contract. Returning from the station board restores the originating card, selected direction, filters, state labels, disruptions, and reading position before refresh.
 

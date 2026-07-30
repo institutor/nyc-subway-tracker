@@ -2,7 +2,7 @@
 
 | Governance field | Value |
 |---|---|
-| Source sections | Approved specification §15; nearby-station and offline-experience plan `Product artifact map` and Task 5 `Product artifacts`, `Ordered steps`, and `Acceptance evidence`; Task 5 brief |
+| Source sections | Approved specification §§14.6, 15, and 16; nearby-station and offline-experience plan `Product artifact map` and Task 5 `Product artifacts`, `Ordered steps`, and `Acceptance evidence`; Task 5 brief |
 | Owner | Experience Product Lead |
 | Required reviewers | Product, Accessibility, Data Quality, Content |
 | Status | Draft |
@@ -15,7 +15,9 @@
 
 This contract owns the contextual station board, compact header, bottom-third control behavior, decision-first row presentation, row disclosure, localized alert placement, rider-readable freshness, and cause-gated empty and degraded states. It does not own arrival admission or ordering, feed health, confidence classification, service-change resolution, track-conflict disposition, accessible-path truth, platform certainty, positioning guidance, saved-preference policy, visual conformance, or release approval.
 
-The approved specification's §14.6 controls station-board refresh behavior and §16 supplies supporting hierarchy, route-recognition, reach, accessibility, and motion constraints. The planned `docs/product/nearby-offline/underground-visual-and-reachability-standard.md`, Task 6, owns measured 48-by-48-point targets, one-handed reach, contrast, large-text, assistive-reading, and motion evidence. This Task 5 contract reserves the required control locations and information order but cannot claim that Task 6 proof.
+The approved specification's §14.6 controls station-board refresh behavior and §16 supplies normative hierarchy, route-recognition, reach, accessibility, and motion constraints. The planned `docs/product/nearby-offline/underground-visual-and-reachability-standard.md`, Task 6, owns measured 48-by-48-point targets, one-handed reach, contrast, large-text, assistive-reading, and motion evidence. This Task 5 contract reserves the required control locations and information order but cannot claim that Task 6 proof.
+
+The [Approved artifact index](../artifact-index.md) currently registers §15 only for this artifact. Controlled governance reconciliation of the index with this contract's normative §§14.6 and 16 consumption is **Pending** before any lifecycle advancement. This Task 5 fix does not edit the index, reinterpret its approval, or advance this artifact beyond **Draft**.
 
 The [Nearby card and direction contract](nearby-card-and-direction-contract.md) supplies the selected station complex, direction context, exact upstream arrival order, evidence states, and localized disruptions. The [nearby and offline experience contract](experience-contract.md) owns persistent destinations and cross-surface continuity. The [zero-tap startup and location-permission flow](zero-tap-startup-and-permission-flow.md) owns the foreground lifecycle trigger, location retry, and station-choice fallback.
 
@@ -27,8 +29,8 @@ This artifact is **Draft**. The authoritative [Gate 0 exit record](../quality/ga
 
 The station board expands one Nearby card into a complete operational view without making a second truth or ranking decision.
 
-- Opening a direction heading or arrival row carries the exact station complex and exact rider-facing direction from that section.
-- A card-level open action carries the direction already selected in shared context. If no direction is selected, the board uses the card's visible one-tap direction choices rather than guessing a default.
+- A single tap on a direction heading or admitted arrival row opens the board with the exact station complex and exact rider-facing direction from that section. No second selection tap is required.
+- A generic card-level open action is permitted only when shared context already contains one exact selected direction. Without that selection, the generic action does not open the board; the rider uses a visible direction heading or admitted row instead. Task 5 never guesses a default.
 - Expansion preserves the card's upstream order, route filters, evidence-state labels, localized disruptions, accessibility scope, useful entrance relationship, and saved-state indicator.
 - Expansion may reveal more governed detail. It may not admit a missing row, upgrade a state, clear a veto, reorder arrivals, hide an affected filtered route's disruption, or change station or direction.
 - Closing the board returns to the same originating destination and card context, including reading position.
@@ -166,6 +168,9 @@ A first fresh coherent recovery snapshot does not restore exact countdowns. The 
 | Direct action | The rider taps visible bottom-third **Refresh**. The request does not reset station, direction, filters, reading position, or the displayed age to zero. |
 | Stale transition | The affected route/feed group becomes Degraded. Its last coherent value freezes, animation stops, and **Live data updating** appears. |
 | Unavailable transition | The board follows the owner-selected cause branch. An anomaly-recovery state may retain visibly frozen last-coherent values with **Live data updating**. If sustained-outage rules replace that context and fallback is independently eligible, exact live countdowns disappear and only the separated Scheduled clock-time board appears. Unaffected Current route/feed groups continue independently. |
+| First recovery snapshot | The first fresh coherent snapshot for the affected route/feed group restores nothing. Frozen presentation and **Live data updating** remain, and no row, exact countdown, or primary eligibility returns. |
+| Second recovery snapshot | Only a second consecutive fresh coherent snapshot can restore route/feed-group eligibility. Every train is then reevaluated through every current admission gate; no prior row or countdown revives automatically. |
+| Interrupted recovery pair | Any intervening invalid, stale, anomalous, incoherent, or otherwise nonconsecutive snapshot resets the pair. The next fresh coherent snapshot becomes a new first snapshot and restores nothing. |
 | Prohibited result | Foreground or tap-created freshness, an advancing stale or Holding time, unconditional deletion of owner-preserved context, premature fallback, frozen Live mixed with Scheduled, network-wide degradation from one failed group, a context jump, or early recovery after one snapshot. |
 | Required reviewers | Product, Accessibility, Data Quality, Content |
 | Review date | Not recorded |
@@ -173,11 +178,11 @@ A first fresh coherent recovery snapshot does not restore exact countdowns. The 
 
 ## Cause-gated empty and degraded states
 
-Each state contains exactly one in-state call to action. Persistent navigation and separately governed global controls remain available, but they do not become extra CTAs inside the state.
+Each rendered state contains exactly one in-state call to action. A cause gate may choose between mutually exclusive actions, but both never render together. Persistent navigation and separately governed global controls remain available, but they do not become extra CTAs inside the state.
 
 | Exact state message | Required cause gate | Exact single in-state action | Result of action | Prohibited use |
 |---|---|---|---|---|
-| **No verified live arrivals in this direction.** | The exact direction has no admitted Live or Expected primary arrivals under Current accepted evidence; no stronger service-change, line-absence, scheduled-fallback, or location state controls. | **View other direction** | Select the other supplied passenger-serving direction without changing station or filters. | Missing feed, unresolved stopping pattern, resolved line absence, or row-count backfill. |
+| **No verified live arrivals in this direction.** | The exact direction has no admitted Live or Expected primary arrivals under Current accepted evidence; no stronger service-change, line-absence, scheduled-fallback, or location state controls. | Render **View other direction** only when another passenger-serving direction exists; otherwise render **Open map**. Never render both. | **View other direction** selects the other supplied direction without changing station or filters. **Open map** preserves the station and current scope. | Missing feed, unresolved stopping pattern, resolved line absence, row-count backfill, no useful action, or both CTAs rendered together. |
 | **Service change—arrivals are hidden until the stopping pattern is confirmed.** | Current high-impact service-change evidence materially leaves the exact route, direction, station, segment, or stopping pattern unresolved. | **View service change** | Open the official detail and localized consequence without creating an arrival. | Generic **Affected**, absent alert metadata, a resolved bypass presented as unresolved, or unrelated routes. |
 | **Live data unavailable. Showing scheduled times.** | The affected route/feed group is Unavailable, the owning sustained-outage or fallback decision has replaced frozen recovery context, and a separately governed eligible schedule covers the service date with no current veto. | **Refresh live data** | Request live evidence for the preserved scope while leaving Scheduled clock times separated and labeled. | Healthy or merely Degraded live data, owner-selected frozen recovery, ineligible schedule, static countdown, or mixing Scheduled with frozen live rows. |
 | **This line is not serving this station right now.** | Current resolved evidence establishes that the exact line and active scope do not serve this station while unrelated service is preserved. | **Open map** | Open Map with the same station and resolved service-change context. | Prediction absence, generic **Affected**, an unresolved high-impact mapping, or a complex-wide claim from one constituent. |
