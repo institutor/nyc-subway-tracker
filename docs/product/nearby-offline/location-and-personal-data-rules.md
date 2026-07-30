@@ -2,14 +2,14 @@
 
 | Governance field | Value |
 |---|---|
-| Source sections | Approved specification §§28.1–28.3; nearby-station and offline-experience plan `Product artifact map` and Task 12 `Product artifacts`, `Ordered steps`, and `Acceptance evidence`; Task 12 brief |
+| Source sections | Approved specification §§28.1–28.3; nearby-station and offline-experience plan `Product artifact map` and Task 12 `Product artifacts`, `Ordered steps`, and `Acceptance evidence`; Task 12 brief; Task 13 applying update for specification §§29.2 and 30.1–30.3 measurement privacy |
 | Owner | Privacy Lead |
 | Required reviewers | Product, Accessibility, Data Quality, Content, Privacy, Operations |
 | Status | Draft |
 | Last validation date | 2026-07-30 |
 | Supersedes | None |
 | Approval evidence | Pending |
-| Scenario results | Not run — Pending; PRIV-L01, PRIV-M01, PRIV-S01, PRIV-Q01, PRIV-N01, scenario 22 privacy application, and Nearby Task 14 saved-state and privacy evidence are absent |
+| Scenario results | Not run — Pending; PRIV-L01, PRIV-M01, PRIV-S01, PRIV-Q01, PRIV-N01, MEAS-A04, scenario 22 privacy application, Task 13 aggregate lineage, and Nearby Task 14 saved-state and privacy evidence are absent |
 
 ## Purpose and authority
 
@@ -149,7 +149,13 @@ The record must not contain or join to a rider name, account, device or advertis
 
 No shared stable join key, lookup table, reversible pseudonym, common timestamp-and-device tuple, or downstream export may reconnect operational-quality analysis to personal context. Access and retention are purpose-limited. If the allowed record cannot be produced without personal context or a join path, do not collect it.
 
-Task 13 may receive only coarse non-personal aggregates derived under a reviewed aggregation step. It may not receive row-level rider events or link permission, station, saved, trip, commute, accessibility, and quality behavior into a person or journey. A measure that cannot be produced under this boundary is omitted.
+The [nearby and offline measurement plan](measurement-plan.md), Task 13, may receive only coarse non-personal aggregates derived under a reviewed aggregation step. It may not receive row-level rider events or link permission, station, saved, trip, commute, accessibility, and quality behavior into a person or journey. A measure that cannot be produced under this boundary is omitted.
+
+The Task 13 intake is limited to a measure identifier, fixed product and artifact versions, a reviewed broad observation window, one permitted coarse segment or separately approved limited intersection, aggregate numerator and denominator, honest Not observed/Not measured/Inconclusive counts, owner-supplied outcome category, aggregation purpose and owner, access roles, review disposition, retention end, and a non-personal evidence reference. It contains no exact station, selected route, query, saved item, commute, trip leg, manual cursor, map pose, raw or derived coordinate, precise joinable timestamp, rider feedback text, or value capable of reconstructing a journey.
+
+Permission and Accessible Route Only comparisons are aggregate labels only; they do not authorize row-level collection of those states. The default readout compares one dimension at a time. Any limited intersection requires Privacy approval, a reviewed aggregation floor, and a documented rider-safety need. An all-dimension join is prohibited. Small or unsafe cells are suppressed and reported Inconclusive rather than exported. This Draft invents no numerical aggregation floor.
+
+An approved aggregate may remain only for the reviewed release decision, audit, and correction period recorded with that aggregate. Transient inputs end at the approved aggregation or deletion point. The aggregate is re-reviewed if its purpose, dimensions, lineage, access, retention, or ability to be joined changes. Release reporting never converts an aggregate into a rider profile or a new operational truth source.
 
 ## PRIV-L01 — Location-choice parity
 
@@ -227,7 +233,7 @@ Task 13 may receive only coarse non-personal aggregates derived under a reviewed
 | Stored content and reference maps | [Offline content and validity contract](offline-content-and-validity-contract.md), Task 8 | Official/structural content survives personal deletion; record unresolved Privacy reviewer question for saved inventory. | Draft; Privacy question and evidence Pending |
 | Saved commute and notifications | Companion Commute workstream | Own no-prompt surfaces and explicit enablement handoff only; all prompt, control, delivery, and data decisions remain companion-owned. | Companion artifacts and evidence absent |
 | Operational-quality diagnostics | Arrival Truth, accessibility/equipment, and product-quality owners under the review policy | Enforce minimum non-personal schema, purpose/access/retention, and no join path. | PRIV-Q01 Not run — Pending |
-| Coarse measurement | `docs/product/nearby-offline/measurement-plan.md`, Task 13 | Permit only coarse non-personal aggregates and omission when separation fails. | Planned artifact and evidence absent |
+| Coarse measurement | [Nearby and offline measurement plan](measurement-plan.md), Task 13 | Permit only the reviewed aggregate schema, one coarse segment by default, privacy-approved limited intersections, honest small-cell suppression, purpose-limited retention, and omission when separation fails. | Draft; MEAS-A04 and aggregate-lineage evidence Not run — Pending |
 | Observed privacy acceptance | `docs/product/nearby-offline/acceptance-evidence.md`, Task 14 | Record all five PRIV fixtures, prohibited results, fixed version, visible and assistive output, and storage/permission traces. | Planned artifact and observations absent |
 
 ## Scenario traceability
@@ -237,6 +243,7 @@ Task 13 may receive only coarse non-personal aggregates derived under a reviewed
 | §28.1 | Location serves ranking only; approximate and denied outcomes retain utility; no continuous background location or default movement history exists. | **Not run — Pending** |
 | §28.2 | Nearby/offline never prompts; only explicit first commute-alert enablement hands off to Commute-owned disruption-only and per-commute controls. | **Not run — Pending** |
 | §28.3 | Saved stations and commutes are private by default; data is minimized; diagnostics are identity-separated; reset and deletion are explicit and truthful. | **Not run — Pending** |
+| Task 13 measurement boundary | Only reviewed coarse non-personal aggregates enter the measurement readout; no row-level rider event, journey reconstruction, all-dimension join, or unsafe small cell is accepted. | **Not run — Pending** |
 | PRIV-L01 | Precise, approximate, and denied journeys retain choice parity, truth safeguards, accessibility constraint, and no retained coordinate trail. | **Not run — Pending** |
 | PRIV-M01 | Every allowed state is explicit, singular or bounded, replaceable, and free of passive or inferred history. | **Not run — Pending** |
 | PRIV-S01 | Per-item and broad controls remain distinct; deletion removes every covered personal copy but never official or offline structural content. | **Not run — Pending** |
@@ -262,6 +269,6 @@ Every observation must identify one fixed product version and retain its input s
 | Can Nearby, Map, Saved, or offline trip use trigger or bundle notification permission? | No. | PRIV-N01 prompt trace |
 | Are all prompt copy, permission states, per-commute controls, delivery data, and notification lifecycle left with Commute? | Yes. | Companion contract and PRIV-N01 review |
 | Can diagnostics contain rider identity, personal context, a join key, or exist when separation cannot be maintained? | No. | PRIV-Q01 schema, access, rejection, and deletion evidence |
-| Can Task 13 receive row-level rider events or reconstruct a journey? | No; only reviewed coarse non-personal aggregates are permitted. | Task 13 contract and aggregate lineage |
+| Can Task 13 receive row-level rider events, an all-dimension join, an unsafe small cell, or reconstruct a journey? | No; only the reviewed coarse non-personal aggregate schema is permitted, with one segment by default and omission when separation fails. | MEAS-A04, aggregate lineage, access, retention, small-cell suppression, and rejection evidence |
 | Have the §28.2 index omission, Task 2 applying provenance, Task 11 Data Quality/§28.3 mismatch, Task 9 Privacy mismatch, and Task 8 Privacy question been reconciled? | No. | Product Governance Lead record and all applicable reviewer decisions |
 | Does this Draft claim Gate 0 passage, any PRIV fixture, scenario 22, Task 14 evidence, Commute approval, deletion completion, optional sync enablement, or release readiness? | No. The decision remains **NO-GO — GATE 0 NOT PASSED**; public boards blocked. | Fixed evidence, all six reviews, governance reconciliation, companion decisions, and later release gate |
