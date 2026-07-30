@@ -21,7 +21,7 @@ This artifact is **Draft**. The authoritative [Gate 0 exit record](../quality/ga
 
 > **NO-GO — GATE 0 NOT PASSED**
 
-Public arrival boards remain blocked. Every case and initial attempt below is **Not run — Pending**. Expected prose, a screenshot without complete state provenance, a conversation, a meeting, a document commit, an empty incident log, or an unversioned dashboard is not working-product evidence and cannot change that disposition.
+Public arrival boards remain blocked. The Task 1–13 artifacts mapped below are currently **Draft** with approval evidence **Pending**; this preparatory traceability does not satisfy the plan dependency that Tasks 1–13 be accepted. Every case and initial attempt below is **Not run — Pending**. Expected prose, a screenshot without complete state provenance, a conversation, a meeting, a document commit, an empty incident log, or an unversioned dashboard is not working-product evidence and cannot change that disposition.
 
 ## Evidence vocabulary and stop rules
 
@@ -233,13 +233,13 @@ Applying artifacts: [station board contract](station-board-and-controls-contract
 | Case ID and source | Precondition, starting tuple, and action | Expected visible and assistive result | Prohibited result |
 |---|---|---|---|
 | BOARD-H01 — specification §§15.1–15.5 | Open a supplied card direction, inspect compact header, rows, localized alerts, row disclosure, and close | Header retains station/routes/walk/entrance/saved/accessibility/disruption while arrivals stay primary; rows retain time/state, route/destination, direction/exception, warning, verified guidance; disclosure preserves station/direction/order; return restores origin context | Admission/reorder on expansion, lost destination/state, widened alert, raw IDs, suppressed-row placeholder, unsupported guidance, or context loss |
-| BOARD-OH01 — Task 5 fixture OH-01 | Board on one direction with filters, warnings, saved/accessibility state, and reading anchor; tap another visible direction once | One tap updates only direction-specific rows/entrance/path/platform/guidance and selected semantics; shared state and both reading anchors persist | Second tap, swipe-only discovery, guessed/copied rows, state upgrade, hidden warning, or station jump |
-| BOARD-OH02 — Task 5 fixture OH-02 | Ordinary axis with one verified opposite and guidance orientation; tap **Reverse direction** | Board and verified orientation change atomically; prior incompatible guidance disappears; shared context persists | Board-only reversal, lagging/mirrored guidance, multi-axis opposite guess, hidden axis, or reclassification |
-| BOARD-OH03 — Task 5 fixture OH-03 | Multiple routes; one affected route; deselect it through **Filter routes** | Rows hide for that route but redundant route-identified warning and official detail stay at exact scope; remaining order persists | Hidden disruption, cleared veto, Good service, line-wide widening, reorder, or color-only meaning |
-| BOARD-OH04 — Task 5 fixture OH-04 | Board with authoritative age and complete tuple; tap bottom **Refresh** | Only newly owner-accepted content and age change; station, direction, filters, accessibility, saved/guidance intent, and reading position persist | Tap-created now, reset age, scroll jump, filter/station/direction reset, state upgrade, or static backfill |
-| BOARD-OH05 — Task 5 fixture OH-05 | Same board with visible **Refresh**; pull to refresh | Same request/truth rules as OH-04; direct control remains visible before, during, and after | Pull as sole path, hidden control, different truth rule, gesture-created freshness, or context reset |
-| BOARD-OH06 — Task 5 fixture OH-06 | Unsaved station board; tap **Save station** | Only saved state changes; header and bottom control agree; board/order/truth/accessibility/warnings/position persist; no account | Silent unsave, board rerank, admission/promotion, alert removal, accessibility/direction reset, or account prompt |
-| BOARD-OH07 — Task 5 fixture OH-07 | Board opened from Nearby; tap Map, interact, and return | Map carries station/direction; return restores exact board/filter/accessibility/saved/warning/evidence/reading context before refresh | Default station/direction, lost filter, top jump, stronger Map claim, hidden warning, stale orientation, or blank search |
+| BOARD-OH01 — Task 5 fixture OH-01; specification §§15.2 and 16.5 | Board on one direction with filters, warnings, saved/accessibility state, and reading anchor; tap another visible direction once | One tap updates only direction-specific rows/entrance/path/platform/guidance and selected semantics; shared state and both reading anchors persist | Second tap, swipe-only discovery, guessed/copied rows, state upgrade, hidden warning, or station jump |
+| BOARD-OH02 — Task 5 fixture OH-02; specification §§15.2 and 16.6 | Ordinary axis with one verified opposite and guidance orientation; tap **Reverse direction** | Board and verified orientation change atomically; prior incompatible guidance disappears; shared context persists | Board-only reversal, lagging/mirrored guidance, multi-axis opposite guess, hidden axis, or reclassification |
+| BOARD-OH03 — Task 5 fixture OH-03; specification §§15.2 and 15.4 | Multiple routes; one affected route; deselect it through **Filter routes** | Rows hide for that route but redundant route-identified warning and official detail stay at exact scope; remaining order persists | Hidden disruption, cleared veto, Good service, line-wide widening, reorder, or color-only meaning |
+| BOARD-OH04 — Task 5 fixture OH-04; specification §§13.2, 14.6, and 15.2 | Board with authoritative age and complete tuple; tap bottom **Refresh** | Only newly owner-accepted content and age change; station, direction, filters, accessibility, saved/guidance intent, and reading position persist | Tap-created now, reset age, scroll jump, filter/station/direction reset, state upgrade, or static backfill |
+| BOARD-OH05 — Task 5 fixture OH-05; specification §§14.6, 15.2, and 16.5 | Same board with visible **Refresh**; pull to refresh | Same request/truth rules as OH-04; direct control remains visible before, during, and after | Pull as sole path, hidden control, different truth rule, gesture-created freshness, or context reset |
+| BOARD-OH06 — Task 5 fixture OH-06; specification §§15.1, 16.5, 26.1, and 26.3 | Unsaved station board; tap **Save station** | Only saved state changes; header and bottom control agree; board/order/truth/accessibility/warnings/position persist; no account | Silent unsave, board rerank, admission/promotion, alert removal, accessibility/direction reset, or account prompt |
+| BOARD-OH07 — Task 5 fixture OH-07; specification §§13.2, 15.2, and 17.3 | Board opened from Nearby; tap Map, interact, and return | Map carries station/direction; return restores exact board/filter/accessibility/saved/warning/evidence/reading context before refresh | Default station/direction, lost filter, top jump, stronger Map claim, hidden warning, stale orientation, or blank search |
 
 ### Operating-honesty family
 
@@ -482,9 +482,9 @@ Each row below is a separate append-only attempt record. Its complete record is 
 
 ## Task 1–13 artifact traceability
 
-Every accepted product artifact is a reviewed input to at least one case. The case definitions above retain the approved-source reference, so the mapping does not create a new source of truth.
+Every Task 1–13 product artifact named by the plan is mapped as a **Draft/Pending input** to at least one case. These mappings are preparatory: they do not claim that the artifacts are accepted, do not advance their lifecycle, and do not satisfy Task 14's acceptance dependency. The case definitions above retain a direct approved-specification or approved-plan requirement reference, so the mapping does not create a new source of truth.
 
-| Plan task | Accepted product artifact | Applying cases | Traceability boundary |
+| Plan task | Product artifact (Draft/Pending input) | Applying cases | Traceability boundary |
 |---|---|---|---|
 | 1 | [Experience contract](experience-contract.md) | CTX-DEST01, CTX-RETURN01, START-WARM01, NEAR-Z01, MAP-AX01 | Persistent information architecture, state tuple, destination/context ownership, and return restoration |
 | 2 | [Zero-tap startup and permission flow](zero-tap-startup-and-permission-flow.md) | START-WARM01, START-COLD01, START-FIRST01, PERM-P01, PERM-P02, PERM-S22A–PERM-S22C, PERM-TEMP01 | Startup shell, one purpose screen, one controlled prompt, denial precedence, and temporary-use lifecycle |
@@ -513,6 +513,6 @@ Task 15 may cite only exact attempt IDs and fixed evidence versions. It must kee
 - Every registered case has one approved-source definition, applying artifacts, owner, rider precondition, starting state, action, expected visible and assistive result, and prohibited result.
 - Every A01 attempt uses NR-01, has no observed product result, and remains **Not run — Pending**.
 - Headline scenarios 1–5, 21–25, 40–44, and 49–51 have local applying cases; upstream scenarios 6–20, 43–44, and 49–50 retain authoritative links; scenarios 26–39 and 45–48 retain companion links only.
-- Tasks 1–13 each map to at least one acceptance case, and no map changes an owner's accepted decision.
+- Tasks 1–13 each map to at least one acceptance case, and no map changes an owner's decision or implies acceptance.
 - No public-arrival, accessibility, offline-currentness, privacy, notification, protected-asset, or release conclusion is inferred from expected prose or missing evidence.
 - Approval evidence remains **Pending** and the release decision remains **NO-GO — GATE 0 NOT PASSED** until fixed working-product evidence and the authoritative gates support a change.
