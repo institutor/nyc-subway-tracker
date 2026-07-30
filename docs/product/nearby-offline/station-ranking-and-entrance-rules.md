@@ -15,7 +15,7 @@
 
 This contract owns practical-walk ranking of nearby station complexes, entrance eligibility, constituent-station grouping, application of supplied accessible-path truth, and transparent personalization. It does not own location permission, arrival admission, service-change resolution, complete-path validity, equipment state, journey planning, platform positioning, or release approval.
 
-The [zero-tap startup and location-permission flow](zero-tap-startup-and-permission-flow.md) supplies only the location precision the rider permitted. The [nearby and offline experience contract](experience-contract.md) owns preserved context and prohibits a ranking refresh from silently replacing the rider's selected station or direction. Arrival and service-change decisions remain owned by the governed artifacts under `docs/product/arrival-truth/`; accessibility and guidance remain companion-owned.
+The [zero-tap startup and location-permission flow](zero-tap-startup-and-permission-flow.md) supplies only the location precision the rider permitted. The [nearby and offline experience contract](experience-contract.md) owns preserved context and prohibits a ranking refresh from silently replacing the rider's selected station or direction. The [Nearby card and direction contract](nearby-card-and-direction-contract.md) consumes this contract's final ordered output without another ranking pass. Arrival and service-change decisions remain owned by the governed artifacts under `docs/product/arrival-truth/`; accessibility and guidance remain companion-owned.
 
 The [approved product specification](../../superpowers/specs/2026-07-30-nyc-subway-train-time-tracker-design.md) controls every conflict. Shared concepts retain their meanings in the [transit product glossary](../contracts/transit-product-glossary.md), and public wording remains subject to the [rider language rules](../contracts/rider-language-rules.md).
 
@@ -132,7 +132,7 @@ One grouped complex result retains:
 - scoped closures and service changes; and
 - a different useful entrance for each direction when required.
 
-A closer entrance serving another axis cannot be called best for the selected direction. Without an explicit selected journey or saved direction, the app does not invent a “likely direction”; it evaluates neutral complex usefulness and passes every direction to the Nearby-card owner.
+A closer entrance serving another axis cannot be called best for the selected direction. Without an explicit selected journey or saved direction, the app does not invent a “likely direction”; it evaluates neutral complex usefulness and passes every direction to the [Nearby card and direction contract](nearby-card-and-direction-contract.md).
 
 Re-ranking may update suggestion order. It may not navigate away from an explicitly selected station, change the rider's direction, clear filters, reset scroll position, or collapse axes into a generic Uptown/Downtown pair.
 
@@ -150,6 +150,20 @@ When a farther but usable station is promoted:
 - never alter arrival, service-change, closure, accessibility, or entrance truth.
 
 No inferred movement history, hidden habit model, account, or preference may override a hard exclusion. The saved-station owner later provides inspection, editing, pausing, deletion, and reset controls.
+
+## Task 4 handoff
+
+This contract passes the [Nearby card and direction contract](nearby-card-and-direction-contract.md):
+
+- the final ordered set of eligible station complexes;
+- each complex's baseline nearest-useful order and any permitted, visible personalization reason for its final position;
+- every verified constituent station, passenger-serving operational axis, and direction;
+- exact entrance-to-constituent and entrance-to-direction relationships, including a different useful entrance by direction when required; and
+- supplied walking time, accessibility, closure, service, and ranking explanations at their exact scope.
+
+Task 4 takes up to the first three eligible complexes in that final order. It must not rerank, duplicate, widen a relationship, relax an exclusion, or let the number or state of arrival rows influence complex order. When fewer than three eligible complexes remain, Task 4 shows fewer honestly.
+
+Scenario 21 remains **Not run — Pending** under this **Draft** contract. The current decision remains **NO-GO — GATE 0 NOT PASSED; public boards blocked**, and no accessibility approval is present.
 
 ## Deterministic ranking cases
 
