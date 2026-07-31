@@ -117,3 +117,97 @@ No real combined-state capture, edit trace, prompt count, permission observation
 - [ ] All linked CUX actuals and reviewer evidence remain Not run — Pending.
 
 Every unchecked item blocks approval. This documentation commit is not evidence.
+
+## Task 7 privacy, retention, and reset addendum
+
+This appended addendum applies the [commute data inventory](../privacy/commute-data-inventory.md) and [retention and reset policy](../privacy/commute-retention-and-reset-policy.md) without revising the accepted Task 4 matrix above. It adds no account, backup, synchronization, continuous location, movement history, passive visits, inferred Home or Work, personal analytics, or operational-truth authority.
+
+### Task 7 governance boundary
+
+| Governance field | Task 7 addendum value |
+|---|---|
+| Additional source sections | Approved specification §§13.3, 25.1–25.7, 26.3, 28.1–28.3, 30, and 34; commute alerts and launch quality plan Task 7; accepted immutable Commute Tasks 1–6 artifacts |
+| Owner | Commute Product Lead |
+| Required reviewers | Product, Accessibility, Data Quality, Content, Privacy, Operations |
+| Status | Draft |
+| Last validation date | 2026-07-30 |
+| Approval evidence | Pending |
+| Scenario results | [Not run — Pending](../test-cases/commute-privacy-scenarios.md#pending-execution-record) |
+
+The artifact index retains its accepted minimum reviewer set but does not yet carry the full Task 7 provenance or mandatory Data Quality review for these added rows. Product Governance reconciliation remains **Pending**. This addendum does not edit the index or treat the mismatch as approval.
+
+### Combined privacy and lifecycle states
+
+Lifecycle, alert intent, current operating-system capability, connectivity, location permission, queue state, delivery memory, and deletion result remain independent. Apply every cause that is simultaneously true; never replace one axis with a more convenient label.
+
+| Starting state | Event or combined condition | Saved preference and lifecycle | Delivery capability, queue, and memory | Visible and assistive result | Forbidden transition |
+|---|---|---|---|---|---|
+| Active; alerts enabled; permission Granted; connected | No privacy or delivery exception | Retain exact confirmed preference and Active lifecycle | Minimum current association; only a currently eligible queue item; minimal ledger | Active card and current service state | Collect account, location, visit history, or personal analytics |
+| Active; alerts enabled | Permission now requires rider action | Retain Active and explicit alert intent; store no permission history | Remove or suspend commute association; cancel queued delivery; retain only needed replay memory | **Needs notification access**; expose **Open notification settings** | Pause, expire, delete, or replay |
+| Active; alerts enabled | Notifications unavailable on this device | Retain Active and explicit alert intent | Remove or suspend association and cancel queue | **Notifications aren't available on this device.** | Claim delivery is available or repeatedly prompt |
+| Active; unmet permission | Current permission later reads Granted | Retain Active | Associate the current capability; evaluate and queue current evidence only | Current enabled state | Restore or replay an old candidate |
+| Active or Paused | Location permission revoked, denied, restricted, or unavailable | Retain exact saved commute and lifecycle | No delivery change caused by location; disable only a separately approved location convenience | **Alerts use your saved trip. Location access is not required for this commute.** where explanation is needed | Require location, infer visits, or alter endpoints |
+| Active; alerts enabled; permission unmet; Offline | Both causes are true | Retain Active and explicit intent | No delivery; no queue; retain minimal replay memory | Show both notification-access and Offline causes visibly and assistively | Collapse the combined state to only one cause |
+| Active; alerts enabled; permission Granted; Offline | Connectivity is lost | Retain Active | Do not claim current remote delivery; invalidate work when its opportunity ends | Truthful Offline state plus current saved commute | Pause, expire, or backfill on reconnect |
+| Active; Offline | Connectivity returns | Retain Active | Evaluate current accepted evidence only | Current connected state | Replay a message missed while Offline |
+| Active | Rider chooses **Pause alerts** | Retain all confirmed preference fields; set Paused | Stop delivery; cancel queue; retain minimum ledger and explicit intent | Paused; expose **Resume alerts** | Delete, expire, or clear replay memory |
+| Paused | Rider chooses **Resume alerts** | Retain preference; set Active | Evaluate current evidence with retained ledger | Active current state | Replay missed or represented messages |
+| Active or Paused | Rider chooses **Edit commute** and reconfirms | Replace the confirmed preference version and affected derived state; preserve lifecycle | Invalidate ineligible queue work; retain only memory needed to avoid duplicate delivery | Reconfirmed current values | Resume a Paused commute or manufacture a resend |
+| Active or Paused | Rider cancels editing | Preserve every field, lifecycle, axis, and focus return | No capability, queue, or memory mutation | Return focus to **Edit commute** | Partial save or hidden mutation |
+| Active | Accepted Task 1 expiry condition occurs | Retain saved preference as Expired | Stop evaluation-for-delivery; remove current queue; retain only still-necessary state | Expired with available controls | Treat expiry as deletion or continue sending |
+| Any saved commute | Rider opens **Delete commute** | No mutation until confirmation | No mutation until confirmation | Open **Delete this commute?** with exact disclosed body, **Delete commute**, and **Keep commute** | Swipe-only, long-press-only, pre-confirmation removal |
+| Delete confirmation open | Rider chooses **Keep commute** | Preserve commute and lifecycle | Preserve current capability, queue eligibility, and ledger | Close dialog and return focus to **Delete commute** | Delete or change alert state |
+| Any saved commute | Rider confirms **Delete commute** | Remove selected preference, provenance, tolerance, recovery and per-commute accessibility values; store no tombstone | Remove linked derived state, ledger, association, queue, and product-controlled payload | **Commute deleted** | Change another commute, saved stations, maps, global Accessible Route Only, or operating-system permission |
+| Last alert-enabled commute | Rider confirms deletion | Remove the commute | Remove Commute delivery registration unless another explicit product use owns it | **Commute deleted** | Retain an ownerless Commute registration |
+| One of multiple commutes | Rider confirms deletion | Remove only the selected commute | Remove only its associations and queue; preserve independently owned capability | **Commute deleted** | Delete or reset another commute |
+| Any personalization exists | Rider opens broad reset | No mutation until confirmation | No mutation until confirmation | **Reset all personalization?** with populated covered and retained category lists | Vague, empty, hidden, or silently expanded lists |
+| Reset confirmed | All covered categories delete or verify absent | Remove every commute and per-commute preference; preserve disclosed maps, official structural data, current global Accessible Route Only, and operating-system permission | Remove all linked derived state, ledgers, associations, queues, payloads, and ownerless Commute registration | Completion only when every category is **Deleted** or **Not present** | Preserve a tombstone, replay memory, or per-commute Accessible Route Only |
+| Personal-data deletion in progress | One or more categories unresolved | Local removed data remains absent | Continue safe verification or retry for unresolved product-controlled copies | Show each **Pending** or **Failed** category | Announce completion |
+| Personal-data deletion checked | Every category resolves | No personal commute data remains | No personal product-controlled delivery copy remains | Complete only with all results **Deleted** or **Not present** | Treat unknown as Not present |
+| Any local commute exists | Operating system clears app data | No local commute, preference, recovery, derived state, or ledger remains | No local association or queue remains; legacy remote delivery is prohibited | Empty commute state; offline maps may also be absent because of the operating system | Restore, replay, or claim remote cleanup without evidence |
+| App was removed or app data cleared | Rider reinstalls | Start empty; no backup or restore | No legacy registration or queue may deliver; current permission alone creates no intent | New setup is required | Restore Home, Work, route, window, preference, or alert intent |
+| Reinstalled; current permission Granted | Rider has not confirmed and enabled a new commute | No commute exists | No delivery association or queue | Empty setup state | Treat permission as alert intent |
+| Recovery updates Off or On | Rider toggles recovery updates | Retain new current setting prospectively | Preserve original-delivery value and change marker only where an approved recovery decision requires them | Show current setting | Retroactively create or erase a recovery message |
+| Pause, delete, reset, or permission loss races with an unsent queue item | Stop or destructive action wins | Apply the rider or system state above | Veto and remove the ineligible queue item | Show current stopped or deleted state | Deliver the stale queued message |
+
+### Exact destructive copy
+
+For one commute:
+
+> **Delete this commute?**
+>
+> This removes {origin} to {destination} and its alert settings from this device. Saved stations, offline maps, and notification permission do not change.
+
+Actions are **Delete commute** and **Keep commute**. Successful local deletion announces **Commute deleted**.
+
+For broad reset:
+
+> **Reset all personalization?**
+>
+> This clears: {covered_categories}. This keeps: {retained_categories}. Notification permission and Accessible Route Only do not change.
+
+The category placeholders require owner-approved current values. Reset and personal-data deletion use exactly **Deleted**, **Not present**, **Pending**, or **Failed** for each disclosed category. Completion is false while any category is Pending or Failed.
+
+### Task 7 control requirements
+
+**Edit commute**, **Pause alerts**, **Resume alerts**, **Delete commute**, **Keep commute**, and **Open notification settings** must be in the bottom third of the relevant screen, at least 48 × 48 CSS pixels, keyboard and switch operable, focus ordered, persistently labeled, and exposed with matching accessible names. Destructive confirmation receives heading focus; cancellation returns focus to the initiating control. Visible and assistive status must agree. No destructive or core action may be swipe-only, long-press-only, gesture-only, or hidden.
+
+### Task 7 open gaps
+
+The 900-second quiet-period proposal; seen and quiet-period semantics; successful delivery versus unknown acknowledgement; severity ordering; correction and retraction; remote delivery topology and invalidation after app-data clearing or reinstall; lock-screen disclosure; and numeric diagnostic retention and floors remain **Pending**. No row may invent a duration or mechanism to close them.
+
+No observed deletion, permission, privacy, remote cleanup, reviewer, pilot, or launch evidence exists. Every linked [CPR fixture](../test-cases/commute-privacy-scenarios.md#fixture-definitions) remains **Not run — Pending**. Gate 0 and the separate accessibility no-go remain in force.
+
+### Task 7 review checklist
+
+- [ ] Every combined state preserves lifecycle, permission, location, connectivity, queue, ledger, and deletion results as independent axes.
+- [ ] Pause, resume, edit, permission restoration, reconnect, and reinstall never replay.
+- [ ] Delete one preserves every disclosed unrelated category and creates no tombstone.
+- [ ] Reset and personal-data deletion cannot complete with Pending or Failed work.
+- [ ] Location remains unnecessary and no permission history is stored.
+- [ ] Control placement, target size, focus, names, announcements, and non-gesture operation are evidenced.
+- [ ] Product, Accessibility, Data Quality, Content, Privacy, and Operations record dated review.
+- [ ] All 19 CPR fixtures pass with fixed inputs, actual evidence, corrections, and reruns.
+- [ ] Product Governance reconciles the index provenance and reviewer mismatch.
+
+Every unchecked item blocks approval. This documentation commit is not evidence.
