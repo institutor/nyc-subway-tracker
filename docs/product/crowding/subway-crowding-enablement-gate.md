@@ -2,7 +2,7 @@
 
 | Governance field | Value |
 |---|---|
-| Source sections | Product artifact index row citing approved specification §§24 and 34; applying approved specification §§24, 27.1, 32.4, 34, and 35; accessibility and platform-guidance plan `Product artifact map` and Task 11 `Product artifacts`, `Dependencies`, `Produces for later tasks`, `Ordered steps`, and `Evidence and acceptance checks` |
+| Source sections | Approved specification §§24, 27.1, 32.4, 34, and 35; accessibility and platform-guidance plan `Product artifact map` and Task 11 `Product artifacts`, `Dependencies`, `Produces for later tasks`, `Ordered steps`, and `Evidence and acceptance checks` |
 | Owner | Guidance Product Lead |
 | Required reviewers | Product, Accessibility, Data Quality, Content, Operations |
 | Status | Draft |

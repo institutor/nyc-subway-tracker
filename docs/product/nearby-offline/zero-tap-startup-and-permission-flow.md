@@ -2,7 +2,7 @@
 
 | Governance field | Value |
 |---|---|
-| Source sections | Approved specification §§14.1–14.2, 28.1, and 31.4 scenario 22; nearby-station and offline-experience plan `Product artifact map` and Task 2 `Product artifacts`, `Ordered steps`, and `Acceptance evidence`; Task 2 brief |
+| Source sections | Approved specification §§14.1–14.2, 28.1–28.2, and 31.4 scenario 22; nearby-station and offline-experience plan `Product artifact map` and Task 2 `Product artifacts`, `Ordered steps`, and `Acceptance evidence`; Task 2 brief; Task 12 no-notification-prompt applying boundary |
 | Owner | Experience Product Lead |
 | Required reviewers | Product, Accessibility, Data Quality, Content, Privacy |
 | Status | Draft |

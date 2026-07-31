@@ -2,7 +2,7 @@
 
 | Governance field | Value |
 |---|---|
-| Source sections | Approved specification §§29.1–29.2, 30, 32.1–32.2, 33–34; nearby-station and offline-experience plan Task 15 `Ordered steps`, `Acceptance evidence`, and `Completion check` |
+| Source sections | Approved specification §§29.1–29.2, 30, 32.1–32.2, 33–34; nearby-station and offline-experience plan `Product artifact map` and Task 15 `Ordered steps`, `Acceptance evidence`, and `Completion check` |
 | Owner | Release Quality Lead |
 | Required reviewers | Product, Accessibility, Data Quality, Content, Privacy, Operations |
 | Status | Draft |

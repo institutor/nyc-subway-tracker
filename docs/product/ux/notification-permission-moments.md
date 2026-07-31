@@ -2,7 +2,7 @@
 
 | Governance field | Value |
 |---|---|
-| Source sections | Product artifact index row citing approved specification §§25.1 and 28.2; additional applying approved specification §§13.1–13.3, 14.2, 14.5–14.6, 25.2, 28.1, 28.3, 31.4 scenarios 22–23, 31.6–31.8 scenarios 36–42, 48, and 51; commute alerts and launch quality plan Task 4; accepted Nearby and Commute Tasks 1–3 artifacts |
+| Source sections | Approved specification §§13.1–13.3, 14.2, 14.5–14.6, 25.1–25.2, 28.1–28.3, 31.4 scenarios 22–23, and 31.6–31.8 scenarios 36–42, 48, and 51; commute alerts and launch quality plan Task 4; accepted Nearby and Commute Tasks 1–3 artifacts |
 | Owner | Commute Product Lead |
 | Required reviewers | Product, Accessibility, Content, Privacy |
 | Status | Draft |

@@ -2,7 +2,7 @@
 
 | Governance field | Value |
 |---|---|
-| Source sections | Product artifact index row citing approved specification §§23.6, 31.6, and 31.8; applying approved specification §23.6, §31.8 scenario 47, and §§32.2–32.3 while retaining the Task 8 boundary in §31.6 scenarios 33–35; accessibility and platform-guidance plan `Product artifact map` and Task 9 `Product artifacts`, `Dependencies`, `Produces for later tasks`, `Ordered steps`, and `Evidence and acceptance checks` |
+| Source sections | Approved specification §23.6, §31.8 scenario 47, and §§32.2–32.3 while retaining Task 8's §31.6 scenarios 33–35 positioning boundary; accessibility and platform-guidance plan `Product artifact map` and Task 9 `Product artifacts`, `Dependencies`, `Produces for later tasks`, `Ordered steps`, and `Evidence and acceptance checks` |
 | Owner | Guidance Product Lead |
 | Required reviewers | Product, Accessibility, Data Quality, Content |
 | Status | Draft |

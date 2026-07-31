@@ -2,7 +2,7 @@
 
 | Governance field | Value |
 |---|---|
-| Source sections | Product artifact index row citing approved specification §§25.1–25.2 and 34; applying approved specification §§5.1–5.2, 25.1–25.2, 25.5, 25.7, 26, 28.2–28.3, 31.6–31.7, 32.3, 33.5, and 34–35; commute alerts and launch quality plan Task 1 |
+| Source sections | Approved specification §§5.1–5.2, 25.1–25.2, 25.5, 25.7, 26, 28.2–28.3, 31.6–31.7, 32.3, 33.5, and 34–35; commute alerts and launch quality plan Task 1 |
 | Owner | Commute Product Lead |
 | Required reviewers | Product, Accessibility, Data Quality, Content, Privacy, Operations |
 | Status | Draft |

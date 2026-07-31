@@ -2,7 +2,7 @@
 
 | Governance field | Value |
 |---|---|
-| Source sections | Approved specification §§25.2–25.7, 26.3, 28.1–28.3, 30, 32.3, 33.5, 34, 36–39, 42, and 48; commute alerts and launch quality plan Task 10 |
+| Source sections | Approved specification §§25.2–25.7, 26.3, 28.1–28.3, 30, 32.3, 33.5, 34, and scenarios 36–39, 42, and 48; commute alerts and launch quality plan Task 10; accepted immutable Commute Tasks 1–9 and fixed gate package |
 | Owner | Release Quality Lead |
 | Required reviewers | Product, Accessibility, Data Quality, Content, Privacy, Operations |
 | Status | Draft |

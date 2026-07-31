@@ -2,7 +2,7 @@
 
 | Governance field | Value |
 |---|---|
-| Source sections | Approved specification §§10.3–10.4 and 31.3 scenarios 15–16; arrival-truth and service-changes plan Task 9 `Artifacts` and `Ordered steps` |
+| Source sections | Approved specification §§9.3, 10.3–10.4, and 31.3 scenarios 15–16; arrival-truth and service-changes plan Task 9 `Artifacts` and `Ordered steps` |
 | Owner | Product Truth Lead |
 | Required reviewers | Product, Data Quality, Operations |
 | Status | Draft |
