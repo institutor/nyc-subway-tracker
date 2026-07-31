@@ -96,9 +96,9 @@ Any numeric proposal requires observed evidence and fresh Product and Data Quali
 
 ## Pending cross-plan dependencies
 
-These rows are ownership references, not links, because the planned files do not yet exist in this worktree. Arrival truth must not duplicate their rules or claim passing evidence for them.
+These rows identify Draft cross-plan owner artifacts that now exist. Their same-version reviewer decisions and observed evidence remain **Pending**; Arrival Truth must not duplicate their rules or claim passing evidence for them.
 
-| Specification scenario | Owning workstream | Planned controlling artifacts | Arrival-truth status |
+| Specification scenario | Owning workstream | Controlling artifacts | Arrival-truth status |
 |---:|---|---|---|
 | 45 | Accessibility and platform guidance | `docs/product/accessibility/equipment-status-policy.md`; `docs/product/accessibility/equipment-status-acceptance-table.md` | Pending cross-plan dependency — zero-outage provisional-empty behavior is not owned here. |
 | 46 | Accessibility and platform guidance | `docs/product/accessibility/equipment-status-policy.md`; `docs/product/accessibility/equipment-status-acceptance-table.md` | Pending cross-plan dependency — equipment restoration confirmation is not owned here. |
