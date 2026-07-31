@@ -13,7 +13,7 @@
 
 ## Purpose and authority
 
-These cases define acceptance evidence for the [schedule fallback and currency policy](schedule-fallback-and-currency-policy.md). They test fallback entry, source ordering, service-date coverage, edition supersession, age anchors, exact currency boundaries, rider wording, service-change veto ordering, and hard-suppression release carryover. The [feed health policy](feed-health-policy.md), [source role and precedence matrix](source-role-and-precedence-matrix.md), [evidence veto catalog](evidence-veto-catalog.md), [service-change impact and resolution policy](service-change-impact-and-resolution-policy.md), [suppression, grace, and recovery policy](suppression-grace-and-recovery-policy.md), [time and train continuity policy](time-and-train-continuity-policy.md), and [arrival admission and ordering contract](arrival-admission-and-ordering-contract.md) continue to govern their respective decisions. The [approved product specification](../../superpowers/specs/2026-07-30-nyc-subway-train-time-tracker-design.md) controls every conflict.
+These cases define acceptance evidence for the [schedule fallback and currency policy](schedule-fallback-and-currency-policy.md). They test fallback entry, source ordering, service-date coverage, edition supersession, age anchors, exact currency boundaries, rider wording, service-change veto ordering, hard-suppression release carryover, deterministic board generation, the three-row cap, and honest partial or empty results. The [feed health policy](feed-health-policy.md), [source role and precedence matrix](source-role-and-precedence-matrix.md), [evidence veto catalog](evidence-veto-catalog.md), [service-change impact and resolution policy](service-change-impact-and-resolution-policy.md), [suppression, grace, and recovery policy](suppression-grace-and-recovery-policy.md), [time and train continuity policy](time-and-train-continuity-policy.md), and [arrival admission and ordering contract](arrival-admission-and-ordering-contract.md) continue to govern their respective decisions. The [approved product specification](../../superpowers/specs/2026-07-30-nyc-subway-train-time-tracker-design.md) controls every conflict.
 
 Every case is **Pending** until its setup is exercised against a fixed reviewed product version, the actual result and prohibited-result checks are recorded, and the Truth Gate accepts the evidence. An expected result written here is not a passing result.
 
@@ -358,6 +358,78 @@ Keep the previously hard-suppressed claim suppressed because zero qualifying rec
 
 Do not restore the claim from static data; count feed unavailability, alert clearance, or schedule retrieval as a recovery update; show a Scheduled clock time, exact countdown, primary row, or stale service-change explanation for the claim; imply cancellation; or keep unrelated claims suppressed. Do not permit readmission until two consecutive fresh coherent accepted updates newer than the adverse evidence collectively prove stable identity, plausible stop order, current movement or stop progress, continued target service, and no unresolved service or track conflict, followed by every Live gate.
 
+## Deterministic fallback-board generation cases
+
+### Case FB1 — Future-departure and operating-service-date eligibility
+
+**Setup**
+
+Prove the exact route/feed group Unavailable and provide one eligible supplemented edition spanning an operating service date across midnight. At authoritative comparison time, supply four exact-stop scheduled records in source chronology: one already past, one exactly equal to comparison time, one future record expressed beyond `24:00` on the operating service date, and one future record whose phone-calendar interpretation would assign it to the wrong day. Keep route, direction, destination, and exact-stop evidence coherent only for the beyond-`24:00` record.
+
+**Expected state**
+
+Map every record to one authoritative New York instant using its source-supported operating service date. Exclude the past and equal-time records. Exclude the phone-calendar-misread record. Show only the eligible beyond-`24:00` departure as one Scheduled clock-time row with the complete fallback presentation and **No additional scheduled departures available.**
+
+**Prohibited outcome**
+
+Do not add a grace period; roll a past or equal time forward; use the phone date; repeat a prior-day trip; borrow a service calendar; synthesize a departure; or show more than the one coherent future exact-stop occurrence.
+
+### Case FB2 — Supplemented-first equivalence, distinct trains, and unresolved conflict
+
+**Setup**
+
+Prove fallback eligibility and supply: a supplemented and regular record canonically proven to represent the same scheduled occurrence; two distinct coherently identified trains with the same route, destination, and departure instant; and two conflicting records for which neither equivalence nor distinct occurrence identity can be proven. All records otherwise target the same exact direction.
+
+**Expected state**
+
+Retain only the supplemented winner for the canonically equivalent occurrence. Retain both distinct same-time trains as separate candidates. Withhold both unresolved conflicting records and record the supported limitation. No duplicate or unresolved record consumes a Scheduled position.
+
+**Prohibited outcome**
+
+Do not show the regular copy beside its supplemented winner; merge distinct trains merely because their public fields match; choose the more optimistic conflicting record; invent occurrence identity; or let an excluded record reduce the visible cap.
+
+### Case FB3 — Deterministic ordering and three-row cap
+
+**Setup**
+
+For one exact rider-facing direction and operational axis, provide five eligible future departures in deliberately shuffled source order. Include two exact-time ties whose route, destination, and canonical occurrence identities exercise every applicable tie-break level. Repeat the run with wrappers and retrieval order changed but canonical content unchanged.
+
+**Expected state**
+
+Order by full chronological departure instant, then the governed route class and public identifier, normalized public destination, and canonical scheduled-occurrence identity. Show exactly the first three rows after ordering. The repeated run produces the identical three rows in identical order. Later rows remain absent from the initial fallback board.
+
+**Prohibited outcome**
+
+Do not order by formatted clock text, source arrival or retrieval order, wrapper identity, optimism, route popularity, or proximity to a three-row boundary. Do not cap before exclusions and ordering, exceed three, or let a tie strengthen evidentiary certainty.
+
+### Case FB4 — Honest partial and empty boards
+
+**Setup**
+
+Run four branches for the same exact direction after all source, identity, currency, veto, and suppression decisions: A leaves two eligible departures; B leaves none because no source supports a future departure; C leaves one unaffected departure after a resolved veto removes another; D leaves one unaffected departure while independent current high-impact evidence makes another claim materially unresolved. Keep the cause and scope evidence distinct.
+
+**Expected state**
+
+A shows exactly two Scheduled rows plus **No additional scheduled departures available.** B shows no Scheduled row, persistent **Live data unavailable**, and **No scheduled departures available.** C shows the unaffected row plus the narrowest resolved service-change consequence. D shows the unaffected row and replaces only the affected proposed claim with **Service change—arrival unavailable**, with no affected clock time. None of the branches implies that service ended or a train was cancelled.
+
+**Prohibited outcome**
+
+Do not backfill from past, opposite-direction, ineligible, superseded, vetoed, ambiguous, hard-suppressed, or out-of-coverage records; use the neutral empty copy in place of a supported resolved consequence; expose a withheld clock time; widen the affected scope; or convert an empty list into proof of no service.
+
+### Case FB5 — Direction, operational-axis, and feed-group isolation
+
+**Setup**
+
+At one station complex, make route/feed group A Unavailable for one direction, keep group B healthy in that direction, keep the opposite direction healthy, and provide more than three eligible Scheduled rows for group A. Include a second passenger-serving operational axis with its own healthy arrivals.
+
+**Expected state**
+
+Combine only eligible Scheduled rows from fallback-qualified groups for the exact affected direction, order them, and show at most three in the separate fallback board. Preserve group B's independently admitted Live or Expected list, the opposite direction, and the second operational axis unchanged. Scheduled rows never fill or displace a Live or Expected next-three position.
+
+**Prohibited outcome**
+
+Do not apply a station-wide or network-wide fallback; mix Scheduled rows into a healthy primary list; count the opposite direction toward the cap; force all operational axes into one pair; exceed three Scheduled rows; or degrade an unaffected route, direction, or axis.
+
 ## Truth Gate result record
 
 | Case | Required actual-result evidence | Status |
@@ -383,5 +455,10 @@ Do not restore the claim from static data; count feed unavailability, alert clea
 | Scenario 20 | Independent current high-impact evidence plus material scope uncertainty required; control branches create neither unavailability nor normal-service proof | Pending |
 | S17 — Known veto | Veto defeats schedule in exact scope before presentation | Pending |
 | S18 — Cleared hard veto | No schedule restoration without two qualifying live recovery updates; unrelated fallback preserved | Pending |
+| FB1 — Future and service-date eligibility | Only explicit coherent future exact-stop departures survive authoritative service-day chronology; past, equal-time, and phone-date inventions excluded | Pending |
+| FB2 — Equivalence and conflict | Supplemented copy wins canonical equivalence; distinct trains remain; unresolved conflicts consume no row | Pending |
+| FB3 — Deterministic first three | Full chronology and fixed tie-breakers produce the identical first three across wrapper and retrieval-order changes | Pending |
+| FB4 — Partial and empty boards | Exact one/two/zero copy and scoped veto/unavailability behavior; no weak backfill or no-service inference | Pending |
+| FB5 — Scope isolation | Three-row cap applies only to the exact fallback direction; healthy groups, opposite direction, and other axes remain independent | Pending |
 
 The result record remains Pending until it links durable observed evidence for a fixed reviewed version. Every prohibited-result check must be recorded. A failure remains in the record and must link its correction and rerun.
