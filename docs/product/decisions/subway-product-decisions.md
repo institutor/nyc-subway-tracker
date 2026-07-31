@@ -43,7 +43,7 @@ SPD-15 applies approved specification §§25.2, 25.5, and 33.5 and commute-plan 
 
 The Phase 0 governance approval remains immutable historical evidence for the unchanged SPD-01–SPD-14 text. It does not approve SPD-15 or this materially revised artifact version. This version remains **Draft**, approval and scenario evidence remain **Pending**, and Product, Accessibility, Data Quality, Content, Privacy, and Operations must all decide on the same fixed version before approval.
 
-The [product artifact index](../artifact-index.md) still records this artifact's historical Approved state and narrower §34 provenance. Product Governance Lead reconciliation of status, provenance, approval evidence, and scenario state remains **Pending** and is outside this task's authorized file scope.
+The Draft [product artifact index](../artifact-index.md) row now matches this artifact's SPD-15 provenance, six-role review path, Draft lifecycle, historical-evidence boundary, and Pending scenario state. That metadata alignment does not approve SPD-15 or this materially revised version; every same-version reviewer decision and applying commute-window scenario remains **Pending**.
 
 ## Application rules
 

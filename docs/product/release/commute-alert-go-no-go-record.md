@@ -16,7 +16,7 @@
 
 This record alone owns the reviewed commute-alert launch disposition. The [launch checklist](commute-alert-launch-checklist.md) owns prerequisites, ordered stages, stop rules, and rollback requirements. The [scenario register](commute-alert-scenario-results.md) owns append-only fixture definitions and attempts. This record does not change Tasks 1–9, the Arrival Truth Gate, Nearby/offline readiness, accessibility release gates, or their controlling decisions.
 
-The artifact index cites Release 1 §32.2 for this launch activity, while commute alerts are a later Release 2 capability under §32.3. Product Governance reconciliation and full Task 10 provenance in the index remain **Pending**. This task does not edit the index.
+The artifact header and Draft artifact index row now align on the later Release 2 boundary in §32.3, full Task 10 provenance, accepted immutable Tasks 1–9 and fixed-gate handoffs, and Product, Accessibility, Data Quality, Content, Privacy, and Operations review. Metadata alignment is not approval and does not change the controlling **NO-GO**; every prerequisite and same-package reviewer decision remains **Pending**.
 
 ## Controlling initial disposition
 

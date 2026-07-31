@@ -19,7 +19,7 @@ This artifact is **Draft**. The authoritative **NO-GO — GATE 0 NOT PASSED** in
 
 ## Product Governance reconciliation
 
-The [product artifact index](../artifact-index.md) cites §§25.4 and 31.8 and lists Product, Data Quality, Content, and Operations. These fixtures additionally apply §§5.1–5.2, 8, 22–23.6, 25.3, 27, 29.3, 30.2–30.3, 31.6–31.8 scenarios 36–39, 42, and 48, 33.1, 33.3, 33.5, 34–35, full Task 3 provenance, and mandatory Accessibility review for the blocking accessible-path branch. Product Governance reconciliation remains **Pending**. This task does not edit the index.
+The artifact header and Draft [product artifact index](../artifact-index.md) row now align on approved specification §§5.1–5.2, 8, 22–23.6, 25.3–25.4, 27, 29.3, 30.2–30.3, 31.6–31.8 scenarios 36–39, 42, and 48, 33.1, 33.3, 33.5, and 34–35, full Task 3 provenance, and Product, Accessibility, Data Quality, Content, and Operations review. That metadata alignment is not approval; every boundary observation and same-version reviewer decision remains **Pending**.
 
 ## Fixed fixture record
 

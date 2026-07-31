@@ -19,7 +19,7 @@ Task 9 may record a pilot disposition; it cannot approve public release. Task 10
 
 ## Product Governance reconciliation
 
-The artifact index cites §32.2 for this pilot template, while subway commute notifications apply to later Release 2 under §32.3. The full Task 9 provenance, operational authority, six-role review, and drill pack are also absent. Product Governance reconciliation remains **Pending**. This task edits neither the index nor any gate record.
+The artifact header and Draft artifact index row now align on the later Release 2 boundary in §32.3, the full Task 9 provenance and operational authority, accepted immutable Tasks 2–8 handoffs, and Product, Accessibility, Data Quality, Content, Privacy, and Operations review. The drill pack remains unexecuted. Metadata alignment is not approval; every pilot result, reviewer decision, and gate disposition remains **Pending**.
 
 ## Silent and limited pilot
 

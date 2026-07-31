@@ -21,7 +21,7 @@ This artifact is **Draft**. The authoritative **NO-GO — GATE 0 NOT PASSED** in
 
 ## Product Governance reconciliation
 
-The [product artifact index](../artifact-index.md) cites §§25.1 and 28.2–28.3 and lists Product, Accessibility, Content, Privacy, and Operations. This matrix additionally applies §§13.1–13.3, 14.2, 14.5–14.6, 25.2, 28.1, scenarios 22–23, 36–42, 48, and 51, full Task 4 provenance, accepted upstream handoffs, and mandatory Data Quality review because tolerance changes reset Task 3 inference. Product Governance reconciliation remains **Pending**. This task does not edit the index.
+The artifact header and Draft [product artifact index](../artifact-index.md) row now align on approved specification §§13.1–13.3, 14.2, 14.5–14.6, 25.1–25.2, 28.1–28.3, scenarios 22–23, 36–42, 48, and 51, full Task 4 and Task 7 provenance, accepted upstream handoffs, and Product, Accessibility, Data Quality, Content, Privacy, and Operations review. That metadata alignment is not approval; every state observation and reviewer decision remains **Pending**.
 
 ## Independent axes
 
@@ -134,7 +134,7 @@ This appended addendum applies the [commute data inventory](../privacy/commute-d
 | Approval evidence | Pending |
 | Scenario results | [Not run — Pending](../test-cases/commute-privacy-scenarios.md#pending-execution-record) |
 
-The artifact index retains its accepted minimum reviewer set but does not yet carry the full Task 7 provenance or mandatory Data Quality review for these added rows. Product Governance reconciliation remains **Pending**. This addendum does not edit the index or treat the mismatch as approval.
+The Draft artifact index row now carries the full Task 7 provenance and mandatory Data Quality review for these added rows alongside the Task 4 provenance and six-role review path. That metadata alignment is not approval; all reset, retention, error-state, and reviewer evidence remains **Pending**.
 
 ### Combined privacy and lifecycle states
 
@@ -208,6 +208,6 @@ No observed deletion, permission, privacy, remote cleanup, reviewer, pilot, or l
 - [ ] Control placement, target size, focus, names, announcements, and non-gesture operation are evidenced.
 - [ ] Product, Accessibility, Data Quality, Content, Privacy, and Operations record dated review.
 - [ ] All 19 CPR fixtures pass with fixed inputs, actual evidence, corrections, and reruns.
-- [ ] Product Governance reconciles the index provenance and reviewer mismatch.
+- [x] Draft index provenance and reviewer metadata align; same-version reviewer decisions and evidence remain Pending.
 
 Every unchecked item blocks approval. This documentation commit is not evidence.

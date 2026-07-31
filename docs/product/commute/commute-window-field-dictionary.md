@@ -21,7 +21,7 @@ This artifact is **Draft**. No real rider window, saved trip, station relationsh
 
 ## Product Governance reconciliation
 
-The [product artifact index](../artifact-index.md) cites a narrower §25.1 boundary. This dictionary also applies §§5.1–5.2, 26, 28.2–28.3, 31.6–31.7, 32.3, 34–35, and the full Task 1 plan provenance. Product Governance Lead reconciliation remains **Pending**. This task does not edit the index or invent approval.
+The artifact header and Draft [product artifact index](../artifact-index.md) row now align on approved specification §§5.1–5.2, 25.1, 26, 28.2–28.3, 31.6–31.7, 32.3, and 34–35, full Task 1 provenance, and Product, Accessibility, Data Quality, Content, Privacy, and Operations review. That metadata alignment does not invent approval; every same-version reviewer decision and field-level scenario remains **Pending**.
 
 ## Required field dictionary
 

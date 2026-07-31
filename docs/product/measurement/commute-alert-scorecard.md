@@ -19,7 +19,7 @@ These are Draft measurement definitions, not observed performance and not MTA gu
 
 ## Product Governance reconciliation
 
-The artifact index does not yet carry the complete Task 8 provenance, twelve-measure set, six-role review, or privacy-safe aggregation conditions. Product Governance reconciliation remains **Pending**. This task does not edit the index or any gate record.
+The artifact header and Draft artifact index row now align on the full Task 8 provenance, accepted immutable Tasks 2, 3, 5, 6, and 7 handoffs, and Product, Accessibility, Data Quality, Content, Privacy, and Operations review. The twelve-measure set and privacy-safe aggregation conditions remain governed by this artifact. Metadata alignment is not approval; every measurement result and reviewer decision remains **Pending**.
 
 ## Required outcome vocabulary
 
@@ -119,6 +119,6 @@ Also Pending are feedback maturity, aggregation floor and retention, sample size
 - [ ] Planned and Unplanned are independently reported and cannot be averaged into Pass.
 - [ ] Every published cell passes the Task 7 privacy boundary and the event-dictionary export limit.
 - [ ] All 25 sampling fixtures have complete, independently reviewed evidence.
-- [ ] Product Governance reconciles the new artifacts and reviewer set.
+- [x] Draft index provenance and six-role reviewer metadata align; same-version reviewer decisions and measurement evidence remain Pending.
 
 Every unchecked item blocks approval. This documentation commit is not evidence.

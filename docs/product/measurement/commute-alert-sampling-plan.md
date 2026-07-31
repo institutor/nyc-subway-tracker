@@ -19,7 +19,7 @@ Every fixture is a synthetic expected definition, not observed evidence and not 
 
 ## Product Governance reconciliation
 
-The artifact index does not yet carry the complete Task 8 provenance, sampling frames, fixture set, six-role review, or privacy restrictions. Product Governance reconciliation remains **Pending**. This task edits neither the index nor any gate record.
+The artifact header and Draft artifact index row now align on the full Task 8 provenance, accepted immutable Tasks 2, 3, 5, 6, and 7 handoffs, and Product, Accessibility, Data Quality, Content, Privacy, and Operations review. The sampling frames, fixture set, and privacy restrictions remain governed by this artifact. Metadata alignment is not approval; every sampling result and reviewer decision remains **Pending**.
 
 ## Frozen sampling frames
 

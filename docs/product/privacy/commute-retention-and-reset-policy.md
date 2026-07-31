@@ -211,6 +211,6 @@ No observed deletion, reset, permission, remote cleanup, privacy, pilot, or laun
 - [ ] Operations proves queue cancellation, registration ownership, and every remote deletion result.
 - [ ] An approved remote cleanup rule closes the app-data-clear and reinstall gap.
 - [ ] Every scenario has actual results, all six dated reviews, evidence, correction, and rerun fields.
-- [ ] Product Governance reconciles Task 7 provenance and reviewers.
+- [x] Draft index provenance and six-role reviewer metadata align; same-version reviewer decisions and evidence remain Pending.
 
 Every unchecked item blocks approval. This documentation commit is not evidence.

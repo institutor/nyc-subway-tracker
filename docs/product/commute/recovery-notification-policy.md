@@ -21,7 +21,7 @@ This artifact is **Draft**. **NO-GO — GATE 0 NOT PASSED** remains authoritativ
 
 ## Product Governance reconciliation
 
-The product artifact index has not yet been reconciled to the full Task 5 provenance and five-role review set above. Product Governance reconciliation remains **Pending**. This task does not edit the index.
+The artifact header and Draft product artifact index row now align on the full Task 5 provenance, accepted Tasks 1–4 and accessibility handoffs, and Product, Accessibility, Data Quality, Content, and Operations review. That metadata alignment is not approval; every recovery observation and reviewer decision remains **Pending**.
 
 ## Per-commute setting
 

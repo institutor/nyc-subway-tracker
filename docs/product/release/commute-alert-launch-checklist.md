@@ -19,7 +19,7 @@ This is a Draft evidence definition, not product evidence and not an MTA guarant
 
 ## Product Governance reconciliation
 
-The artifact index cites Release 1 §32.2 for this launch activity, while subway commute alerts apply to later Release 2 under §32.3. The index also lacks the complete Task 10 provenance, six-role same-package approval, and fixed gate package. Product Governance reconciliation remains **Pending**. This task edits neither the index nor any upstream gate.
+The artifact header and Draft artifact index row now align on the later Release 2 boundary in §32.3, full Task 10 provenance, accepted immutable Tasks 1–9 and upstream gate handoffs, and Product, Accessibility, Data Quality, Content, Privacy, and Operations review. The six-role same-package decisions and fixed gate evidence remain **Pending**. Metadata alignment does not alter any upstream gate or authorize launch.
 
 ## Immutable release package
 

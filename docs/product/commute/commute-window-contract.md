@@ -23,7 +23,7 @@ The authoritative current posture remains **NO-GO — GATE 0 NOT PASSED** under 
 
 ## Product Governance reconciliation
 
-The [product artifact index](../artifact-index.md) cites the narrower §§25.1–25.2 and 34 boundary. This contract also applies §§5.1–5.2, 25.5, 25.7, 26, 28.2–28.3, 31.6–31.7, 32.3, 33.5, 35, and the full Task 1 plan provenance. Product Governance Lead reconciliation remains **Pending**. This task does not edit the index or treat its current status as approval of this Draft.
+The artifact header and Draft [product artifact index](../artifact-index.md) row now align on approved specification §§5.1–5.2, 25.1–25.2, 25.5, 25.7, 26, 28.2–28.3, 31.6–31.7, 32.3, 33.5, and 34–35, full Task 1 provenance, and Product, Accessibility, Data Quality, Content, Privacy, and Operations review. That metadata alignment is not approval; every same-version reviewer decision and commute-window scenario remains **Pending**.
 
 ## Product promise
 

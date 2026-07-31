@@ -21,7 +21,7 @@ This artifact is **Draft**. The authoritative posture remains **NO-GO — GATE 0
 
 ## Product Governance reconciliation
 
-The [product artifact index](../artifact-index.md) cites only §25.4 and lists Product, Data Quality, Content, and Operations. This policy additionally applies §§5.1–5.2, 8, 22–23.6, 25.3, 27, 29.3, 30.2–30.3, 31.6–31.8 scenarios 36–39, 42, and 48, 33.1, 33.3, 33.5, 34–35, full Task 3 provenance, and mandatory Accessibility review because the immediate blocking accessible-path branch is safety-critical. Product Governance reconciliation remains **Pending**. This task does not edit the index.
+The artifact header and Draft [product artifact index](../artifact-index.md) row now align on approved specification §§5.1–5.2, 8, 22–23.6, 25.3–25.4, 27, 29.3, 30.2–30.3, 31.6–31.8 scenarios 36–39, 42, and 48, 33.1, 33.3, 33.5, and 34–35, full Task 3 provenance, and Product, Accessibility, Data Quality, Content, and Operations review. That metadata alignment is not approval; every threshold fixture and same-version reviewer decision remains **Pending**.
 
 ## Exact unrounded model
 
@@ -153,8 +153,8 @@ Task 7 later owns retention and deletion assurance.
 ## Explicit mismatches and gaps
 
 - “More than five minutes” means stored `T = 300` with strict `ΔJ > T`; it does not mean `>= 300`.
-- The Task 1 dictionary and future Task 4 setup flow do not yet own tolerance selection UI. Task 3 owns only the three semantic values and later handoff.
-- Task 9 transfer artifacts do not yet exist. Only a future fixed versioned handoff may be consumed; Task 3 does not duplicate scenario 47 or buffer arithmetic.
+- The Task 1 dictionary and Draft Task 4 setup flow own the tolerance-selection handoff and rider controls; their reviewer decisions and observed evidence remain Pending. Task 3 owns only the three semantic values.
+- Draft Task 9 transfer artifacts now define the versioned handoff; their reviewer decisions and observed evidence remain Pending. Task 3 does not duplicate scenario 47 or buffer arithmetic.
 - Specification §25.4 names **Tight** and **Uncertain**, not **Unlikely**, as transfer triggers.
 - No moderate-impact aggregation rule is authorized; subthreshold families are never summed.
 - No real source, baseline, fixed product/build, run, reviewer decision, approval, correction, rerun, or launch evidence exists.

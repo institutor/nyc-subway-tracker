@@ -23,7 +23,7 @@ The authoritative **NO-GO — GATE 0 NOT PASSED** in the [Gate 0 exit record](..
 
 ## Product Governance reconciliation
 
-The [product artifact index](../artifact-index.md) cites §§25.3 and 31.6. These examples additionally apply §§8, 20, 22, 25.2, 27, and full Task 2 provenance. Product Governance Lead reconciliation of that additional provenance remains **Pending**. This task does not edit the index.
+The artifact header and Draft [product artifact index](../artifact-index.md) row now align on approved specification §§8, 20, 22, 25.2–25.3, 27, and 31.6, full Task 2 provenance, and Product, Accessibility, Data Quality, Content, and Operations review. That metadata alignment is not approval; every relevance fixture and same-version reviewer decision remains **Pending**.
 
 ## Fixed record contract
 
@@ -110,10 +110,10 @@ Every row below is one independent run record. A later passing rerun preserves t
 
 ## Explicit gaps
 
-- Task 3 threshold and persistence artifacts do not exist.
-- Task 4 permission behavior does not exist.
-- Task 5 delivery, message, alternative copy, and recovery evidence do not exist.
-- Task 6 episode-identity and deduplication algorithm evidence does not exist.
+- Task 3 threshold and persistence artifacts are Draft; their scenario evidence and reviewer decisions remain Pending.
+- Task 4 permission behavior is defined in Draft artifacts; its scenario evidence and reviewer decisions remain Pending.
+- Task 5 delivery, message, alternative-copy, and recovery artifacts are Draft; their evidence and reviewer decisions remain Pending.
+- Task 6 episode-identity and deduplication artifacts are Draft; their scenario evidence and reviewer decisions remain Pending.
 - No data-health opt-in contract exists.
 - Scenario 39 handoff completeness does not demonstrate a notification.
 - No real source, run, fixed product/build, reviewer decision, correction, rerun, pilot, or release evidence exists.

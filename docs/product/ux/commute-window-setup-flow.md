@@ -21,7 +21,7 @@ This artifact is **Draft**. The authoritative **NO-GO — GATE 0 NOT PASSED** in
 
 ## Product Governance reconciliation
 
-The [product artifact index](../artifact-index.md) cites §§25.1 and 28.2. This flow additionally applies §§13.1–13.3, 14.2, 14.5–14.6, 25.2, 28.1, 28.3, scenarios 22–23, 36–42, 48, and 51, full Task 4 provenance, and the accepted Nearby and Tasks 1–3 handoffs. Product Governance reconciliation remains **Pending**. This task does not edit the index.
+The artifact header and Draft [product artifact index](../artifact-index.md) row now align on approved specification §§13.1–13.3, 14.2, 14.5–14.6, 25.1–25.2, 28.1–28.3, scenarios 22–23, 36–42, 48, and 51, full Task 4 provenance, accepted Nearby and Tasks 1–3 handoffs, and Product, Accessibility, Content, and Privacy review. That metadata alignment is not approval; every setup-flow observation and reviewer decision remains **Pending**.
 
 ## Independent setup axes
 

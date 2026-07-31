@@ -17,7 +17,7 @@
 
 This artifact is **Draft**. **NO-GO — GATE 0 NOT PASSED** and **NO-GO — REQUIRED ACCESSIBILITY EVIDENCE AND COVERAGE ARE NOT DEMONSTRATED** remain in force. Every commute, device, token, queue, diagnostic, action, and result below is synthetic. No storage, deletion, permission, reset, reviewer, pilot, or launch behavior has been observed or approved.
 
-The artifact index does not yet reflect the full Task 7 provenance or six-role review set. Product Governance reconciliation is **Pending**; this task does not edit the index.
+The artifact header and Draft artifact index row now align on the full Task 7 provenance, accepted Tasks 1–6 handoffs, and Product, Accessibility, Data Quality, Content, Privacy, and Operations review. That metadata alignment is not approval; every privacy-scenario result and reviewer decision remains **Pending**.
 
 ## Fixed inherited input contract
 

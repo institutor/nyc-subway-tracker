@@ -19,7 +19,7 @@ These Draft definitions are not observed events and are not MTA guarantees. No a
 
 ## Product Governance reconciliation
 
-The artifact index does not yet carry the full Task 8 provenance, event boundary, six-role review, or privacy-safe export contract. Product Governance reconciliation remains **Pending**. This task does not edit the index or any gate record.
+The artifact header and Draft artifact index row now align on the full Task 8 provenance, accepted immutable Tasks 2, 3, 5, 6, and 7 handoffs, and Product, Accessibility, Data Quality, Content, Privacy, and Operations review. The event boundary and privacy-safe export contract remain governed by this artifact. Metadata alignment is not approval; every event observation and reviewer decision remains **Pending**.
 
 ## Boundary model
 

@@ -26,7 +26,7 @@ Task 6 waives, merges, and passes neither blocker. Public arrival boards and com
 
 ## Product Governance reconciliation
 
-The product artifact index has not been reconciled to the full Task 6 provenance or the required Privacy reviewer in addition to Product, Accessibility, Data Quality, Content, and Operations. Product Governance reconciliation remains **Pending**. This task does not edit the index or treat the mismatch as approval.
+The artifact header and Draft product artifact index row now align on the full Task 6 provenance, accepted immutable Tasks 2–5 handoffs, and Product, Accessibility, Data Quality, Content, Operations, and Privacy review. That metadata alignment is not approval; every episode fixture and same-version reviewer decision remains **Pending**.
 
 ## Four separate identity layers
 

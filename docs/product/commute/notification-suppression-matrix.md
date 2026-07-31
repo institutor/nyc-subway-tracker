@@ -21,7 +21,7 @@ This artifact is **Draft** and all scenario evidence is **Not run — Pending**.
 
 ## Product Governance reconciliation
 
-The [product artifact index](../artifact-index.md) cites §§25.3 and 31.6. This matrix additionally applies §§8, 20, 22, 25.2, 27, 31.2, 31.5, 33.1, 33.3, 33.5, and full Task 2 provenance. Product Governance Lead reconciliation of that additional provenance remains **Pending**. This task does not edit the index.
+The artifact header and Draft [product artifact index](../artifact-index.md) row now align on approved specification §§8, 20, 22, 25.2–25.3, 27, 31.2, 31.5–31.6, 33.1, 33.3, and 33.5, full Task 2 provenance, and Product, Accessibility, Data Quality, Content, and Operations review. That metadata alignment is not approval; every suppression observation and same-version reviewer decision remains **Pending**.
 
 ## Precedence
 
