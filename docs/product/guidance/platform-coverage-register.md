@@ -335,3 +335,79 @@ These definitions are not executed evidence. They establish no real coverage, ca
 - [ ] No real priority, coverage, geometry, output, reviewer, approval, metric, or authorization is claimed.
 
 Every unchecked required item blocks coverage eligibility and Release 2 consideration. This documentation commit is not working-product evidence.
+
+## Task 12 final platform-coverage checkpoint
+
+This is a separately signable, append-only Task 12 readout. It preserves the first 337 lines at accepted blob `8154c788585db5713025f42e1d876111025f6508`, including all 38-field rules, priority categories, reverification triggers, feedback rules, `PCOV-01`–`PCOV-20` definitions, and Pending execution results. It does not rewrite or upgrade a coverage row, fixture, field, review, or result.
+
+| Checkpoint field | Current value |
+|---|---|
+| Checkpoint ID | `PCOV-T12-FINAL-v1`; decision-record identifier only |
+| Evaluated base | Commit `841b4df8d0b6346cbbde428fbd83d77b2f68b417` |
+| Owner | Guidance Product Lead |
+| Required reviewers | Product, Accessibility, Data Quality, Content, Operations |
+| Evaluation date | 2026-07-30 |
+| Artifact approval | **Pending** |
+| Actual decision identity | **Pending** |
+| Current decision | **NO-GO — PLATFORM-GUIDANCE COVERAGE AND REVERIFICATION EVIDENCE IS NOT DEMONSTRATED** |
+| Release authorization | **Unsigned** |
+| Central checkpoint | [Task 12 Steps 5–13 final checkpoint](../quality/accessibility-and-guidance-release-gates.md#task-12-steps-513-final-checkpoint) |
+
+The current decision is independent from positioning/transfer, pre-commute accessibility notifications, crowding, Arrival Truth Gate 0, Nearby/offline, and Release 1 accessibility. No other feature, fixture count, synthetic completeness, aggregate, or review can waive it. Only GO or NO-GO is available; no Conditional GO applies.
+
+### Exact current coverage census
+
+| Coverage evidence item | Current count or value | Decision effect |
+|---|---:|---|
+| Included Release 2 complexes | **None** | No complex is authorized or included |
+| Real 38-field atomic rows | **0** | No real scope is structurally supported |
+| Eligible rows | **0** | No row may enter runtime positioning evaluation |
+| Real priority complexes | **0** | No real priority queue or category assignment exists |
+| Verified destination-exit objectives | **0** | No exit-positioning objective is demonstrated |
+| Verified transfer objectives | **0** | No transfer-positioning objective is demonstrated |
+| Verified accessible objectives | **0** | No accessible-positioning objective is demonstrated |
+| Observed visible outputs | **0** | No rider-visible behavior is demonstrated |
+| Observed assistive outputs | **0** | No assistive behavior or parity is demonstrated |
+| Reviewed feedback records | **0** | No feedback handling or correction is demonstrated |
+| `PCOV-01`–`PCOV-20` fixed definitions | **20** | Definitions only; all remain **Not run — Pending** |
+| `PCOV-01`–`PCOV-20` execution results | **20 Not run — Pending** | No fixture supplies passing evidence |
+
+Coverage included is **None**. Every real complex, constituent, route, pattern, direction, destination, directional platform/orientation, objective, target, accessible path, zone relationship, field visit, verifier, output, and feedback record is unsupported for this feature. Unsupported does not mean inaccessible or operationally unavailable.
+
+### Exact row and omission rule
+
+Task 12 requires the accepted Task 7 atomic record plus one exact Task 10 38-field coverage row for each released atomic scope. All 38 fields must be fixed to the same immutable version, including current orientation, verification date, named verifier, durable sources and field check, every restriction and exclusion, all five same-version decisions, disposition, and field 38.
+
+Missing, blank, placeholder, inherited, unresolved, stale, differently versioned, unsigned, or unreviewed content makes the row ineligible and omits positioning. There is no percentage-complete, station-summary, complex-summary, shared-platform, nearby-row, priority, or bulk-enable substitute.
+
+The synthetic field-38 lifecycle value **Pending — Task 12 not yet decided** remains a pre-decision input only. Even when every other field and field-38 element is synthetically complete, it does not approve an artifact, include a real complex, create an eligible real row, authorize display, or authorize release. `PCOV-01` remains an unexecuted expected-policy definition.
+
+### Reverification, conflict, and feedback boundaries
+
+Any accepted or materially unresolved change to geometry, passage, exit/corner, elevator chain, boarding area, platform, orientation, direction, destination, service pattern, stopping relationship, or source version makes only the affected row **Reverification required / ineligible** immediately. Omit the affected recommendation while preserving the prior immutable row, adverse evidence, unaffected rows, decisions, correction, and rerun.
+
+A transient runtime conflict suppresses current output without rewriting durable structure unless accepted evidence proves a durable relationship change. Preserve exact visible and assistive conflict copy **Track change—check station signs** and **Service change—this train's downstream stops are not verified.** Missing or Unknown truth cannot become an Expected or Verified zone.
+
+Feedback uses exactly:
+
+- **Wrong zone**
+- **Unclear instruction**
+- **Changed station geometry**
+
+There is no Other category. Split a multi-category report into linked records. Feedback never verifies geometry, orientation, accessibility, or coverage. A credible material **Wrong zone** or **Changed station geometry** report makes the exact row ineligible; materially misleading **Unclear instruction** suppresses the wording until a same-scope content correction and review close the risk.
+
+### Fixed package, reviewers, and authorization
+
+No fixed product/build, real coverage package, priority source, field evidence, verification date, named verifier, rendered output, feedback corpus, denominator, reviewer signature, correction, or rerun exists.
+
+| Required reviewer | Actual identity | Artifact decision | Decision date | Durable signature/evidence | Findings/correction/rerun |
+|---|---|---|---|---|---|
+| Product | **Pending** | **Pending** | **Pending** | **Pending** | **Pending — none recorded** |
+| Accessibility | **Pending** | **Pending** | **Pending** | **Pending** | **Pending — none recorded** |
+| Data Quality | **Pending** | **Pending** | **Pending** | **Pending** | **Pending — none recorded** |
+| Content | **Pending** | **Pending** | **Pending** | **Pending** | **Pending — none recorded** |
+| Operations | **Pending** | **Pending** | **Pending** | **Pending** | **Pending — none recorded** |
+
+Artifact approval is separate from release authorization. Assignment, authorship, task review, attendance, or silence is not a signature. GO requires every declared real atomic row, exclusion, output, feedback/correction, zero-tolerance conflict check, and five-role same-version review to pass on one immutable package. Any missing row, zero or unfixed denominator, Pending, **Run — Fail**, **Run — Inconclusive**, **Changes required**, version mismatch, missing signature, open trigger, or safety finding requires NO-GO.
+
+No correction or rerun is recorded. Future work appends the original and corrected immutable versions, exact affected scope, owner, evidence, five new same-version decisions, separate output results, and a new signed decision. It never rewrites this census or current result.

@@ -237,3 +237,88 @@ All current audit results, fixture observations, reviewer decisions, evidence at
 - [ ] The current no-go and blocked public-board decisions remain explicit.
 
 Every unchecked required item blocks crowding enablement and release consideration. This documentation commit is not working-product evidence.
+
+## Task 12 final crowding checkpoint
+
+This is a separately signable, append-only readout. It preserves the first 239 lines at accepted blob `6dbfa4d4512c8aae849d9a39690d44dd0816ca37`, including the dated-source finding, proxy ban, seven-condition gate, full-omission behavior, accessibility precedence, `CRD-01`–`CRD-16` definitions, and every Pending result.
+
+| Checkpoint field | Current value |
+|---|---|
+| Checkpoint ID | `CRD-T12-FINAL-v1`; decision-record identifier only |
+| Evaluated base | Commit `841b4df8d0b6346cbbde428fbd83d77b2f68b417` |
+| Owner | Guidance Product Lead |
+| Required reviewers | Product, Accessibility, Data Quality, Content, Operations |
+| Evaluation date | 2026-07-30 |
+| Artifact approval | **Pending** |
+| Actual decision identity | **Pending** |
+| Current decision | **NO-GO — SUBWAY CAR-LEVEL CROWDING REMAINS DISABLED** |
+| Release authorization | **Unsigned** |
+| Central checkpoint | [Task 12 Steps 5–13 final checkpoint](../quality/accessibility-and-guidance-release-gates.md#task-12-steps-513-final-checkpoint) |
+
+This decision is independent from Arrival Truth, Nearby/offline, Release 1 accessibility, positioning/transfer, platform coverage, and pre-commute accessibility notifications. Crowding evidence cannot waive another feature's blocker, and another feature cannot enable crowding. Only GO or NO-GO is available; there is no Conditional GO.
+
+### Current omission and evidence census
+
+Subway crowding remains completely absent on every launch surface. Show no module, shell, car row, badge, legend, placeholder, coming-soon treatment, stale or typical diagram, proxy estimate, partial train, grey/blank car, or rider-facing **Unknown** car. Historical occupancy, headways, bunching, station density, rider reports, engagement, schedules, and line conditions retain only separately approved original meanings and never become live car-level capacity.
+
+| Required evidence | Current value | Decision effect |
+|---|---|---|
+| Fresh immutable pre-launch official-source audit | **Not run — Pending** | Blocks every train and the global feature |
+| Approved qualifying source and immutable capture | **None** | Blocks |
+| Approved source schema and semantics | **None** | Blocks |
+| Coherent one-to-one real train matches | **0** | Blocks |
+| Real every-car occupancy records | **0** | Blocks |
+| Real consist length/order records | **0** | Blocks |
+| Real current directional-orientation records | **0** | Blocks |
+| Approved route/fleet coverage rule and denominator | **None** | Blocks globally |
+| Observed visible or assistive product outputs | **0** | Blocks |
+| Named same-package reviewer decisions/signatures | **0** | Blocks |
+| `CRD-01`–`CRD-16` definitions | **16** | Definitions only |
+| `CRD-01`–`CRD-16` execution results | **16 Not run — Pending** | No fixture supplies evidence |
+| Corrections and reruns | **None** | No later evidence exists |
+
+The July 30, 2026 documentation review remains a dated finding, not a current or permanent no-source claim. The required fresh audit has not occurred, and no source, audit capture, coverage population, schema, train, car, consist, orientation, output, reviewer, approval, or authorization is inferred.
+
+### Seven simultaneous future conditions
+
+A fresh immutable pre-launch audit is necessary but never sufficient. Each exact displayed train and the global release scope must pass all seven conditions together on one immutable package:
+
+| Condition | Current evidence |
+|---|---|
+| 1. Approved official, authoritative, current source with permitted car-level semantics and immutable provenance | **Pending / none** |
+| 2. Coherent one-to-one match to the exact displayed train; trip ID alone is insufficient | **Pending / none** |
+| 3. Accepted occupancy for every actual car; no aggregate, partial, blank, or Unknown car | **Pending / none** |
+| 4. Current actual consist length and exact car order | **Pending / none** |
+| 5. Current directional Front-to-Back orientation for the exact direction, platform, and service pattern | **Pending / none** |
+| 6. Authoritative source age no more than 90 seconds at declared precision | **Pending / none** |
+| 7. Predeclared, reviewed route-and-fleet coverage rule with immutable population, numerator, denominator, window, currency, exclusions, and gap treatment | **Pending / none** |
+
+One failure or missing field omits the whole module. A passing train cannot compensate for missing global coverage. A source discovery cannot compensate for absent train identity, every-car data, consist, orientation, freshness, or coverage. No average, confidence score, typical consist, historical order, manual judgment, or partial display can compensate for another condition.
+
+Freshness remains inclusive at exactly 90.000 seconds and fails at the first representable value above 90 seconds at the declared precision; at one-millisecond precision, 90.001 seconds fails. Phone time, retrieval time, rounding, future/regressed repair, or a precision-ambiguous boundary cannot strengthen the result.
+
+Direction reversal, reroute, consist/order change, train-match change, source/schema change, or unresolved orientation forces a fresh complete audit/evaluation. Until every condition and later authorization passes again, omit the entire visible and assistive module.
+
+### Conditional presentation remains unavailable
+
+The future labels **Seats likely**, **Room to stand**, and **Very crowded** remain conditional definitions only. No occupancy thresholds, icon design, color values, contrast decision, last-update format, aggregation policy, exact-count policy, or approved source semantics exists. None may appear now.
+
+If a future package passes, text, meaningful icon, color, verified Front-to-Back order, equivalent assistive order/meaning, source-owned last update, and the conditions-may-change caveat must remain together. Exact passenger counts remain absent without separately approved source precision and presentation policy.
+
+Accessibility and safety always outrank crowding convenience. A future less-crowded zone can never override a verified accessible boarding/exit zone, Accessible Route Only, safe-platform guidance, a hard conflict, an unavailable positioning claim, or an unverified path.
+
+### Artifact review and append-only reevaluation
+
+| Required reviewer | Actual identity | Artifact decision | Decision date | Durable signature/evidence | Findings/correction/rerun |
+|---|---|---|---|---|---|
+| Product | **Pending** | **Pending** | **Pending** | **Pending** | **Pending — none recorded** |
+| Accessibility | **Pending** | **Pending** | **Pending** | **Pending** | **Pending — none recorded** |
+| Data Quality | **Pending** | **Pending** | **Pending** | **Pending** | **Pending — none recorded** |
+| Content | **Pending** | **Pending** | **Pending** | **Pending** | **Pending — none recorded** |
+| Operations | **Pending** | **Pending** | **Pending** | **Pending** | **Pending — none recorded** |
+
+Artifact approval and release authorization remain separate. Assignment, authorship, task review, attendance, silence, an audit, a source discovery, or a synthetic fixture is not approval or authorization.
+
+GO requires a fresh immutable audit, all seven simultaneous conditions, every `CRD` and real-scope check, complete visible/assistive evidence, no open safety or accessibility conflict, and five explicit same-package approvals. Any Pending, missing evidence, **Run — Fail**, **Run — Inconclusive**, **Changes required**, version mismatch, missing signature, or safety finding requires NO-GO.
+
+No correction or rerun is recorded. A future correction appends the exact original/corrected source, audit, schema, train, consist, orientation, coverage, output, reviewer package, affected scope, owner, reason, and new attempts. Preserve this decision and every original Pending or adverse result; a later GO never erases them.

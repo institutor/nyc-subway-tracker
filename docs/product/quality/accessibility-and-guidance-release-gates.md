@@ -211,3 +211,159 @@ Task 12 Steps 5–13 are **Pending — not evaluated at checkpoint 1**.
 | Step 13 — final terminology review | **Pending — not evaluated at checkpoint 1** |
 
 No future platform-coverage register, crowding gate, Release 2 result, commute-notification result, cross-risk result, or terminology decision is created or claimed here. None can waive this Release 1 safety blocker. Task 7 starts only after this checkpoint decision is recorded.
+
+## Task 12 Steps 5–13 final checkpoint
+
+This section is a separately signable, append-only checkpoint. It preserves every byte and decision in `A11Y-R1-GATE-v1` above, including the separate Arrival Truth Gate 0, Nearby/offline, and Release 1 accessibility no-go records, the 17-case/54-definition census, the one failed-response control, all Pending results, and the unsigned Release 1 authorization. A later feature cannot pass, merge, weaken, or waive any of them.
+
+| Checkpoint field | Recorded value |
+|---|---|
+| Checkpoint identifier | `A11Y-PLATFORM-FINAL-v1`; decision-record identifier only |
+| Fixed assessment base | Commit `841b4df8d0b6346cbbde428fbd83d77b2f68b417` |
+| Preserved Release 1 prefix | Blob `bbb18d88777258a5136686e92423d3d62b335374`; first 213 lines |
+| Owner | Release Quality Lead |
+| Evaluation date | 2026-07-30 |
+| Governance status | Draft; artifact approvals Pending |
+| Actual decision identity | **Pending** |
+| Release authorization | **INTENTIONALLY UNSIGNED — REQUIRED FIXED EVIDENCE AND REVIEWER DECISIONS ARE NOT DEMONSTRATED.** |
+| Supersedes | None; this checkpoint appends to, and does not replace, `A11Y-R1-GATE-v1` |
+
+The fixed base contains accepted documentation definitions, not working-product evidence. Product/build, configuration, source captures, field inventory, real coverage, outputs, attachments, reviewer identities, signatures, authorization, corrections, and reruns are absent or Pending.
+
+### Independent current feature decisions
+
+| Feature boundary | Current decision | Release effect |
+|---|---|---|
+| Release 2 positioning and transfer | **NO-GO — RELEASE 2 POSITIONING AND TRANSFER EVIDENCE IS NOT DEMONSTRATED** | No Front/Middle/Back or transfer-likelihood claim is authorized for release. |
+| Pre-commute accessibility notification | **NO-GO — PRE-COMMUTE ACCESSIBILITY-NOTIFICATION EVIDENCE IS NOT DEMONSTRATED** | No accessible-path commute push, pilot, or release is authorized. |
+| Platform-guidance coverage and reverification | The independently owned current decision is recorded in the [platform coverage register](../guidance/platform-coverage-register.md#task-12-final-platform-coverage-checkpoint). | Missing real coverage cannot inherit a result from positioning, transfer, commute, or crowding. |
+| Subway car-level crowding | The independently owned current decision is recorded in the [subway crowding enablement gate](../crowding/subway-crowding-enablement-gate.md#task-12-final-crowding-checkpoint). | Crowding remains a wholly separate omission gate. |
+
+These are four independent feature decisions. No feature waives another, and none waives Gate 0, Nearby/offline, Release 1 accessibility, or the [Task 10 commute-alert decision](../release/commute-alert-go-no-go-record.md#controlling-initial-disposition). Only GO or NO-GO is available at this checkpoint; there is no Conditional GO.
+
+### Immutable evaluated versions
+
+| Evaluated dependency | Immutable accepted version at the fixed base | Checkpoint use |
+|---|---|---|
+| [Platform evidence standard](../guidance/platform-evidence-standard.md) | Blob `a942d520da172f0c4c983114135d857b6461f572` | Atomic evidence, orientation, conflict, recovery, and Task 10 coverage handoff |
+| [Platform state and positioning certainty matrix](../guidance/platform-state-and-certainty-matrix.md) | Blob `e6091e6a9ac9379797f7a9851aa9e172afee6a1f` | 13 PG fixture families and 22 branches |
+| [Positioning rider experience](../guidance/positioning-rider-experience.md) | Blob `4ef128ec308e7804c02d36f0c843ca34badfbf37` | `POS-33`–`POS-35` rider and assistive behavior |
+| [Transfer connection assessment](../guidance/transfer-connection-assessment.md) | Blob `23cfaba8b512facd163c9bcd2f7be7b4a32e1a6c` | 25 XFER definitions and exact boundary vocabulary |
+| [Accessibility acceptance pack](../accessibility/accessibility-acceptance-pack.md) | Blob `caad060f28e50feec9aaea5358c6248a4c26d8bd` | Release 1 census plus appended Release 2 positioning definitions |
+| [Complete accessible-path contract](../accessibility/complete-path-contract.md) | Blob `eb0206aab5ebcd6ea6bca73e817c9bc9b1ebfaf1` | Exact selected path and complete-path authority |
+| [Accessible Route Only matrix](../accessibility/accessible-route-only-state-matrix.md) | Blob `87136a54aa5b6a21d2617d186255651c0bfa0377` | Hard constraint and accessible-zone priority |
+| [Equipment status policy](../accessibility/equipment-status-policy.md) | Blob `dab01743e7226a95288e22071b04651aa5afd2f3` | Equipment state, freshness, and Unknown treatment |
+| [Path-impact and reroute playbook](../accessibility/path-impact-and-reroute-playbook.md) | Blob `bad8188c7f2bc134fed15eabfa294a631c8a13ca` | Blocking-path consequence and independently verified alternative |
+| [Underway warning matrix](../accessibility/underway-warning-state-matrix.md) | Blob `eecf847e786d0d8fe71a4d378e7ca06135fea152` | Separate Release 1 underway-warning evidence |
+| [Commute launch checklist](../release/commute-alert-launch-checklist.md) | Blob `d5e22aacbc3250d63c362953186e1f4631104769` | Fixed prerequisites and strict pre-window target |
+| [Commute launch scenarios](../release/commute-alert-scenario-results.md) | Blob `ee17ebee93f4c79f9cafa43f9b3fd028603951bd` | 27 Pending launch fixtures, including scenario 39 |
+| [Commute go/no-go record](../release/commute-alert-go-no-go-record.md) | Blob `acf0fe625245b0a943af143499ccb57ecacf6988` | Controlling Task 10 decision and absent fixed evidence |
+
+Accepted commute Tasks 2–10 are bound as immutable documentation inputs: Task 2 `6adc993fb40ece43f1239e17d9e70a39b81f63b4` plus accepted corrective revision `33af4d48f5a6d2d482041cdf2bf94f3c6d8b9a01`; Task 3 `3593416c5a475a43d30bc31160ecba7d803fca53`; Task 4 `d893728d92fc90ebb7f364e9e61f9fecc8ce54e4`; Task 5 `875d5eb9223e3c7b046af6c6346addac8bab0522`; Task 6 `3c38f56624e4e5febf94dfc34a65c84927e04557`; Task 7 `404bad3c9cb9ffa6cb7536dcbb1946c6e1e020d9`; Task 8 `1ba4a96737311261ccbaa22c8b39a537fd82fde7`; Task 9 `a35144d3c3ca049cb2b761b1b8a833c6c151f41f`; and Task 10 `841b4df8d0b6346cbbde428fbd83d77b2f68b417`.
+
+The Task 10 controlling result remains **NO-GO — prerequisites and fixed-version evidence incomplete**. That documentation package contains no fixed executable build, source run, delivery, pilot, reviewer signature, or authorization and therefore supplies no passing commute-notification evidence here.
+
+### Positioning and transfer evidence readout
+
+| Required evidence family | Frozen census | Current fixed evidence | Current effect |
+|---|---:|---|---|
+| Platform state and positioning certainty | 13 `PG` families / 22 branches | All 22 branches **Not run — Pending** | Blocks |
+| Positioning rider experience | 3 definitions: `POS-33`, `POS-34`, `POS-35` | All 3 **Not run — Pending**; counted once, not duplicated by the accessibility pack | Blocks |
+| Transfer assessment | 25 `XFER` definitions | All 25 **Not run — Pending** | Blocks |
+| Atomic real evidence | Exact station/complex, constituent, route, direction, service pattern, platform/track, stopping relationship, zone geometry, orientation, verification date, sources, conflicts, and independent reviewer package | No fixed real record, source capture, field verification, output, or signature | Blocks |
+| Visible and assistive parity | Same state, certainty, scope, order, consequence, conflict, recovery, and action | **Not run — Pending** | Blocks |
+
+Every released positioning or transfer scope must prove complete atomic coverage, current direction/orientation and verification date, exact train/platform relationship, hard-conflict suppression, accessible-zone priority, and independently evidenced recovery after reversal or conflict. A transient conflict cannot rewrite durable geometry; a prior result cannot be mechanically reversed. Current accepted evidence must establish the new orientation and every dependent claim before guidance returns.
+
+The exact transfer boundary fixtures remain:
+
+| Boundary fixture | Exact frozen decision |
+|---|---|
+| `XFER-B03-BELOW` / `AT` / `ABOVE` | Spare `2:59` is **Tight**; `3:00` and `3:01` are **Likely** |
+| `XFER-B05-BELOW` / `AT` / `ABOVE` | Accessible spare `4:59` is **Tight**; `5:00` and `5:01` are **Likely** |
+| Optimistic interval versus walk | `O<W` is **Unlikely**; `O=W` is **Uncertain** |
+| Conservative interval versus walk | `C=W` is **Tight** |
+| Conservative interval with buffer | `C=W+B` is **Likely** |
+| Range straddles walk feasibility | **Uncertain** |
+| Accessible buffer | Effective accessible minimum is 5 minutes; a smaller stored general preference does not lower it |
+
+No rounding, phone time, board-order estimate, running assumption, guessed platform, guessed zone, historical orientation, or partial accessible chain may strengthen these outcomes.
+
+### Pre-commute accessibility-notification readout
+
+This subdecision binds the accepted commute Tasks 2–10 to actual working-product accessibility evidence; definitions alone do not pass it. It does not replace the separate Release 1 underway-warning gate.
+
+| Required proof | Exact requirement | Current fixed evidence |
+|---|---|---|
+| Selected path | Exact saved journey occurrence, selected complete path/version, required connection/equipment, route, direction, constituent, entrance, transfer, exit, and consequence | Absent; **Not run — Pending** |
+| Blocking truth | Current, coherent, source-owned blocking evidence for that exact path; Unknown remains Unknown and is not an outage or a no-outage claim | Absent; **Not run — Pending** |
+| Timing | When complete evidence and all gates are ready before the window, delivery must satisfy `delivery_time < window_start`; exactly at start is late | No delivery or authoritative timing evidence |
+| Broken-path role | The failed edge must be required by the selected path and materially change the commute decision | No fixed path-impact execution |
+| Alternative | Offer only an independently verified, currently complete alternative; never label an unverified official alternative accessible or silently activate it | No fixed alternative execution |
+| Final check | Immediately recheck lifecycle, explicit permission, connectivity, window, source currentness, exact path/scope, vetoes, alternative, hold state, and prior delivery | No final-check attachment |
+| Deduplication | One normalized episode/impact/occurrence delivery; wording, source, timestamp, or overlapping-window equivalence causes no second push | No delivery ledger or dedupe execution |
+| Visible/assistive parity | Same exact path impact, consequence, certainty, action, timing, and order | No rendered or assistive result |
+| Separate underway warning | Release 1 `IMP-09`, `IMP-10`, `IMP-13`, and `IMP-14` evidence remains independently required | **Not run — Pending** under `A11Y-R1-GATE-v1` |
+
+Mandatory commute scenarios remain definitions only:
+
+| Scenario | Required accessibility-notification boundary | Current result |
+|---|---|---|
+| 36 | Unused saved segment is Suppress with no push | **Not run — Pending** |
+| 37 | Exact saved-origin bypass produces exactly one actionable push when every gate passes | **Not run — Pending** |
+| 38 | Wording-only equivalent produces no duplicate | **Not run — Pending** |
+| 39 | Exact required elevator failure produces a path-scoped alert strictly before start when ready pre-window, plus only an independently verified alternative | **Not run — Pending** |
+| 48 | Four minutes and exactly five minutes suppress; above five requires the accepted persistence and final recheck | **Not run — Pending** |
+| 42 where time affects the decision | Authoritative source chronology controls; phone time never strengthens freshness or persistence | **Not run — Pending** |
+
+No operational-case count is established or inferred from these definitions. No source capture, real commute, fixed build, notification attempt, acknowledgment, visible/assistive output, reviewer decision, correction, rerun, or pilot evidence exists.
+
+### Cross-risk and terminology reconciliation
+
+The following vocabularies remain exact and independent:
+
+- snapshot: **Current**, **Degraded**, **Unavailable**, **Provisional empty**;
+- equipment: **No official outage reported**, **Out of service**, **Planned outage**, **Unknown**;
+- positioning: **Verified**, **Expected**, **Unavailable**;
+- platform: **Platform confirmed**, **Expected platform**, **Check station signs**; and
+- transfer: **Likely**, **Tight**, **Uncertain**, **Unlikely**.
+
+Raw or unconfirmed empty, stale, anomalous, failed, malformed, incomplete, unmatched, or unjoinable evidence never becomes **No official outage reported**. **Unknown** never becomes an outage or a no-outage state. Transfer **Uncertain** is not platform **Check station signs**, positioning **Unavailable**, or arrival **Arrival uncertain**.
+
+For an invalidating nonterminal actual-versus-scheduled-track conflict, preserve exact visible and assistive context **Track change—check station signs** and exact explanation **Service change—this train's downstream stops are not verified.** Suppress the affected arrival row and every dependent platform, positioning, transfer, and accessibility claim while preserving unrelated service. Offline treatment preserves exact **Offline—live arrivals, alerts, and elevator status are unavailable.**
+
+Accessibility and safe-platform guidance always outrank fastest exit, quickest transfer, or crowding convenience. No positioning claim may strengthen platform truth; no transfer arithmetic may repair a missing interval, failed path, hard conflict, or Unknown equipment state; no commute push may establish operational truth.
+
+The artifact index does not contain the full Task 12 final-checkpoint provenance and does not include Privacy in the commute-notification reviewer set. Product Governance reconciliation remains **Pending**; this checkpoint does not edit the index or infer approval.
+
+### Artifact review and authorization
+
+Artifact approval and feature authorization are separate. Assignment, authorship, a task review, attendance, silence, or another feature's decision is not approval.
+
+| Feature package | Reviewer role | Actual reviewer identity | Artifact decision | Decision date | Durable signature/evidence | Correction/rerun |
+|---|---|---|---|---|---|---|
+| Positioning/transfer | Product | **Pending** | **Pending** | **Pending** | **Pending** | **Pending — none recorded** |
+| Positioning/transfer | Accessibility | **Pending** | **Pending** | **Pending** | **Pending** | **Pending — none recorded** |
+| Positioning/transfer | Data Quality | **Pending** | **Pending** | **Pending** | **Pending** | **Pending — none recorded** |
+| Positioning/transfer | Content | **Pending** | **Pending** | **Pending** | **Pending** | **Pending — none recorded** |
+| Positioning/transfer | Operations | **Pending** | **Pending** | **Pending** | **Pending** | **Pending — none recorded** |
+| Pre-commute accessibility notification | Product | **Pending** | **Pending** | **Pending** | **Pending** | **Pending — none recorded** |
+| Pre-commute accessibility notification | Accessibility | **Pending** | **Pending** | **Pending** | **Pending** | **Pending — none recorded** |
+| Pre-commute accessibility notification | Data Quality | **Pending** | **Pending** | **Pending** | **Pending** | **Pending — none recorded** |
+| Pre-commute accessibility notification | Content | **Pending** | **Pending** | **Pending** | **Pending** | **Pending — none recorded** |
+| Pre-commute accessibility notification | Privacy | **Pending** | **Pending** | **Pending** | **Pending** | **Pending — none recorded** |
+| Pre-commute accessibility notification | Operations | **Pending** | **Pending** | **Pending** | **Pending** | **Pending — none recorded** |
+
+| Authorization field | Positioning/transfer | Pre-commute accessibility notification |
+|---|---|---|
+| Fixed same-version package | **Pending** | **Pending** |
+| Actual decision owner | **Pending** | **Pending** |
+| Five/six required signatures | **Pending** | **Pending** |
+| Artifact approval | **Pending** | **Pending** |
+| Release authorization | **Unsigned** | **Unsigned** |
+
+GO requires every definition and real-scope row to **Run — Pass** on one immutable package, no unresolved safety or cross-risk finding, and every mandatory same-package signature. Any Pending, missing evidence, **Run — Fail**, **Run — Inconclusive**, **Changes required**, version mismatch, missing signature, or safety finding requires NO-GO. No conditional, risk acceptance, feature trade, or partial scope may waive a blocker.
+
+### Append-only correction and reevaluation
+
+No correction or rerun is recorded. A future correction must name its bounded scope, owner, original and corrected immutable versions, affected evidence, and reason. Preserve every original Pending, failed, inconclusive, prohibited, and reviewer result. Append a new sequential attempt and a new separately signed feature decision; never rewrite this checkpoint. A future GO cannot erase this no-go or any independent upstream no-go.
