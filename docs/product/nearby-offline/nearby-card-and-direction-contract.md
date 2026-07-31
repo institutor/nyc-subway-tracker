@@ -25,13 +25,13 @@ This artifact is **Draft**. The authoritative [Gate 0 exit record](../quality/ga
 
 Task 4 receives Task 3's final eligible complex order after transparent permitted personalization. It applies the following rule without another station-ranking pass:
 
-1. Take the first eligible complex in the supplied final order.
+1. Take the first eligible complex in Task 3's complete deterministic supplied order.
 2. Continue in that same order until three complexes are selected or no eligible complex remains.
 3. Show fewer than three when geography and governed evidence yield fewer than three.
 4. Preserve each complex's baseline nearest-useful rank and any visible personalization reason.
-5. Preserve the supplied entrance-to-constituent, entrance-to-direction, axis, closure, service, and accessibility relationships.
+5. Preserve the supplied entrance-to-constituent, entrance-to-direction, axis, closure, service, accessibility, and practical-walk tie relationships.
 
-Task 4 must not duplicate a complex, widen an entrance or direction relationship, relax a Task 3 exclusion, pull a lower complex upward because it has more arrival rows, or replace an honest smaller result set. Arrival quantity, Live state, disruption state, screen fit, and desire to fill three cards never change the station order.
+Task 4 applies no additional tie-break at the three-card cutoff. It preserves **About the same walk.** and **One of the closest confirmed entrances.** when supplied, and never turns a neutral presentation order into a uniquely-nearest claim. It must not duplicate a complex, widen an entrance or direction relationship, relax a Task 3 exclusion, pull a lower complex upward because it has more arrival rows, or replace an honest smaller result set. Arrival quantity, Live state, disruption state, screen fit, and desire to fill three cards never change the station order.
 
 If Task 3 cannot establish a nearby order without a centroid or geographic guess, Task 4 shows the governed station-picker path. It does not invent a card merely to make Nearby look populated.
 
@@ -249,7 +249,7 @@ Each fixture is an expected product review, not a rendered or observed result.
 
 | Review question | Required Draft result | Evidence needed later |
 |---|---|---|
-| Are up to three complexes taken from Task 3 without a second ranking pass? | Yes. | Scenario 21 plus Task 14 card-order observation |
+| Are up to three complexes taken from Task 3 without a second ranking or tie-breaking pass, including stable third-card membership for equal walks? | Yes. | Scenario 21, UR-C07 repeated-run result, and Task 14 card-order observation |
 | Does each card retain required identity, entrance, route, accessibility, disruption, direction, and arrival content? | Yes. | Task 14 rendered-card review |
 | Are all passenger-serving directions initially present? | Yes; ordinary and multi-axis fixtures prohibit hiding. | RC-01 and RC-02 observation |
 | Is upstream admission and order preserved exactly? | Yes. | Scenarios 1–5, AT-S50, and RC-03 |

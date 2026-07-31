@@ -45,13 +45,26 @@ The decision sequence is fixed:
 3. Apply hard entrance, closure, and current-service exclusions.
 4. When Accessible Route Only is enabled, apply the supplied exact path and equipment constraints.
 5. Compare practical street-walk usefulness only among the remaining entrances.
-6. Select the best eligible entrance for each relevant constituent station and direction.
+6. Select the shortest eligible entrance for each relevant constituent station and direction; when supported walking evidence cannot distinguish candidates, use the neutral presentation order below without calling one operationally better.
 7. Group verified connected constituents into one complex result without erasing operational axes or direction-specific entrance facts.
-8. Establish the baseline nearest-useful order.
+8. Establish the complete deterministic baseline nearest-useful order, including the neutral tie keys below.
 9. Apply only permitted, visible personalization as a presentation modifier.
 10. Preserve the closer workable comparison whenever personalization promotes a farther station.
 
 If entrance evidence cannot support a practical comparison, the app offers the bottom-anchored station picker. It does not fall back to centroid distance, guess an entrance, or invent a nearest result.
+
+## Deterministic equal-walk handling
+
+A candidate is strictly nearer only when the permitted location precision and supported practical-walk evidence distinguish it as shorter. Equal practical-walk values and walk estimates whose supported precision overlaps are a practical-walk tie. The app preserves that uncertainty; it does not manufacture extra distance precision to force a winner.
+
+After hard exclusions, establish the baseline order in two stages:
+
+1. For tied eligible entrances serving the same constituent and direction, order by normalized public street or corner description, then canonical entrance identity. Select the first only as the stable presentation entrance.
+2. Order eligible complex results by supported practical-walk value or range, then normalized rider-recognizable complex name, normalized constituent-station public identity, selected entrance public description, canonical complex identity, canonical constituent identity, and canonical entrance identity.
+
+The public-name and canonical-identity keys are neutral presentation keys only. They do not make the first tied entrance or complex closer, safer, more accessible, more reliable, or more useful. Source order, retrieval order, input enumeration, render order, route popularity, arrival quantity, Live state, and a desire to fill three cards are never tie-breakers.
+
+When a practical-walk tie is material to a selected entrance, a **nearest** label, or the three-card cutoff, use **About the same walk.** Do not call the first tied result uniquely nearest. When one of multiple tied entrances must be named, describe it as **One of the closest confirmed entrances.**
 
 ## Ranking evidence record
 
@@ -65,7 +78,7 @@ Every candidate, including excluded entrances, retains enough evidence to explai
 | Arrival usefulness | Direction-specific upstream qualified-arrival availability; supplied evidence state and board area; resolved service-change consequence; whether passenger service is established; distinction between no qualified arrival, unavailable data, and resolved no service. |
 | Accessibility | Accessible Route Only state; exact accessible entrance; constituent, route, direction, platform, transfer, and exit scope as applicable; verified path record; every required route-critical equipment state and freshness result; valid, invalid, or Unknown path; visible reason a closer unverified entrance lost. |
 | Personalization | Explicit saved station, entrance, or direction preference; permitted time-of-day context; baseline nearest-useful result; whether presentation order changed; visible reason for promotion; proof the closer workable result remains visible. |
-| Decision and review | Eligible or excluded disposition; exact exclusion reason; baseline practical-walk rank; final display rank; winning station and entrance; decisive evidence; rider-visible explanation; every closer candidate and why it did not win; reviewer, date, and evidence status. |
+| Decision and review | Eligible or excluded disposition; exact exclusion reason; supported practical-walk value or range; practical-walk tie membership; every applied neutral tie key; baseline practical-walk rank; final display rank; selected station and entrance; decisive evidence; rider-visible explanation; every strictly closer candidate and every tied candidate; reviewer, date, and evidence status. |
 
 Location is a ranking input only. It never admits a train, clears a service-change veto, establishes an accessible path, confirms a platform, or strengthens evidence.
 
@@ -259,12 +272,24 @@ Each case is an expected fixture. Its result remains **Not run — Pending** unt
 | Prohibited result | Rank A1 or B1 as useful; call an omitted closure record open; borrow A2's evidence; hide the station; use centroid distance; or let a saved preference override the exclusion. |
 | Evidence status | Not run — Pending |
 
+### UR-C07 — Equal-walk entrance and third-card ties
+
+| Case field | Fixed value |
+|---|---|
+| Inputs | Four eligible complexes A, B, C, and D each have a practical-walk estimate of about 5 minutes with the same supported precision, identical hard-constraint outcomes, and no personalization. Complex A has two equally supported eligible entrances, A1 and A2. Fixed normalized public descriptions and canonical identities place A1 before A2 and complexes A, B, C, then D. Repeat with source records, retrieval wrappers, and input enumeration shuffled. |
+| Baseline result | A1 is Complex A's stable presentation entrance. The complete baseline order is A, B, C, D; Task 4 therefore receives A, B, and C as the first three in every run. |
+| Decisive evidence | The walking evidence establishes one tie set. Public descriptions and canonical identities stabilize presentation and cutoff membership only; they do not establish a shorter walk or stronger transit state. |
+| Visible explanation | Preserve each supported approximate walk and show **About the same walk.** where the order or cutoff needs explanation. If A1 is named as the selected entrance, describe it as **One of the closest confirmed entrances.** |
+| Prohibited result | Call A1 or A uniquely nearest; invent finer distance precision; change the selected entrance, complex order, or third-card membership when inputs are shuffled; or use source, retrieval, render, route, arrival, or evidence-state order as a tie-break. |
+| Evidence status | Not run — Pending |
+
 ## Review and release conditions
 
 | Review question | Required Draft result | Evidence needed later |
 |---|---|---|
 | Does ranking start from usable entrances rather than centroids? | Yes. | Scenario 21 and entrance-coverage observation |
 | Are hard exclusions applied before walking comparison and personalization, including missing or stale entrance-closure evidence? | Yes. | UR-C01–UR-C06 observed results |
+| Do equal or precision-overlapping walks retain neutral wording and deterministic entrance, complex, and third-card selection under shuffled inputs? | Yes. | UR-C07 repeated-run observation |
 | Does every result preserve exact constituent and direction scope? | Yes. | Multi-axis and direction review |
 | Does Accessible Route Only reject Unknown without silently relaxing? | Yes. | Companion complete-path/equipment evidence and UR-C04 |
 | Can a preference hide or rewrite the closer workable result? | No. | UR-C05 and saved-state evidence |
