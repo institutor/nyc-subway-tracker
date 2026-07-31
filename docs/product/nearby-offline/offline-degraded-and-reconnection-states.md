@@ -188,7 +188,7 @@ OFF-T23 applies approved-specification §31.4 scenario 23 and the Task 10 tunnel
 | Stored eligibility, Task 8 Current/Stale/Topology rules, **Scheduled**, exact stale copy, reference-map copy, and offline accessibility wording | [Offline content and validity contract](offline-content-and-validity-contract.md), Task 8, consuming Arrival Truth | Apply exactly; do not recompute, rename, strengthen, or clear a veto. | Draft; five availability cases and Task 14 Not run — Pending |
 | Active-card fields, contingencies, claim-specific times, and manual progress | [Offline trip card and manual progress contract](offline-trip-card-and-progress-contract.md), Task 9 | Preserve exactly through Offline and recovery; never reset or use progress as evidence. | Draft; trip walkthroughs and Task 14 Not run — Pending |
 | Connectivity detection, route/feed recovery, service-change resolution, arrival admission, complete paths, equipment, positioning, transfer guidance, and verified alternatives | Their platform, Arrival Truth, accessibility, and guidance owners | Consume accepted results in priority order; fail closed and never manufacture a result. | Companion approvals and fixed-version evidence absent |
-| Personal-data rules and observed Nearby/offline cases | Task 12 and `docs/product/nearby-offline/acceptance-evidence.md`, Task 14 | Preserve current boundaries; do not define retention or claim observed evidence. | Artifacts and evidence absent |
+| Personal-data rules and observed Nearby/offline cases | Task 12 and `docs/product/nearby-offline/acceptance-evidence.md`, Task 14 | Preserve current boundaries; do not define retention or claim observed evidence. | Draft artifacts present; observed evidence and same-version approval Pending |
 
 ## Scenario traceability
 
@@ -197,7 +197,7 @@ OFF-T23 applies approved-specification §31.4 scenario 23 and the Task 10 tunnel
 | §18.3 Offline presentation | Exact persistent banner, stable last coherent screen, frozen cached values with claim-specific New York times, Task 8 schedule limits, route-critical equipment Unknown, exact map and accessibility wording | **Not run — Pending** |
 | §18.4 Reconnection | Exact five-stage recovery with accessibility first, service-change vetoes before arrivals, active context before background content, and a blocking scoped invalidation warning | **Not run — Pending** |
 | §31.4 scenario 23 | OFF-T23 keeps the current screen stable and enters explicit Offline state through tunnel loss and ordered recovery | **Not run — Pending** |
-| Task 10 acceptance evidence | No advancing or active-Live cache, visible five-stage order, no one-snapshot restoration, warning before unrelated refresh, and no context or progress reset | **Not run — Pending**; Nearby Task 14 artifact and observations are absent |
+| Task 10 acceptance evidence | No advancing or active-Live cache, visible five-stage order, no one-snapshot restoration, warning before unrelated refresh, and no context or progress reset | **Not run — Pending**; Nearby Task 14 evidence ledger is present, but observations and same-version approval remain Pending |
 
 All observations must use the same fixed product version reviewed by Product, Accessibility, Data Quality, Content, Privacy, and Operations. A written expectation, screenshot without state provenance, or unrecorded conversation is not scenario or approval evidence.
 

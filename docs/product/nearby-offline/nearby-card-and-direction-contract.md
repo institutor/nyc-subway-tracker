@@ -241,7 +241,7 @@ Each fixture is an expected product review, not a rendered or observed result.
 | Train identity | [Time and train continuity policy](../arrival-truth/time-and-train-continuity-policy.md) | Preserve one row, absence, or stronger independently qualified candidate exactly. | **NO-GO — GATE 0 NOT PASSED**; public boards blocked |
 | Schedule fallback | [Schedule fallback and currency policy](../arrival-truth/schedule-fallback-and-currency-policy.md) | Show only in the separated supplied fallback state. | **NO-GO — GATE 0 NOT PASSED**; public boards blocked |
 | Station-board expansion | [Station board and controls contract](station-board-and-controls-contract.md), Task 5 | Preserve station, direction, filters, upstream order, evidence-state labels, disruptions, and every disposition on expansion and return. | Draft; Task 14 Not run — Pending |
-| Accessibility | Companion artifacts planned under `docs/product/accessibility/` | Preserve exact scoped state; do not infer approval or path validity. | Approval and evidence absent |
+| Accessibility | Draft companion artifacts under `docs/product/accessibility/` | Preserve exact scoped state; do not infer approval or path validity. | Same-version approval and observed evidence Pending |
 | Scenarios 1–5 | [Arrival truth acceptance catalog](../quality/arrival-truth-acceptance-catalog.md) and `docs/product/nearby-offline/acceptance-evidence.md`, Task 14 | Apply expected visible Nearby result and prohibited checks. | Not run — Pending |
 | Release 1 | `docs/product/nearby-offline/release-1-readiness.md`, Task 15 | Make no readiness or launch claim. | Pending |
 

@@ -21,9 +21,9 @@ The [zero-tap startup and location-permission flow](zero-tap-startup-and-permiss
 
 The [station board and controls contract](station-board-and-controls-contract.md) owns the visible station-board application of §14.6 and §§15.1–15.5: compact station detail, bottom-third controls, refresh presentation, disclosures, scoped alerts, and cause-gated states. This experience contract retains cross-surface restore-first, refresh-second continuity, while Task 2 owns only the foreground lifecycle trigger. Supporting §16 visual, measured reach, contrast, assistive, and motion conformance remains with the [underground visual and reachability standard](underground-visual-and-reachability-standard.md), Task 6.
 
-The [map modes and journey behavior contract](map-modes-and-journey-behavior.md), Task 7, owns the Map destination's independent appearance, service-meaning, spatial-view, and overlay axes; Actual-now and reference-layer rules; reroute visualization; interaction continuity inside Map; and journey planning and ranking. This experience contract continues to own exactly four persistent destinations and the restore-first boundary across them. The map contract records specification §17 and §31.4 scenario 25 as its source provenance and marks the artifact-index reconciliation **Pending** before lifecycle advancement.
+The [map modes and journey behavior contract](map-modes-and-journey-behavior.md), Task 7, owns the Map destination's independent appearance, service-meaning, spatial-view, and overlay axes; Actual-now and reference-layer rules; reroute visualization; interaction continuity inside Map; and journey planning and ranking. This experience contract continues to own exactly four persistent destinations and the restore-first boundary across them. The map contract and its Draft index row now align on specification §17, §31.4 scenario 25, full Task 7 provenance, and the four-role review path; scenario execution, reviewer decisions, and lifecycle advancement remain **Pending**.
 
-This artifact is **Draft**. The authoritative [Gate 0 exit record](../quality/gate-0-exit-record.md) and the applying [Release 1 readiness record](release-1-readiness.md) state **NO-GO — GATE 0 NOT PASSED**; public arrival boards remain blocked. The [Release 1 risk register](risk-register.md) records current experience risks without changing their narrower owners or required responses. Every absent artifact and scenario result remains **Pending** until its own required review and observed evidence are complete. Accessibility, guidance, Task 6 rendered/measured evidence, Task 7 walkthrough evidence, rights resolution, and all six release-reviewer decisions remain absent. This contract makes no launch, readiness, or approval claim.
+This artifact is **Draft**. The authoritative [Gate 0 exit record](../quality/gate-0-exit-record.md) and the applying [Release 1 readiness record](release-1-readiness.md) state **NO-GO — GATE 0 NOT PASSED**; public arrival boards remain blocked. The [Release 1 risk register](risk-register.md) records current experience risks without changing their narrower owners or required responses. All allocated companion artifacts now exist as Drafts, but every scenario result remains **Pending** until its own required review and observed evidence are complete. Accessibility and guidance approvals, Task 6 rendered/measured evidence, Task 7 walkthrough evidence, rights resolution, and all six release-reviewer decisions remain absent. This contract makes no launch, readiness, or approval claim.
 
 ## Experience architecture
 
@@ -132,7 +132,7 @@ Nearby, Map, Commute, Saved, station detail, and offline trip surfaces consume g
 
 ## Cross-surface ownership
 
-Existing owned artifacts are linked. Planned artifacts remain code text until they exist and are reviewed.
+All owned artifact paths now exist as Drafts and are linked; their reviewer decisions and observed evidence remain Pending.
 
 | Product decision or state | Authoritative owner | Applying surface or evidence owner | This contract's boundary |
 |---|---|---|---|
@@ -158,7 +158,7 @@ Existing owned artifacts are linked. Planned artifacts remain code text until th
 
 ## Source–product–delivery allocation
 
-This table is the complete source-to-task allocation for the approved specification scope named by the nearby/offline plan. “Product allocation” names the decision boundary; “Delivery allocation” names one authoritative artifact and numbered task. Existing artifacts are linked; planned paths remain code text.
+This table is the complete source-to-task allocation for the approved specification scope named by the nearby/offline plan. “Product allocation” names the decision boundary; “Delivery allocation” names one authoritative artifact and numbered task. All allocated artifact paths now exist as linked Drafts; no link implies approval or observed evidence.
 
 | Specification source | Product allocation | Delivery allocation | Evidence or release allocation |
 |---|---|---|---|

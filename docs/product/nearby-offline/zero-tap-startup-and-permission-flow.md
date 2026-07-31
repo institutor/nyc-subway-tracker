@@ -21,9 +21,9 @@ This artifact is **Draft**. Its lifecycle outcomes, timing, scenario evidence, a
 
 ### §28.2 applying-provenance reconciliation
 
-The [artifact index](../artifact-index.md) and metadata above cite §§14.1–14.2, 28.1, and §31.4 scenario 22. This flow also applies §28.2 by prohibiting a notification-permission prompt during Nearby startup, permission handling, foreground return, Map, Saved, and offline-trip use. The [location and personal-data rules](location-and-personal-data-rules.md), Task 12, own that no-prompt boundary; the companion Commute workstream owns any later prompt after explicit first commute-alert enablement.
+The Draft [artifact index](../artifact-index.md) row now records §§14.1–14.2, 28.1–28.2, §31.4 scenario 22, full Task 2 provenance, and the Task 12 no-notification-prompt applying boundary. This flow applies §28.2 only by prohibiting a notification-permission prompt during Nearby startup, permission handling, foreground return, Map, Saved, and offline-trip use. The [location and personal-data rules](location-and-personal-data-rules.md), Task 12, own that no-prompt boundary; the companion Commute workstream owns any later prompt after explicit first commute-alert enablement.
 
-Record §28.2 as applying provenance in the index and artifact metadata before advancement from **Draft**. This Task 12 update does not edit the index, reassign the prompt to Task 2, manufacture review, or treat reconciliation as complete.
+This metadata alignment does not reassign the prompt to Task 2 or manufacture review. Every reviewer decision, scenario observation, and lifecycle advancement remains **Pending**.
 
 ## Zero-tap contract
 
@@ -216,7 +216,7 @@ Declining or limiting location must not produce coercive copy, repeated prompts,
 
 ## Cross-artifact ownership and scenario allocation
 
-Planned paths remain code text until those artifacts exist.
+All allocated artifact paths now exist as Drafts and are linked; their reviewer decisions and observed evidence remain Pending.
 
 | Decision or evidence | Owning artifact or task | Task 2 responsibility | Current disposition |
 |---|---|---|---|
@@ -246,5 +246,5 @@ Planned paths remain code text until those artifacts exist.
 | Does temporary location failure preserve a station screen without claiming old location is current? | Yes; it uses the required sentence and bottom actions. | Task 14 temporary-failure case |
 | Does foreground return restore context before refresh without another prompt or jump? | Yes. | Task 14 foreground-return case |
 | Can location admit, reorder, or strengthen a train or accessibility decision? | No. | Upstream evidence plus Task 14 integration cases |
-| Does this flow apply §28.2 only as a no-prompt boundary, with location and notification unbundled and every prompt decision retained by Commute? | Yes by contract; not observed. | PRIV-N01 and Product Governance provenance reconciliation |
+| Does this flow apply §28.2 only as a no-prompt boundary, with location and notification unbundled and every prompt decision retained by Commute? | Yes by contract; not observed. | PRIV-N01 and same-version Product, Accessibility, Data Quality, Content, and Privacy review |
 | Does the artifact preserve the current Gate 0 decision while keeping privacy, metrics, scenario evidence, and Release 1 claims Pending? | Yes. Gate 0 is **NO-GO — GATE 0 NOT PASSED** and public boards are blocked; the other listed claims remain Pending. | A later signed Gate 0 record plus required owner reviews and observed evidence |

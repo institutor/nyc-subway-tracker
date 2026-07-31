@@ -242,7 +242,7 @@ Any official map, symbol, logo, or brand asset without documented applicable rig
 | Live, Holding, degraded, stale, unavailable, and recovery truth | Linked arrival-truth policies and Gate 0 evidence owners | **NO-GO — GATE 0 NOT PASSED**; public boards blocked |
 | Accessible-path state and immediate blocking-change consequence | Companion accessibility owners | Approval and observed evidence absent |
 | Platform and positioning guidance | Companion guidance owners | Approval, coverage, and observed evidence absent |
-| Underground interaction observations, including reduced motion | `docs/product/nearby-offline/acceptance-evidence.md`, Nearby Task 14; Release Quality Lead | Artifact and rendered evidence absent; Not run — Pending |
+| Underground interaction observations, including reduced motion | `docs/product/nearby-offline/acceptance-evidence.md`, Nearby Task 14; Release Quality Lead | Draft evidence ledger present; rendered evidence and same-version approval Not run — Pending or Pending |
 | MTA rights and public-release use | Asset inventory owned here; Task 15 release review records the blocker | Rights authority and durable permission evidence absent; public use blocked |
 | Mandatory reviewer routing | Product Governance Lead under the review policy | Header and Draft index row list P/A/D/C; all same-version reviewer decisions remain Pending |
 

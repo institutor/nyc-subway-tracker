@@ -181,7 +181,7 @@ This is an expected fixed-version fixture, not observed evidence.
 | Stored structure, schedule validity, and exact reference-map label | [Offline content and validity contract](offline-content-and-validity-contract.md), Task 8 | Use only separately eligible stored content; saved preference never upgrades it. | Draft; Task 8 cases and Task 14 Not run — Pending |
 | Arrival, service-change, accessibility, equipment, platform, and guidance truth | Arrival Truth and companion accessibility/guidance owners | Apply accepted decisions at exact scope and fail closed; never persist them as preference. | Gate 0 and companion approval evidence absent |
 | Location privacy, personal-data inventory, retention, broad deletion assurance, diagnostics, notification boundary, and optional synchronization | [Location and personal-data rules](location-and-personal-data-rules.md), Task 12 | Consume the private-by-default and lifecycle boundary; define only the immediate visible station-specific actions above. | Draft; PRIV-M01, PRIV-S01, PRIV-Q01, and PRIV-N01 Not run — Pending |
-| Observed saved-state acceptance | `docs/product/nearby-offline/acceptance-evidence.md`, Task 14 | Record fixed-version observations and prohibited-result checks. | Artifact and observations absent |
+| Observed saved-state acceptance | `docs/product/nearby-offline/acceptance-evidence.md`, Task 14 | Record fixed-version observations and prohibited-result checks. | Draft evidence ledger present; observations and same-version approval Pending |
 
 ## Scenario traceability
 

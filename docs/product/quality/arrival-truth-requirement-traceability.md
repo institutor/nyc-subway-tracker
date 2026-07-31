@@ -84,9 +84,9 @@ Each row names exactly one product contract, one narrower policy or decision tab
 
 ## Cross-plan ownership
 
-These planned paths remain code-form references because the files do not yet exist. No truth-owned case duplicates their rules.
+These cross-plan owner artifacts now exist as Drafts and are linked below. Their evidence remains Pending in each owning workstream, and no truth-owned case duplicates their rules.
 
-| Scenarios | Owning workstream | Planned owner artifacts | Required evidence state |
+| Scenarios | Owning workstream | Owner artifacts | Required evidence state |
 |---:|---|---|---|
 | 45–46 | Accessibility and platform guidance | `docs/product/accessibility/equipment-status-policy.md`; `docs/product/accessibility/equipment-status-acceptance-table.md` | Pending in owning workstream |
 | 47 | Accessibility and platform guidance | `docs/product/guidance/transfer-connection-assessment.md` | Pending in owning workstream |

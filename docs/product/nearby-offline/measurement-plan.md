@@ -243,11 +243,11 @@ Every attempt is append-only and binds one fixed product version, fixed artifact
 | Arrival admission, evidence state, suppression, ghost decision, and later outcome | Arrival Truth and service-change owners | Consume accepted decision and coarse aggregate; never infer truth from engagement. | Draft/Pending; Gate 0 not passed |
 | Startup, Nearby, controls, preserved context, and station-card utility | Nearby Experience Product Lead | Define reviewed outcome and aggregate only. | Draft; Task 14 evidence absent |
 | Offline open, historical honesty, active card, and reconnection | Offline Experience Product Lead | Measure aggregate open/result and context-loss category without stored values. | Draft; Task 14 evidence absent |
-| Accessible validation, equipment state, and reroute | Accessibility and Equipment owners | Consume complete-path and current equipment outcomes; report coarse On/Off aggregate only. | Companion artifacts/evidence absent |
-| Platform guidance and correction | Guidance Product Lead | Keep in product readout but do not enable, calibrate, or infer. | Companion artifacts/evidence absent |
-| Commute actionability, mute, opt-out, and attribution | Commute Product Lead | Receive approved aggregate only; no notification or saved-commute data. | Companion artifacts/evidence absent |
+| Accessible validation, equipment state, and reroute | Accessibility and Equipment owners | Consume complete-path and current equipment outcomes; report coarse On/Off aggregate only. | Draft companion artifacts present; approval and observed evidence Pending |
+| Platform guidance and correction | Guidance Product Lead | Keep in product readout but do not enable, calibrate, or infer. | Draft companion artifacts present; approval and observed evidence Pending |
+| Commute actionability, mute, opt-out, and attribution | Commute Product Lead | Receive approved aggregate only; no notification or saved-commute data. | Draft companion artifacts present; approval and observed evidence Pending |
 | Privacy schema, aggregation floor, access, and retention | Privacy Lead under [location and personal-data rules](location-and-personal-data-rules.md) | Reject any row-level, joinable, or reconstructable input; omit unsafe measures. | PRIV-Q01 and MEAS-A04 Not run — Pending |
-| Acceptance evidence and go/no-go | Release Quality Lead and mandatory reviewers | Record fixed results and failures; this plan does not approve release. | Task 14 and Task 15 artifacts absent |
+| Acceptance evidence and go/no-go | Release Quality Lead and mandatory reviewers | Record fixed results and failures; this plan does not approve release. | Task 14 and Task 15 artifacts present; execution and same-version approval Pending |
 
 ## Draft review checklist
 

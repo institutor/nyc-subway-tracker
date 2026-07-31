@@ -19,11 +19,11 @@ This contract does not create an arrival, current stopping pattern, service-chan
 
 Current service consumes the [arrival admission and ordering contract](../arrival-truth/arrival-admission-and-ordering-contract.md), [service-change impact and resolution policy](../arrival-truth/service-change-impact-and-resolution-policy.md), and [reroute and track-conflict playbook](../arrival-truth/reroute-and-track-conflict-playbook.md). Service date and future patterns consume the [time and train continuity policy](../arrival-truth/time-and-train-continuity-policy.md), [source role and precedence matrix](../arrival-truth/source-role-and-precedence-matrix.md), and [schedule fallback and currency policy](../arrival-truth/schedule-fallback-and-currency-policy.md). Task 7 owns unmistakable online reference-layer meaning. The [offline content and validity contract](offline-content-and-validity-contract.md), Task 8, owns stored-map and offline-open eligibility, reference-itinerary eligibility, schedule-validity presentation, and application of the exact offline honesty copy **Reference pattern—not live.** That exact offline copy is Task 8 evidence, not Task 7 acceptance evidence.
 
-This artifact is **Draft**. The authoritative [Gate 0 exit record](../quality/gate-0-exit-record.md) is **NO-GO — GATE 0 NOT PASSED**; public boards blocked. Companion complete-path, equipment, guidance, and acceptance artifacts do not exist, scenario 25 and the walkthroughs below are **Not run — Pending**, and MTA map, symbol, and brand rights are unresolved. Contract prose is an expected product rule, not observed evidence or public-release permission.
+This artifact is **Draft**. The authoritative [Gate 0 exit record](../quality/gate-0-exit-record.md) is **NO-GO — GATE 0 NOT PASSED**; public boards blocked. Companion complete-path, equipment, guidance, and acceptance artifacts now exist as Drafts, but their reviewer decisions and observed evidence remain **Pending**; scenario 25 and the walkthroughs below are **Not run — Pending**, and MTA map, symbol, and brand rights are unresolved. Contract prose is an expected product rule, not observed evidence or public-release permission.
 
 ### Provenance reconciliation
 
-The product artifact index currently registers this Task 7 artifact against specification §17 only. The Task 7 brief, delivery plan, and required day-to-night walkthrough also allocate §31.4 scenario 25 here. Record that provenance reconciliation in the index before any lifecycle advancement. This task does not change the index; the reconciliation remains **Pending**.
+The Draft [product artifact index](../artifact-index.md) row now aligns with specification §17, §31.4 scenario 25, full Task 7 provenance, and the Product, Accessibility, Data Quality, and Content review path. That metadata alignment is not approval; scenario 25, the required day-to-night walkthrough, every reviewer decision, and lifecycle advancement remain **Pending**.
 
 ## Independent map axes
 
@@ -134,7 +134,7 @@ Reference layers show only their governed reference pattern. They do not absorb 
 
 ## Accessibility overlays
 
-Accessibility overlays consume companion complete-path, equipment, direction, entrance, platform, transfer, and destination-exit decisions. They do not infer a complete path from a station badge, one elevator, route color, normal topology, or missing outage record. The companion artifacts and observed evidence are absent, so no positive current accessibility claim is demonstrated here.
+Accessibility overlays consume companion complete-path, equipment, direction, entrance, platform, transfer, and destination-exit decisions. They do not infer a complete path from a station badge, one elevator, route color, normal topology, or missing outage record. The companion artifacts exist as Drafts, but their approvals and observed evidence remain Pending, so no positive current accessibility claim is demonstrated here.
 
 | Overlay state | Required redundant treatment | Meaning that may be presented only when supplied | Prohibited inference |
 |---|---|---|---|
@@ -251,9 +251,9 @@ An official feed or public reference is not a map or brand license. Any protecte
 | Dark/Light appearance, non-color meaning, legibility, assistive reading, and reach | [Underground visual and reachability standard](underground-visual-and-reachability-standard.md), Task 6 | Draft criteria exist; rendered/measured evidence remains Not run — Pending |
 | Current stopping patterns, service-change scope, reroutes, closures, and vetoes | Linked arrival-truth owners | Draft/Pending; **NO-GO — GATE 0 NOT PASSED**; public boards blocked |
 | Service date, supplemented horizon, regular schedule, edition selection, confidence, and currency | Linked arrival-truth time/source/schedule owners | Draft/Pending; scenario and currency evidence absent |
-| Full, Partial, Directional, Currently blocked, and Status unknown path results | Companion accessibility and equipment owners | Artifacts, approval, and observed evidence absent |
+| Full, Partial, Directional, Currently blocked, and Status unknown path results | Companion accessibility and equipment owners | Draft artifacts present; same-version approval and observed evidence Pending |
 | Stored maps, offline validity, reference-itinerary eligibility, and exact offline honesty copy | [Offline content and validity contract](offline-content-and-validity-contract.md), Task 8 | **Draft** contract exists and applies **Reference pattern—not live.** where stored/offline reference content could be mistaken for current; both map-open paths and the five availability cases remain Not run — Pending; this Task 7 contract makes no storage, offline-open, or offline-validity claim |
-| Reroute and scenario 25 observations | `docs/product/nearby-offline/acceptance-evidence.md`, Task 14; Release Quality Lead | Artifact and observed evidence absent; Not run — Pending |
+| Reroute and scenario 25 observations | `docs/product/nearby-offline/acceptance-evidence.md`, Task 14; Release Quality Lead | Evidence ledger present; observed evidence Not run — Pending |
 | MTA map, symbol, and brand rights | Task 15 rights review, with asset inventory initiated here | Durable permission evidence absent; protected public use blocked |
 
 ## Draft review checklist
