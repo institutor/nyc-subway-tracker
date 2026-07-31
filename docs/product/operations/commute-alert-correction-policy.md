@@ -9,7 +9,7 @@
 | Last validation date | 2026-07-30 |
 | Supersedes | None |
 | Approval evidence | Pending |
-| Drill results | [Not run — Pending](commute-alert-pilot-review-template.md#pending-drill-record) |
+| Scenario results | [Not run — Pending](commute-alert-pilot-review-template.md#pending-drill-record) |
 
 ## Purpose and authority
 
@@ -46,7 +46,21 @@ Apply the first matching step:
 | 4. Independent new worsening evidence | A new current accepted consequence is independently material under Tasks 5–6, rather than a correction of the prior evidence | Evaluate one ordinary Task 5/6 escalation with full current gates and deduplication | The approved ordinary escalation class/template only | Label it correction, bundle unrelated causes without approval, or send both correction and duplicate escalation |
 | 5. Verified improvement or release | Prior disruption delivery exists; current evidence independently proves governed improvement/release; rider had prospectively enabled recovery updates; every Task 5 recovery and Task 6 identity/deduplication gate passes | Evaluate Task 5 recovery prospectively | The approved Task 5 recovery class/template only | Routine all-clear, retroactive opt-in, release-hold message, or recovery from mere feed/alert disappearance |
 
-An **Unknown acknowledgment** proves neither Step 1 nor Step 3. Never assume success or failure, never retry, and never send a rider correction solely from Unknown. Hold or Suppress dependent action until acknowledgment semantics are approved.
+## Unknown acknowledgment correction boundary
+
+An **Unknown acknowledgment** proves neither Step 1 nor any delivered branch. Task 6 must append **Delivery unresolved — acknowledgment Unknown**, write no successful baseline or represented-window marker, and activate the exact unresolved-attempt lock. Steps 2 and 3 require authoritative Success evidence; Step 1 requires authoritative proof of non-delivery. Unknown supplies neither.
+
+While the lock is active, any same-occurrence, same-delivery-group candidate equivalent to or dependent on the unresolved impact remains **Hold for stronger evidence — Final recheck unresolved**. Never retry, replay, recover, correct, or write a successful baseline solely from Unknown. A preference or window edit that leaves normalized scope unchanged cannot evade the lock.
+
+Only these append-only transitions are allowed:
+
+| Transition | Correction effect |
+|---|---|
+| Authoritative Success resolves the exact immutable attempt | Close the lock and apply the original frozen class’s ordinary successful-delivery rule: initial/escalation may write its baseline and markers; recovery preserves that baseline and writes only its exact recovery marker. Then apply Step 2 or Step 3 to any materiality review; resolution itself sends nothing |
+| Authoritative Failed resolves the exact immutable attempt | Close the lock and apply Step 1; write no baseline and never retry or replay the original |
+| Occurrence expires while still Unknown | Append **Expired unresolved** without calling it Success or Failed; close only the active occurrence lock; no late delivery, recovery, or correction |
+
+A correction allegation while delivery remains Unknown is recorded as **Delivery unresolved**, not **Rider correction required** or **Not delivered**. An independently proven different occurrence or delivery group may receive its own ordinary evaluation, but it cannot resolve or correct the Unknown attempt.
 
 ## Supported correction effects
 
@@ -94,11 +108,11 @@ Every correction review preserves:
 | Fixed package | Product/build and Tasks 2–9 versions; incident and correction-policy version |
 | Original evidence | Source/effective/currentness timeline; accepted, rejected, quarantined, and unresolved evidence |
 | Original decision | Eligibility, threshold, timing, class, identity/equivalence, capability, final check, expected/actual outcome |
-| Delivery | No attempt, Success, Failed, or Unknown acknowledgment; successful delivery evidence where Step 2 or 3 is used |
+| Delivery | No attempt, authoritative Success, authoritative Failed, **Delivery unresolved — acknowledgment Unknown**, or **Expired unresolved**; immutable attempt linkage and authoritative resolution evidence; Success is mandatory where Step 2 or 3 is used |
 | Materiality | Exact before meaning, corrected supported meaning, rider choice consequence, and controlled material/not-material result |
 | Containment | Hold scope, queue cancellation, final switch result, unaffected routes/boards, accessibility/privacy classification |
 | Remedy | Applicable step, allowed narrowing/withdrawal/clarification, class/channel/template status, approvals |
-| History | Original baseline and ledger preserved; append-only transition and reason |
+| History | Original baseline and ledger preserved; append-only transition and reason; Unknown never overwrites a successful baseline or creates one |
 | Recovery | Cause-specific prerequisites, corrected fixed version, reruns, remaining holds, current-only release, no replay |
 
 The [incident log template](commute-alert-incident-log-template.md) records this non-personally. Exact personal evidence stays inside its Task 7 boundary.
@@ -113,6 +127,7 @@ The [incident log template](commute-alert-incident-log-template.md) records this
 | Prior disruption was correctly delivered and later verified improvement/release passes every prospective recovery gate | Step 5; Task 5 recovery |
 | A hold is operationally released | **Release hold**, not a rider recovery or correction |
 | A candidate went stale, ended, Offline, or outside-window before delivery | Step 1 plus Suppress where applicable; no late send |
+| Delivery acknowledgment remains Unknown | **Delivery unresolved**; no Step 1–3 classification, retry, replay, recovery, correction, or successful-baseline write; covered future action remains Hold |
 
 ## Accessibility and privacy
 
@@ -122,13 +137,14 @@ Neither Accessibility nor Privacy error may be reduced to “copy only” withou
 
 ## Pending gaps
 
-Correction/retraction class, channel, template, lock-screen behavior, acknowledgment semantics, seen state, severity ordering, remote token lifecycle, numeric “promptly,” and the Task 6 quiet-period proposal remain Pending. This policy invents none.
+Correction/retraction class, channel, template, lock-screen behavior, provider-specific evidence mappings that can authoritatively resolve Unknown, seen state, severity ordering, remote token lifecycle, numeric “promptly,” and the Task 6 quiet-period proposal remain Pending. The quiet proposal is not applied or used as gate input. The conservative Unknown state, lock, transitions, and correction prohibition apply without inventing a provider mapping.
 
 ## Draft review checklist
 
 - [ ] Materiality is tied to a rider decision, not wording churn.
 - [ ] The first matching one of exactly five steps controls.
-- [ ] Unknown acknowledgment is never assumed, retried, or used to trigger correction.
+- [ ] Unknown acknowledgment writes only the unresolved-attempt record, never a successful baseline, and is never assumed, retried, replayed, recovered, or used to trigger correction.
+- [ ] The exact Unknown lock remains until authoritative resolution or occurrence expiry and cannot be evaded by an equivalent preference/window edit.
 - [ ] Step 3 preserves evidence and exact state **Rider correction required**.
 - [ ] No correction class, channel, or copy is improvised.
 - [ ] Ordinary escalation, Task 5 recovery, and Release hold remain distinct.

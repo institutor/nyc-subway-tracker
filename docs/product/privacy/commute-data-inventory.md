@@ -19,9 +19,9 @@ The inventory is a data-minimization ceiling, not a collection backlog. An item 
 
 This artifact is **Draft**. It demonstrates no collection, deletion, permission, privacy, reviewer, pilot, or launch evidence. The authoritative posture remains **NO-GO — GATE 0 NOT PASSED**. The separate accessibility posture remains **NO-GO — REQUIRED ACCESSIBILITY EVIDENCE AND COVERAGE ARE NOT DEMONSTRATED**. Task 7 waives neither blocker.
 
-## Product Governance reconciliation
+## Product Governance alignment
 
-The product artifact index does not yet carry the full Task 7 provenance, Privacy ownership, or Data Quality review required for these additions. Product Governance reconciliation remains **Pending**. This task does not edit the index or treat the mismatch as approval.
+The product artifact index and this header align on the full Task 7 provenance, Privacy ownership, and the six-role reviewer set including Data Quality. The index and this artifact remain **Draft**, approval evidence remains **Pending**, and header alignment is not approval or launch evidence.
 
 ## Privacy boundary
 
@@ -81,17 +81,18 @@ Derived state does not extend the approved measurement period, tolerance, freshn
 |---|---|---|---|---|---|---|---|
 | Exact occurrence key and confirmed preference version | Bind delivery memory to one Task 1 occurrence and preference version | Approved occurrence generation and current confirmed preference | Device-local commute-linked delivery ledger | Retain only while needed to suppress replay or apply an approved recovery rule for that saved commute | Pause, edit and reconfirm, delete, or reset | Remove with the commute or owner-approved ledger reset | Do not claim prior delivery; if equivalence cannot be proven, Hold for stronger evidence rather than risk a duplicate |
 | Operational-root ID, disruption-episode IDs, commute-impact delivery-group ID, and represented episode IDs | Apply Task 6 identity and cross-source deduplication | Accepted Task 6 normalization | Device-local ledger as immutable references; never a rider identity or analytics key | Retain only while the identity can affect deduplication or recovery for the occurrence | Delete commute or reset; no rider-facing mutation of evidence identity | Remove all commute-linked references | Hold for stronger evidence; no duplicate-prone send |
-| Last successful delivery ID, accepted delivery time, and message class | Prove whether a materially equivalent initial, update, or recovery message was successfully delivered | Accepted delivery result under Task 5 and Task 6 | Device-local commute-linked ledger | Retain only while needed for deduplication or approved recovery of the occurrence | Pause, delete, or reset; resume and edit never clear memory to force a resend | Remove with the commute or reset | Unknown acknowledgement has no prescribed outcome. Its semantics are Pending and block the dependent decision; never assume success, failure, or Hold |
+| Last successful delivery ID, accepted delivery time, and message class | Prove whether a materially equivalent initial, update, or recovery message was successfully delivered | Authoritative successful-delivery result under Task 5 and Task 6 | Device-local commute-linked ledger | Retain only while needed for deduplication or approved recovery of the occurrence | Pause, delete, or reset; resume and edit never clear memory to force a resend | Remove with the commute or reset | An Unknown acknowledgment is never written here. If an unresolved-attempt record exists, its exact lock controls; otherwise Hold for stronger evidence when equivalence cannot be proven |
+| Single unresolved delivery-attempt record: immutable attempt ID; occurrence key; confirmed preference version; delivery group; represented episode/impact IDs; frozen normalized impact fingerprint; frozen class and payload version; authoritative attempt time; exact state **Delivery unresolved — acknowledgment Unknown**; resolution evidence empty until authoritative resolution | Prevent a potentially delivered message from being duplicated without converting Unknown into Success or Failed | A delivery attempt for which authoritative evidence proves neither Success nor Failed | Device-local commute-linked delivery ledger; one append-only record per unresolved attempt and no analytics copy | Keep the active lock only until authoritative Success/Failed resolution or occurrence expiry; on expiry append **Expired unresolved** without reclassification; retain only under the still-Pending owner lifecycle | Pause retains the lock; delete or reset removes the personal record and all linked work; resume or edit cannot clear it to force a resend | Remove with the commute or reset and deliver nothing; deletion is not delivery resolution | Write no successful baseline, represented-window marker, recovery entitlement, Seen state, correction entitlement, retry, or replay. Hold every same-occurrence, same-group candidate equivalent to or dependent on the unresolved impact, including after an edit that leaves normalized scope unchanged; independently proven different occurrences/groups remain eligible for their own evaluation |
 | Delivered baseline; affected points and normalized direction | Compare a later candidate with what the rider actually received | Exact accepted delivery snapshot | Device-local commute-linked ledger | Retain only while needed for material-change or recovery comparison | Delete commute or reset | Remove with the commute or reset | No comparison is allowed; Hold for stronger evidence where comparison is required |
 | Ordered severity and scale with approved version, when an ordering is approved | Determine whether a later impact is materially different | Accepted Task 6 ordered value and version | Device-local commute-linked ledger | Retain only while the approved comparison can affect the occurrence | Delete commute or reset | Remove with the commute or reset | Do not invent an ordering. Without an approved ordering, the severity branch cannot pass; if no other material branch passes, preserve Task 6 **Suppress — Below material change** |
 | Unrounded delivered added time and its approved basis | Compare material added-time change without rounding drift | Accepted Task 3 and Task 5 delivery snapshot | Device-local commute-linked ledger | Retain only while the comparison can affect the occurrence | Delete commute or reset | Remove with the commute or reset | Do not infer or reconstruct it; Hold when required |
 | Delivered active and window-end times | Apply currentness, opportunity, and recovery boundaries | Accepted Task 1, Task 5, and Task 6 decision snapshot | Device-local commute-linked ledger | Retain only while the boundaries can affect the occurrence | Delete commute or reset | Remove with the commute or reset | Opportunity cannot be extended; send nothing |
 | Delivered verified action or alternative and evidence version | Prevent wording-only or unverified-alternative updates | Accepted Task 5 action and its evidence version | Device-local commute-linked ledger | Retain only while comparison can affect the occurrence | Delete commute or reset | Remove with the commute or reset | Omit an unverified alternative; Hold if it is material |
 | Recovery setting at original delivery, current recovery setting, and prospective-change marker | Enforce prospective-only recovery behavior | Explicit rider setting plus the accepted original delivery snapshot | Device-local commute-linked ledger | Retain only while an approved recovery can still be evaluated | Toggle recovery updates; delete or reset | Remove with the commute or reset | Recovery is Off |
-| Quiet-period start, expiry, and reason, only after that quiet behavior is approved | Prevent repeat interruption under an approved Task 6 quiet rule | Accepted delivery decision | Device-local commute-linked ledger | No collection until the open quiet-semantics decision is approved; afterward only while the quiet state can affect the occurrence | Delete commute or reset | Remove with the commute or reset | Do not collect or apply a quiet interval until approved |
+| Proposed quiet-period start, expiry, and reason | Preserve a Pending design question without creating product behavior | No permitted source while the proposal is unapproved | **Prohibited: do not collect or store** | No lifecycle exists while unapproved | Not applicable; there is no rider or operator state | No record may exist | Do not collect, derive, apply, or use the proposal as a gate, Send, Suppress, Hold, retry, or replay input |
 | Immutable pointers to non-personal source evidence and transformation versions | Make a delivery decision reviewable without copying source history into the personal ledger | Accepted operational evidence catalog | Device-local commute-linked references only | Retain only while linked delivery memory is necessary | Delete commute or reset | Remove pointers; retain only independently governed non-personal evidence | Review uses current independently governed evidence; no personal source-history copy |
 
-Pause retains the preference and minimal delivery memory but stops delivery. Resume evaluates current evidence and never replays missed or already represented messages. Editing and reconfirming never manufacture a resend. Delete and reset clear the personal ledger.
+Pause retains the preference, minimal delivery memory, and any active unresolved-attempt lock but stops delivery. Resume evaluates current evidence and never replays missed, failed, Unknown, or already represented messages. Editing and reconfirming never manufacture a resend or clear an unresolved-attempt lock. Delete and reset clear the personal ledger and permit no late delivery.
 
 ## 5. Delivery capability and queued copies
 
@@ -114,7 +115,7 @@ The following may be read for a current decision but may not be converted into s
 - current source health, coherence, freshness, anomaly, and quarantine results;
 - current operating-system permission or delivery capability, read only when needed with no transition history, plus current connectivity and current authoritative time;
 - rendered recommendations and candidate payload construction; and
-- current delivery response needed for the accepted Task 6 ledger update.
+- current delivery response needed for the accepted Task 6 ledger update, including an authoritative resolution linked to the exact immutable attempt.
 
 Operational evidence remains under its source owner. Only the minimal immutable pointers and decision snapshots enumerated above may enter a personal ledger.
 
@@ -159,9 +160,9 @@ No personal event becomes permissible merely because it may be aggregated later.
 
 The following remain **Pending** and block any dependent collection or launch claim:
 
-- whether the 900-second quiet-period proposal receives final owner approval;
-- the exact seen and quiet-period semantics;
-- successful delivery versus unknown acknowledgement behavior;
+- whether the 900-second quiet-period proposal receives final owner approval; until then it is not collected, applied, or used as gate input;
+- the exact Seen definition and any future approved quiet-period semantics;
+- provider-specific evidence mappings that can authoritatively resolve Unknown to Success or Failed, plus the owner-approved lifecycle for expired unresolved records; the conservative Unknown state and lock already apply without inventing those mappings;
 - controlled severity ordering and version ownership;
 - correction and retraction delivery behavior;
 - remote delivery topology and cleanup after app-data clearing or reinstall;
@@ -178,9 +179,10 @@ No observed deletion, permission, privacy, pilot, accessibility, or launch resul
 - [ ] Data Quality confirms operational inputs and personal decision state remain separate.
 - [ ] Content confirms delivered payload and lock-screen disclosure are approved.
 - [ ] Operations confirms delivery-service copies, access roles, deletion paths, and last-owner cleanup.
+- [ ] Product, Operations, Data Quality, and Privacy confirm Unknown writes only the single unresolved-attempt record, no successful baseline, and blocks its exact duplicate-prone scope until authoritative resolution or occurrence expiry.
 - [ ] Privacy approves a remote cleanup rule without inventing a duration.
 - [ ] Each prohibited identifier and reconstruction path is verified absent.
 - [ ] All privacy scenarios pass with complete evidence and reruns after corrections.
-- [ ] Product Governance reconciles provenance and reviewers in the artifact index.
+- [ ] Product Governance approval evidence is recorded against the aligned provenance and reviewer set.
 
 Every unchecked item blocks approval. This documentation commit is not evidence.

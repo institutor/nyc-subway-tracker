@@ -9,7 +9,7 @@
 | Last validation date | 2026-07-30 |
 | Supersedes | None |
 | Approval evidence | Pending |
-| Drill results | [Not run — Pending](commute-alert-pilot-review-template.md#pending-drill-record) |
+| Scenario results | [Not run — Pending](commute-alert-pilot-review-template.md#pending-drill-record) |
 
 ## Purpose and authority
 
@@ -19,16 +19,16 @@ This playbook consumes, but cannot change, accepted Commute Tasks 2–8 or Arriv
 
 All rules and drills are Draft, not MTA guarantees. No observed roster, paging path, switch, access test, queue cancellation, delivery, correction, recovery, pilot, reviewer decision, or release evidence exists. Gate 0 remains **NO-GO — GATE 0 NOT PASSED**. Public boards, commute pushes, pilot advance, and launch claims remain blocked.
 
-## Product Governance reconciliation
+## Product Governance alignment
 
-The artifact index cites §32.2 for the pilot template, while subway commute notifications apply to later Release 2 under §32.3. Full Task 9 provenance, reviewer authority, and drill evidence are also absent from the index. Product Governance reconciliation remains **Pending**. This task edits neither the index nor any gate record.
+The product artifact index and this header align on the full Task 9 provenance, the §32.3 Release 2 boundary, Operations ownership, and the six-role reviewer set. Both remain **Draft**, approval and drill evidence remain **Pending**, and index alignment changes no gate record.
 
 ## Operational roster and authority
 
 | Role | May decide or command | Must provide | May not do |
 |---|---|---|---|
 | Operations Incident Commander | Sole switch-command authority; engage global, matching route/feed-group, or episode holds; own incident state and containment scope | Incident ID, command time, scope, reason, queue action, handoff, and release record | Delegate command ambiguity, auto-release, or self-verify execution |
-| Delivery/platform on-call | Execute the Commander’s switch command and queue cancellation; capture before/after evidence | Switch state, cancellation result, delivery disposition, failed/unknown result, and final-check evidence | Choose or widen scope, command release, retry Unknown, verify own work, or self-release |
+| Delivery/platform on-call | Execute the Commander’s switch command and queue cancellation; capture before/after evidence | Switch state, cancellation result, delivery disposition, authoritative Failed result or **Delivery unresolved — acknowledgment Unknown**, and final-check evidence | Choose or widen scope, command release, retry Unknown, verify own work, or self-release |
 | Data Quality on-call | Decide source health, quarantine, mapping, correlation, and recovery-evidence sufficiency | Authoritative timestamps, currentness, anomaly, mapping, accepted/rejected evidence, and two-snapshot state | Override commute policy, delivery evidence, or Accessibility/Privacy authority |
 | Commute Product Lead | Interpret rider materiality and commute policy; demand containment; stop a pilot | Exact policy branch and rider consequence | Override a truth failure or release alone |
 | Release Quality Lead | Freeze versions, reproduce, adjudicate, preserve failures, and run correction/rerun evidence; demand containment | Fixed package, expected/actual/prohibited checks, independent review, and rerun lineage | Release alone or rewrite an original result |
@@ -74,7 +74,7 @@ Use exactly these five outcomes:
 | Outcome | Exact condition | Delivery consequence |
 |---|---|---|
 | **Continue** | Current Tasks 2–8 result passes and no effective matching hold exists | Candidate may continue to the final switch and delivery checks |
-| **Hold** | Evidence or common cause is unresolved, or a matching containment switch is effective | Send and queue nothing; cancel unsent matching work |
+| **Hold** | Evidence or common cause is unresolved, an active unresolved-attempt lock covers the candidate, or a matching containment switch is effective | Send and queue nothing; cancel unsent matching work |
 | **Suppress** | A definite gate failure, staleness, ended opportunity, or other accepted exclusion exists | Send nothing and never late-send |
 | **Correct** | A prior delivered claim would cause a materially wrong rider choice and a supported correction path exists | Apply the correction policy; no improvised message |
 | **Release hold** | Owner recovery evidence, required independent approvals, and a complete current Tasks 2–7 reevaluation pass | Remove only the commanded hold; this is not a recovery notification and never replays work |
@@ -93,18 +93,20 @@ The exact effective-hold rule is:
 | Route/feed-group | Candidates dependent on the exact route or published feed group | Healthy unrelated route/feed groups |
 | Episode | Candidates representing the exact Task 6 episode or materially equivalent delivery group | Independent episodes or unrelated service |
 
-Switches have no auto-expiry. Elapsed time, a quiet interval, service-alert disappearance, one healthy snapshot, a new deployment, or a process restart cannot release them. Releasing one scope leaves every other matching hold effective.
+Switches have no auto-expiry. Elapsed time, service-alert disappearance, one healthy snapshot, a new deployment, or a process restart cannot release them. Releasing one scope leaves every other matching hold effective.
 
 Every delivery path must:
 
-1. evaluate current Tasks 2–7 and candidate currentness;
+1. evaluate current Tasks 2–7, candidate currentness, successful-delivery memory, and active unresolved-attempt locks;
 2. read all three hold scopes;
 3. apply the OR rule;
 4. cancel or refuse matching unsent queue work when held;
 5. perform the ordinary final pre-delivery recheck; and
 6. reread the switch immediately before the final send action.
 
-A hold engaged during a queue race vetoes the unsent item. An **Unknown acknowledgment** is never assumed failed and never retried. Release does not replay held, failed, stale, ended, Offline, outside-window, or unknown work.
+A hold engaged during a queue race vetoes the unsent item. An Unknown acknowledgment appends **Delivery unresolved — acknowledgment Unknown**, writes no successful baseline or represented-window marker, and activates the exact same-occurrence, same-delivery-group unresolved-attempt lock for equivalent or dependent impact. Covered future action remains **Hold for stronger evidence — Final recheck unresolved**. Never assume Success or Failed, retry, replay, recover, correct, or write a successful baseline solely from Unknown.
+
+Only authoritative evidence linked to the immutable attempt may resolve the lock to Success or Failed. Success writes the original frozen successful-delivery memory and sends nothing from resolution alone. Failed writes no baseline and never replays the original. If the occurrence expires first, append **Expired unresolved**, close only that active occurrence lock, and take no late action. Elapsed time, restart, queue absence, message visibility, Seen state, or operator inference cannot resolve Unknown.
 
 ## State and surface isolation
 
@@ -127,7 +129,7 @@ Station boards continue under independent Arrival Truth and feed-health policy. 
 | 1. Detect | Open an incident from an operational cue, sentinel, reviewer demand, or drill | Cue, discovery role, authoritative time, fixed versions, mode |
 | 2. Bound | Identify the narrowest supported episode, route/feed-group, delivery-system, accessibility, privacy, or global scope; state unaffected scope | Exact supported affected/unaffected operational scope; no rider identity |
 | 3. Command | Commander records Continue, Hold, Suppress, or Correct and commands any hold | Before state, command, reason, scope, time, required approvals |
-| 4. Execute | Delivery on-call engages switch and cancels unsent matching queue entries | Executor, switch result, cancellation counts/results, failed/unknown dispositions |
+| 4. Execute | Delivery on-call engages switch and cancels unsent matching queue entries | Executor, switch result, cancellation counts/results, Failed or **Delivery unresolved — acknowledgment Unknown** dispositions, and immutable attempt linkage |
 | 5. Verify | Independent verifier checks switch state, final-check behavior, queue isolation, board isolation, and unaffected routes | Before/after capture and prohibited checks |
 | 6. Investigate | Domain owners preserve accepted, rejected, quarantined, and unresolved evidence and common-cause census | Append-only incident transitions and fixed package |
 | 7. Correct | If a prior delivered claim was materially wrong, apply the correction policy | Materiality, supported remedy, Content approval, preserved original |
@@ -147,7 +149,7 @@ Station boards continue under independent Arrival Truth and feed-health policy. 
 | Suspicious 39.x% disappearance | Context may establish anomaly; no safe harbor below 40 | Same fixed denominator plus simultaneous loss, malformed/empty content, chronology, and other coherence context | Automatically accept or automatically classify anomaly from percentage alone |
 | Missing or contradictory station, segment, direction, train, path, period, generic **Affected**, or structured/text conflict | Hold the exact episode or route-direction-segment scope; broader only when evidence cannot safely narrow | Newer coherent accepted mapping, exact scope, and complete current reevaluation | Guess scope, choose a side, or convert generic Affected into impact |
 | Second equivalent delivery, including cross-source or overlapping-window delivery | Duplicate breach; immediate pilot stop and episode Hold | Preserve both results; common-cause census; corrected fixed version; Task 6 original-boundary, integrated, holdout, and shadow reruns | Delete history, count per source, retry, or widen without evidence |
-| Delivery acknowledgment Unknown | Do not assume success or failure; do not retry; Hold or Suppress dependent future action pending an approved rule | Preserved Unknown disposition and approved acknowledgment semantics before deterministic use | Convert to failure, success, duplicate, or resend |
+| Delivery acknowledgment Unknown | Append **Delivery unresolved — acknowledgment Unknown**; write no successful baseline/marker; Hold every same-occurrence/group equivalent or dependent candidate under the exact unresolved-attempt lock | Immutable attempt and frozen impact package; preserved Unknown record; authoritative exact-attempt Success/Failed resolution or occurrence-expiry transition; independent delivery verification before release | Convert to failure/success, retry, replay, recover, correct solely from Unknown, write a successful baseline, or let an equivalent edit evade the lock |
 | Wrong segment/direction or stale/resolved delivery | Immediate pilot stop; at least episode Hold; widen only from common-cause evidence; evaluate material correction | Complete authoritative-time decision package, correction review, corrected version, targeted and integrated reruns | Call harmless, average away, or rewrite original |
 | Deterministic should-Send miss | Immediate pilot stop and false-negative review; contain at least affected episode or delivery path | Fixed expected/actual package, root cause, correction, current rerun | Call capability block when capability existed or backfill the missed push |
 | Widespread false positives | Global Hold and cancellation of every unsent commute notification | Common-cause census, unaffected-surface check, corrected version, global and holdout reruns, broad release approvals | Disable boards, alter saved commutes, or release a subset without evidence |
@@ -161,12 +163,13 @@ Station boards continue under independent Arrival Truth and feed-health policy. 
 | Route/feed freshness or anomaly | Two consecutive fresh coherent snapshots for that exact group. The first restores nothing. A stale, incomplete, regressed, malformed, contradictory, suspiciously empty, or newly anomalous second snapshot breaks the pair; the next qualifying snapshot restarts at one |
 | Mapping or correlation uncertainty | Newer coherent accepted evidence resolves route, direction, segment, constituent/path, period, and consequence at the required precision |
 | Duplicate, queue, delivery, or transformation defect | Corrected fixed product/rule version; preserved original; Task 6 original-boundary, integrated, holdout, and shadow reruns; independent delivery verification |
+| Unknown delivery acknowledgment | Authoritative resolution linked to the exact immutable attempt, or documented occurrence expiry; append-only ledger transition; no baseline before Success; no retry/replay/correction; covered-scope and unrelated-scope checks; Data Quality plus independent delivery verification |
 | Wrong delivered claim | Correction-policy disposition, approved class/channel if rider correction is required, preserved delivery evidence, and all affected reruns |
 | Accessibility | Complete current path/equipment/alternative evidence, Accessibility and Data Quality approvals, corrected-version targeted and unaffected-route reruns |
 | Privacy | Containment and deletion evidence for every affected product-controlled boundary, Privacy and Data Quality approvals, no remaining personal or reversible join |
 | Global/common cause | Every affected domain’s prerequisite, global/holdout/shadow reruns, and Operations, Product, Data Quality, and affected-domain approvals |
 
-After cause-specific recovery, rerun current Tasks 2–7 eligibility, timing, deduplication, capability, privacy, final checks, and every still-effective hold. Release only current opportunities. Never release an old queue, backfill a missed notification, or treat **Release hold** as Task 5 recovery.
+After cause-specific recovery, rerun current Tasks 2–7 eligibility, timing, deduplication, capability, privacy, final checks, every active unresolved-attempt lock, and every still-effective hold. Release only current opportunities. Never release an old queue, backfill a missed notification, retry/replay Unknown work, or treat **Release hold** as Task 5 recovery.
 
 ## Internal incident updates
 
@@ -188,7 +191,7 @@ The [pilot review template](commute-alert-pilot-review-template.md) separates si
 
 ## Pending gaps
 
-Task 6 quiet-period approval, seen state, delivery success versus Unknown acknowledgment, severity ordering, correction/retraction class/channel/copy, numeric “promptly,” sample size/duration/floor/retention, active-commuter definition, feedback maturity, opt-out attribution window, remote token lifecycle, lock-screen behavior, roster names/pages/response times, and switch implementation remain Pending. No operator may invent them.
+Task 6 quiet-period approval, seen state, provider-specific evidence mappings that can authoritatively resolve Unknown to Success or Failed, severity ordering, correction/retraction class/channel/copy, numeric “promptly,” sample size/duration/floor/retention, active-commuter definition, feedback maturity, opt-out attribution window, remote token lifecycle, lock-screen behavior, roster names/pages/response times, and switch implementation remain Pending. The quiet proposal is not collected, applied, or used as gate input. The conservative Unknown state and lock apply without inventing a provider mapping. No operator may invent a missing decision.
 
 ## Draft review checklist
 
@@ -196,6 +199,7 @@ Task 6 quiet-period approval, seen state, delivery success versus Unknown acknow
 - [ ] Roster, backup, page, handoff, access, and separation are tested before pilot.
 - [ ] Continue, Hold, Suppress, Correct, and Release hold are applied exactly.
 - [ ] Global, route/feed-group, and episode holds use OR precedence, no expiry, no replay, queue cancellation, and a final switch reread.
+- [ ] Unknown writes one unresolved-attempt record and no successful baseline; its exact duplicate-prone scope remains held until authoritative resolution or occurrence expiry.
 - [ ] Saved state, permission, ledger, ARO, boards, and unaffected routes remain isolated.
 - [ ] Every incident branch and recovery prerequisite has fixed drill evidence.
 - [ ] Release approval is independent of switch execution.
