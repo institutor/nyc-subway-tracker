@@ -68,11 +68,13 @@ After admission is complete:
 
 1. Form the primary set from admitted **Live** and **Expected** trains only.
 2. Give each primary train its best current arrival estimate and its evidence-supported arrival range. For an Expected range, the ordering estimate is the center of that range.
-3. Sort the primary set chronologically by that best current estimate.
-4. If two evidence-supported arrival ranges overlap and one train is Live, place the Live train first within that overlap.
-5. Take the first three trains from the resulting chronological order.
+3. Establish one deterministic initial total order using, in sequence: the best current estimate; supported range lower bound; supported range upper bound; public route order—numbered routes numerically, then lettered routes alphabetically, then shuttles by full public name, then any other public route identity alphabetically; normalized actual destination; and the coherent stable train-instance identity that already passed admission.
+4. Apply the narrow Live-overlap preference once. Visit admitted Live trains in their initial-total-order sequence. For each Live train, inspect the current rows immediately before it and move it ahead only of the maximal contiguous block of Expected trains whose individual supported ranges directly overlap that Live train's range. Stop at an earlier Live train or the first non-overlapping row. Preserve every other relative position.
+5. Take the first three trains from the resulting deterministic order.
 
-The overlap preference is narrow. Live does not receive a global confidence boost and does not automatically outrank an earlier Expected train. When the ranges do not overlap, the earlier best current estimate remains first; an earlier Expected train can therefore precede one or more later Live trains.
+Every ordering value is fixed before the three-row cutoff. Source order, retrieval order, wrapper order, record enumeration, and screen-render order are never tie-breakers. The route, destination, and stable-identity keys exist only to keep indistinguishable arrival claims in a repeatable presentation order; they do not make a train earlier, more certain, more important, or more trustworthy.
+
+The overlap preference is narrow and deterministic. Live does not receive a global confidence boost and does not automatically outrank an earlier Expected train. A Live train may cross only directly overlapping Expected rows that are contiguous immediately before it at the moment it is visited. It never crosses an earlier Live row, a non-overlapping row, or a row connected only through a chain of other overlaps. When ranges do not overlap, the initial chronological order remains; an earlier Expected train can therefore precede one or more later Live trains.
 
 Admission, state labels, and time answer different questions. Admission determines whether a train may participate. The evidence state determines its rider treatment. Time determines the order among admitted primary trains, except for the Live preference inside an actual range overlap.
 
@@ -100,7 +102,7 @@ For every board decision, preserve:
 3. The ordered remaining-stop evidence and actual destination and direction.
 4. The result of the service-change, track, freshness, identity, and movement gates.
 5. The assigned disposition and board area.
-6. For every primary train, the evidence-supported range, best current estimate, overlap decision, and final chronological position.
+6. For every primary train, the evidence-supported range, best current estimate, every applied total-order value, its initial position, any direct-overlap comparison and movement, and its final chronological position.
 7. The displayed next-three rows, any separate Holding warning, Uncertain secondary row, scoped unavailable explanation, and any fewer-than-three explanation.
 8. Every suppressed, unavailable, quarantined, limited, or static record that was prohibited from backfilling the board, with candidate rejection and public/internal disposition recorded separately.
 

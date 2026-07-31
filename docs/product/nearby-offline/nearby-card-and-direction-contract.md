@@ -92,9 +92,9 @@ Large text or a compact screen may increase vertical length; it may not remove a
 Admission finishes upstream before Task 4 receives a list. Task 4 applies the supplied disposition and order exactly:
 
 1. The primary candidate set contains admitted **Live** and **Expected** trains only.
-2. Upstream sorts primary candidates chronologically by best current arrival estimate.
+2. Upstream establishes its complete deterministic chronological order, including fixed neutral tie keys.
 3. An Expected range uses its center estimate for ordering.
-4. Live precedes Expected only when their supported ranges overlap.
+4. Live precedes only the contiguous Expected rows that directly overlap it under the upstream bounded-overlap rule.
 5. Take the first three from that upstream order for the exact direction.
 6. Keep every non-primary disposition in its owned area or absence.
 
