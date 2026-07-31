@@ -4,7 +4,7 @@
 |---|---|
 | Source sections | Approved specification §18.2, §31.4 scenarios 24–25 as applied, and §31.8 scenario 51; nearby-station and offline-experience plan Product artifact map and Task 9 Product artifacts, Ordered steps, and Acceptance evidence; Task 9 brief |
 | Owner | Experience Product Lead |
-| Required reviewers | Product, Accessibility, Data Quality, Content |
+| Required reviewers | Product, Accessibility, Data Quality, Content, Privacy |
 | Status | Draft |
 | Last validation date | 2026-07-30 |
 | Supersedes | None |
@@ -21,17 +21,17 @@ The [offline, degraded, and reconnection states contract](offline-degraded-and-r
 
 This artifact is **Draft**. The authoritative [Gate 0 exit record](../quality/gate-0-exit-record.md) remains **NO-GO — GATE 0 NOT PASSED**; public boards blocked. The three walkthroughs below are **Not run — Pending**. No fixed card, assistive output, companion truth package, Privacy decision, or Task 14 observation exists. Expected contract prose is not observed evidence or release permission.
 
-## Governance mismatch and mandatory Privacy review
+## Governance reconciliation and mandatory Privacy review
 
-The [artifact index](../artifact-index.md) registers Product, Accessibility, Data Quality, and Content for this contract. The [review and approval policy](../review-and-approval-policy.md) additionally requires Privacy when an artifact presents personal data. A saved origin, destination, direction, accessibility need, contingency, and manual trip position form personal travel context, so Privacy review is mandatory.
+The artifact header and Draft [artifact index](../artifact-index.md) row register Product, Accessibility, Data Quality, Content, and Privacy. The [review and approval policy](../review-and-approval-policy.md) requires Privacy because a saved origin, destination, direction, accessibility need, contingency, and manual trip position form personal travel context.
 
 | Governance question | Current record | Required disposition |
 |---|---|---|
-| Registered reviewer set | Product, Accessibility, Data Quality, Content | Retain the index-aligned metadata above until governed reconciliation. |
+| Registered reviewer set | Product, Accessibility, Data Quality, Content, Privacy | Reviewer routing is reconciled in the artifact header and Draft index row. |
 | Applicable policy minimum | Product, Accessibility, Data Quality, Content, plus Privacy | Privacy must review the same fixed version because the card contains personal travel context. |
-| Reconciliation and review evidence | Pending | Privacy review and Product Governance Lead reconciliation of the index and artifact metadata are required before advancement from **Draft**. |
+| Review evidence | Pending | Privacy and every other mandatory reviewer must decide on the same fixed version before advancement from **Draft**. |
 
-This Task 9 change does not edit the index, silently add approval, or treat the mismatch as waived. It also does not define retention, deletion, reset, synchronization, analytics, diagnostics, or tracking. Those decisions remain with Task 12. Manual progress requires no underground location and cannot create a default movement history.
+This reviewer-routing reconciliation is not approval. This contract also does not define retention, deletion, reset, synchronization, analytics, diagnostics, or tracking. Those decisions remain with Task 12. Manual progress requires no underground location and cannot create a default movement history.
 
 ## One active trip and capture boundary
 
@@ -232,6 +232,6 @@ Task 14 must observe every walkthrough against the same fixed version reviewed b
 | Does every displayed schedule-derived clock time retain **Scheduled** plus the applicable currency and service-date context, never a countdown? | Required here; not observed. | Current, Stale, and topology-only fixed cards |
 | Are route-critical operational equipment states Unknown offline, with positive structural wording limited to a complete exact chain? | Yes by expected contract; companion truth is absent. | TRIP-A01 plus companion complete-path/equipment evidence |
 | Does the minimum-complete card omit unavailable guidance without blank or error treatment? | Yes by expected contract; not observed. | TRIP-M51 rendered and assistive observation |
-| Has Privacy reviewed the same fixed version and has the index/metadata mismatch been reconciled? | No. | Privacy decision and Product Governance Lead reconciliation |
+| Is Privacy routing aligned between the artifact and Draft index row? | Yes; no Privacy decision or approval is implied. | Same-version Privacy decision with every other mandatory reviewer |
 | Does this contract redefine retention, tracking, synchronization, analytics, diagnostics, Task 10 recovery, or companion truth? | No. It only preserves the card and manual progress through the linked Task 10 recovery behavior. | Cross-artifact review after Task 12 and companion artifacts exist |
-| Does this Draft claim Gate 0 passage, scenario passage, companion approval, Privacy approval, or release readiness? | No. The decision remains **NO-GO — GATE 0 NOT PASSED**; public boards blocked. | Fixed evidence, all mandatory reviews, governance reconciliation, and later release gate |
+| Does this Draft claim Gate 0 passage, scenario passage, companion approval, Privacy approval, or release readiness? | No. The decision remains **NO-GO — GATE 0 NOT PASSED**; public boards blocked. | Fixed evidence, all mandatory reviews, and the later release gate |

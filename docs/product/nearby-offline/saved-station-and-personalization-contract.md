@@ -2,9 +2,9 @@
 
 | Governance field | Value |
 |---|---|
-| Source sections | Approved specification §§26.1–26.3; nearby-station and offline-experience plan `Product artifact map` and Task 11 `Product artifacts`, `Ordered steps`, and `Acceptance evidence`; Task 11 brief |
+| Source sections | Approved specification §§26.1–26.3 and 28.3; nearby-station and offline-experience plan `Product artifact map` and Task 11 `Product artifacts`, `Ordered steps`, and `Acceptance evidence`; Task 11 brief |
 | Owner | Experience Product Lead |
-| Required reviewers | Product, Accessibility, Content, Privacy |
+| Required reviewers | Product, Accessibility, Data Quality, Content, Privacy |
 | Status | Draft |
 | Last validation date | 2026-07-30 |
 | Supersedes | None |
@@ -21,18 +21,18 @@ Arrival, service-change, entrance, accessibility, equipment, map, and guidance o
 
 This artifact is **Draft**. The authoritative [Gate 0 exit record](../quality/gate-0-exit-record.md) remains **NO-GO — GATE 0 NOT PASSED**; public boards blocked. Every result below is an expected fixture with status **Not run — Pending**, not an observed pass, approval, or release claim.
 
-## Governance mismatch and mandatory review
+## Governance reconciliation and mandatory review
 
-The [artifact index](../artifact-index.md) registers Product, Accessibility, Content, and Privacy and cites specification §26 for this artifact. The [review and approval policy](../review-and-approval-policy.md) additionally requires Data Quality because opening and reconnecting a saved station presents live, scheduled, cached, degraded, and service-change truth. This contract also applies §28.3 when it distinguishes per-station reset and deletion from Task 12's broad personal-data controls.
+The artifact header and Draft [artifact index](../artifact-index.md) row register Product, Accessibility, Data Quality, Content, and Privacy and include specification §§26.1–26.3 and 28.3. The [review and approval policy](../review-and-approval-policy.md) requires Data Quality because opening and reconnecting a saved station presents live, scheduled, cached, degraded, and service-change truth.
 
 | Governance question | Current record | Required disposition |
 |---|---|---|
-| Registered reviewer set | Product, Accessibility, Content, Privacy | Retain the index-aligned metadata above until governed reconciliation. |
+| Registered reviewer set | Product, Accessibility, Data Quality, Content, Privacy | Reviewer routing is reconciled in the artifact header and Draft index row. |
 | Applicable policy minimum | Product, Accessibility, Data Quality, Content, Privacy | All five roles must review the same fixed version. Data Quality reviews refresh, hidden-route disruption, offline-value, and fail-closed truth application. |
-| Registered source provenance | Specification §26 in the index and §§26.1–26.3 above | Add §28.3 as applying provenance for the per-station control boundary. The [location and personal-data rules](location-and-personal-data-rules.md), Task 12, retain broad privacy and deletion assurance. |
-| Reconciliation and review evidence | Pending | A Data Quality decision and Product Governance Lead reconciliation of both reviewer and §28.3 applying-provenance mismatches are required before advancement from **Draft**. |
+| Registered source provenance | Specification §§26.1–26.3 and 28.3 | The [location and personal-data rules](location-and-personal-data-rules.md), Task 12, retain broad privacy and deletion assurance. |
+| Review evidence | Pending | A Data Quality decision and all other mandatory reviewer decisions on the same fixed version are required before advancement from **Draft**. |
 
-This contract does not edit the index, invent approval, or treat the mismatch as waived.
+This metadata reconciliation does not invent approval or satisfy any saved-state scenario.
 
 ## Saved record and memory boundary
 
@@ -212,5 +212,5 @@ All Task 11 observations must identify one fixed product version and record expe
 | Do pause, station reset, and delete preserve their exact bounded state and leave official truth intact? | Yes by contract; not observed. | SAVE-R01 before/after comparison |
 | Does station reset silently disable Accessible Route Only or does delete blank an already open board? | No. | SAVE-R01 accessibility and open-board branches |
 | Are Task 12 privacy assurance, retention, diagnostics, notification, optional synchronization, broad reset, and deletion kept out of Task 11 ownership? | Yes. | Task 12 cross-domain review and PRIV-S01 |
-| Have Product, Accessibility, Data Quality, Content, and Privacy reviewed the same fixed version and have the reviewer and §28.3 applying-provenance mismatches been reconciled? | No. | All five decisions and Product Governance Lead reconciliation |
-| Does this Draft claim Gate 0 passage, SAVE-C01, SAVE-R01, UR-C05, Task 14, privacy assurance, companion approval, or release readiness? | No. The decision remains **NO-GO — GATE 0 NOT PASSED**; public boards blocked. | Fixed evidence, all mandatory reviews, governance reconciliation, and later release gate |
+| Are all five reviewer roles and §28.3 applying provenance aligned between the artifact and Draft index row? | Yes; no reviewer decision or approval is implied. | Same-version decisions from Product, Accessibility, Data Quality, Content, and Privacy |
+| Does this Draft claim Gate 0 passage, SAVE-C01, SAVE-R01, UR-C05, Task 14, privacy assurance, companion approval, or release readiness? | No. The decision remains **NO-GO — GATE 0 NOT PASSED**; public boards blocked. | Fixed evidence, all mandatory reviews, and the later release gate |

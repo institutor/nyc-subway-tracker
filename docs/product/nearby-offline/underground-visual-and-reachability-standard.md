@@ -4,7 +4,7 @@
 |---|---|
 | Source sections | Approved specification §16; nearby-station and offline-experience plan Product artifact map and Task 6 Product artifacts, Ordered steps, and Acceptance evidence; Task 6 brief |
 | Owner | Experience Product Lead |
-| Required reviewers | Product, Accessibility, Content |
+| Required reviewers | Product, Accessibility, Data Quality, Content |
 | Status | Draft |
 | Last validation date | 2026-07-30 |
 | Supersedes | None |
@@ -21,17 +21,17 @@ Arrival and freshness presentation consumes the [arrival confidence and ghost po
 
 This artifact is **Draft**. The authoritative [Gate 0 exit record](../quality/gate-0-exit-record.md) is **NO-GO — GATE 0 NOT PASSED**; public boards blocked. The six named audits below are **Not run — Pending**. No fixed rendered product, measured target bounds, contrast report, large-text capture, assistive-technology transcript, reduced-motion capture, or one-handed reach record exists.
 
-## Governance mismatch and mandatory review
+## Governance reconciliation and mandatory review
 
-The [artifact index](../artifact-index.md) registers Product, Accessibility, and Content for this standard. The [review and approval policy](../review-and-approval-policy.md) requires those roles and adds Data Quality when a rider-experience artifact presents live, scheduled, cached, degraded, or service-change truth. This standard visibly distinguishes those states and therefore requires Data Quality review.
+The artifact header and Draft [artifact index](../artifact-index.md) row register Product, Accessibility, Data Quality, and Content for this standard. The [review and approval policy](../review-and-approval-policy.md) requires Data Quality because this rider experience visibly distinguishes live, scheduled, cached, degraded, and service-change truth.
 
 | Governance question | Current record | Required disposition |
 |---|---|---|
-| Registered reviewer set | Product, Accessibility, Content | Retain the index-aligned metadata above until governed reconciliation. |
+| Registered reviewer set | Product, Accessibility, Data Quality, Content | Reviewer routing is reconciled in the artifact header and Draft index row. |
 | Applicable policy minimum | Product, Accessibility, Content, plus Data Quality | Data Quality review is mandatory because visual, motion, and assistive treatments present live, degraded, stale, Holding, Scheduled, and service-change meaning. |
-| Reconciliation and review evidence | Pending | Data Quality must review the same fixed version before this artifact may advance from **Draft**. The index and artifact metadata must then be reconciled through the governance owner. |
+| Review evidence | Pending | All four roles must review the same fixed version before this artifact may advance from **Draft**. |
 
-This Task 6 change does not edit the approved index, silently add approval, or treat the mismatch as waived.
+This reviewer-routing reconciliation is not approval. Approval evidence and observed conformance remain **Pending**.
 
 ## Fixed visual glance hierarchy
 
@@ -244,7 +244,7 @@ Any official map, symbol, logo, or brand asset without documented applicable rig
 | Platform and positioning guidance | Companion guidance owners | Approval, coverage, and observed evidence absent |
 | Underground interaction observations, including reduced motion | `docs/product/nearby-offline/acceptance-evidence.md`, Nearby Task 14; Release Quality Lead | Artifact and rendered evidence absent; Not run — Pending |
 | MTA rights and public-release use | Asset inventory owned here; Task 15 release review records the blocker | Rights authority and durable permission evidence absent; public use blocked |
-| Mandatory reviewer reconciliation | Product Governance Lead under the review policy | Index lists P/A/C; policy-required Data Quality review and reconciliation Pending |
+| Mandatory reviewer routing | Product Governance Lead under the review policy | Header and Draft index row list P/A/D/C; all same-version reviewer decisions remain Pending |
 
 ## Draft review checklist
 
@@ -257,5 +257,5 @@ Any official map, symbol, logo, or brand asset without documented applicable rig
 | Does every Task 5 core control meet 48-by-48 and bottom-third requirements with visible gesture alternatives? | Required by contract; not measured. | UG-A06 |
 | Do stale and Holding states stop movement and decrementing, including under reduced motion? | Required by contract; not observed. | Task 14 freshness and reduced-motion evidence |
 | Are official maps, symbols, and brand assets cleared for public use? | No. | Asset inventory and durable MTA rights evidence or reviewed removal/no-dependency result |
-| Are all mandatory reviewers aligned to the registered row? | No. Data Quality is required by policy but absent from the index row. | Governance reconciliation and same-version Product, Accessibility, Data Quality, and Content decisions |
+| Are all mandatory reviewer roles aligned between the artifact and Draft index row? | Yes; Product, Accessibility, Data Quality, and Content are registered in both. No reviewer decision is implied. | Same-version decisions from all four roles |
 | Does this Draft claim visual conformance, Gate 0 passage, rights permission, or release approval? | No. The decision remains **NO-GO — GATE 0 NOT PASSED**; public boards blocked. | Fixed-version evidence, complete reviewer decisions, rights resolution, and the later release gate |

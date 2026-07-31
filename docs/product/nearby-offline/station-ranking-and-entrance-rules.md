@@ -2,9 +2,9 @@
 
 | Governance field | Value |
 |---|---|
-| Source sections | Approved specification §§14.3, 19.3–19.4, and 31.4 scenario 21; nearby-station and offline-experience plan `Product artifact map` and Task 3 `Product artifacts`, `Ordered steps`, and `Acceptance evidence`; Task 3 brief |
+| Source sections | Approved specification §§14.3, 19.3–19.4, 26.2, and 31.4 scenario 21; nearby-station and offline-experience plan `Product artifact map` and Task 3 `Product artifacts`, `Ordered steps`, and `Acceptance evidence`; Task 3 brief; Task 11 saved-personalization input boundary |
 | Owner | Experience Product Lead |
-| Required reviewers | Product, Accessibility, Data Quality, Content |
+| Required reviewers | Product, Accessibility, Data Quality, Content, Privacy |
 | Status | Draft |
 | Last validation date | 2026-07-30 |
 | Supersedes | None |
@@ -21,18 +21,18 @@ The [approved product specification](../../superpowers/specs/2026-07-30-nyc-subw
 
 This artifact is **Draft**. The authoritative [Gate 0 exit record](../quality/gate-0-exit-record.md) is **NO-GO — GATE 0 NOT PASSED**, so public arrival boards remain blocked. Accessibility owner artifacts, observed scenario 21 evidence, and Release 1 approval are also absent. The cases below are expected review fixtures, not observed passes.
 
-## Governance and applying-provenance mismatch
+## Governance and applying-provenance reconciliation
 
-The [artifact index](../artifact-index.md) registers Product, Accessibility, Data Quality, and Content and names approved-specification §§14.3, 19.3–19.4, and §31.4 scenario 21 for this artifact. This contract also applies §26.2 whenever Task 11 supplies saved-personalization inputs, and the [review and approval policy](../review-and-approval-policy.md) requires Privacy review because explicit saved preferences, time windows, and permitted location are personal-data inputs to ranking.
+The artifact header and Draft [artifact index](../artifact-index.md) row register Product, Accessibility, Data Quality, Content, and Privacy and include approved-specification §26.2 when Task 11 supplies saved-personalization inputs. The [review and approval policy](../review-and-approval-policy.md) requires Privacy review because explicit saved preferences, time windows, and permitted location are personal-data inputs to ranking.
 
 | Governance question | Current record | Required disposition |
 |---|---|---|
-| Registered reviewer set | Product, Accessibility, Data Quality, Content | Retain the index-aligned metadata above until governed reconciliation. |
+| Registered reviewer set | Product, Accessibility, Data Quality, Content, Privacy | Reviewer routing is reconciled in the artifact header and Draft index row. |
 | Applicable reviewer minimum | Product, Accessibility, Data Quality, Content, Privacy | All five roles must review the same fixed version. Privacy reviews saved-preference, explicit-time-window, and permitted-location application. |
-| Registered source provenance | §§14.3, 19.3–19.4, and §31.4 scenario 21 | Record §26.2 as applying provenance through the Task 11 contract before advancement from **Draft**. Task 3 retains ranking ownership; Task 11 does not redefine eligibility or baseline order. |
-| Reconciliation and evidence | Pending | Product Governance Lead reconciliation of the index and artifact metadata, plus a Privacy decision on the same fixed version, are required. |
+| Registered source provenance | §§14.3, 19.3–19.4, 26.2, and §31.4 scenario 21 | Task 3 retains ranking ownership; Task 11 does not redefine eligibility or baseline order. |
+| Review evidence | Pending | A Privacy decision and all other mandatory reviewer decisions on the same fixed version are required before advancement from **Draft**. |
 
-This contract does not edit the index, invent Privacy approval, or treat either mismatch as waived.
+This metadata reconciliation does not invent Privacy approval or satisfy any scenario gate.
 
 ## “Nearest” means nearest useful entrance
 
@@ -253,5 +253,5 @@ Each case is an expected fixture. Its result remains **Not run — Pending** unt
 | Does Accessible Route Only reject Unknown without silently relaxing? | Yes. | Companion complete-path/equipment evidence and UR-C04 |
 | Can a preference hide or rewrite the closer workable result? | No. | UR-C05 and saved-state evidence |
 | Can ranking admit a train or clear a service-change veto? | No. | Upstream Gate 0 evidence and Task 14 integration review |
-| Has Privacy reviewed the same fixed version and has §26.2 applying provenance been reconciled with the index and metadata? | No. | Privacy decision and Product Governance Lead reconciliation |
+| Are Privacy routing and §26.2 applying provenance aligned between the artifact and Draft index row? | Yes; no Privacy decision or approval is implied. | Same-version Privacy decision with every other mandatory reviewer |
 | Are current approval and scenario results claimed? | No. Gate 0 is a no-go; this artifact and every case remain Draft/Pending. | Required reviewer decisions and observed evidence |

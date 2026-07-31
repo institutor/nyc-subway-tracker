@@ -2,9 +2,9 @@
 
 | Governance field | Value |
 |---|---|
-| Source sections | Approved specification §§19.3–19.4, 21.10, 31.5, and 33.3; accessibility and platform-guidance plan `Product artifact map` and Task 3 `Product artifacts`, `Dependencies`, `Produces for later tasks`, `Ordered steps`, and `Evidence and acceptance checks` |
+| Source sections | Approved specification §§19.3–19.4, 21.10, 23.1, 23.3, 23.5, 29.4, 31.5, §31.6 scenario 35, and 33.3; accessibility and platform-guidance plan `Product artifact map`, Task 3 `Product artifacts`, `Dependencies`, `Produces for later tasks`, `Ordered steps`, and `Evidence and acceptance checks`, and Task 8 positioning-priority extension |
 | Owner | Accessibility Product Lead |
-| Required reviewers | Product, Accessibility, Data Quality, Content |
+| Required reviewers | Product, Accessibility, Data Quality, Content, Operations |
 | Status | Draft |
 | Last validation date | 2026-07-30 |
 | Supersedes | None |
@@ -27,9 +27,9 @@ Public arrival boards remain blocked.
 
 Task 3 does not pass Gate 0, approve any path or coverage record, authorize an accessible-now claim, or make the Release 1 accessibility decision.
 
-## Governance provenance reconciliation
+## Governance provenance status
 
-The [artifact index](../artifact-index.md) cites specification §§19.3–19.4 for this matrix. Task 3 additionally applies acceptance case §21.10, accessibility scenarios §31.5, completeness risk §33.3, and the plan's full Task 3 provenance, as recorded above. Product Governance Lead reconciliation of the index and this metadata is **Pending** before this artifact may advance from **Draft**. This task does not edit the index or treat the mismatch as approved.
+The artifact header and Draft [artifact index](../artifact-index.md) row include the Task 3 accessibility provenance and the Task 8 positioning-priority extension, with Product, Accessibility, Data Quality, Content, and Operations review. Reviewer decisions, scenario evidence, and approval remain **Pending**.
 
 ## Controlling invariant
 
@@ -479,7 +479,7 @@ This append-only Task 8 extension leaves every preceding Task 3 definition, all 
 | Status and approval | **Draft**; approval **Pending** |
 | Scenario result | **Not run — Pending** |
 
-The artifact index's narrower Task 3 provenance and four-role review remain unchanged. Product Governance Lead reconciliation of this append-only Task 8 provenance and Operations review with the index is **Pending**. This task does not edit the index or treat the mismatch as approved.
+The artifact header and Draft index row now carry this Task 8 provenance and Operations review requirement. This metadata reconciliation does not approve the extension; its reviewer decisions and scenario result remain **Pending**.
 
 Task 7 continues to own **Platform confirmed**, **Expected platform**, **Check station signs**, **Verified**, **Expected**, **Unavailable**, the hard actual-versus-scheduled-track conflict, recovery, and independent guidance reevaluation. This extension consumes those decisions and does not redefine them.
 

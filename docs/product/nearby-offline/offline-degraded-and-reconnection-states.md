@@ -4,7 +4,7 @@
 |---|---|
 | Source sections | Approved specification §§18.3–18.4 and §31.4 scenario 23; nearby-station and offline-experience plan `Product artifact map` and Task 10 `Product artifacts`, `Ordered steps`, and `Acceptance evidence`; Task 10 brief |
 | Owner | Experience Product Lead |
-| Required reviewers | Product, Accessibility, Data Quality, Content |
+| Required reviewers | Product, Accessibility, Data Quality, Content, Privacy, Operations |
 | Status | Draft |
 | Last validation date | 2026-07-30 |
 | Supersedes | None |
@@ -21,17 +21,17 @@ The [artifact index](../artifact-index.md) registers §§18.3–18.4 and §31.4 
 
 This artifact is **Draft**. The authoritative [Gate 0 exit record](../quality/gate-0-exit-record.md) remains **NO-GO — GATE 0 NOT PASSED**; public boards blocked. OFF-T23 and every recovery and warning result below are expected behavior with status **Not run — Pending**. No fixed product version, observed tunnel run, companion approval, Privacy decision, Operations decision, or Task 14 evidence is recorded. Expected prose is not observed evidence or release permission.
 
-## Governance mismatch and mandatory review
+## Governance reconciliation and mandatory review
 
-The artifact index registers Product, Accessibility, Data Quality, and Content. The review policy additionally requires Privacy because this contract preserves and presents active-trip and manual-progress personal travel context, and Operations because it controls blocking operational and accessibility invalidation warnings during recovery.
+The artifact header and Draft [artifact index](../artifact-index.md) row register Product, Accessibility, Data Quality, Content, Privacy, and Operations. The review policy requires Privacy because this contract preserves and presents active-trip and manual-progress personal travel context, and Operations because it controls blocking operational and accessibility invalidation warnings during recovery.
 
 | Governance question | Current record | Required disposition |
 |---|---|---|
-| Registered reviewer set | Product, Accessibility, Data Quality, Content | Retain the index-aligned metadata above until governed reconciliation. |
+| Registered reviewer set | Product, Accessibility, Data Quality, Content, Privacy, Operations | Reviewer routing is reconciled in the artifact header and Draft index row. |
 | Applicable policy minimum | Product, Accessibility, Data Quality, Content, plus Privacy and Operations | All six roles must review the same fixed version. Privacy reviews preserved personal travel context; Operations reviews warning, correction, and recovery behavior. |
-| Reconciliation and review evidence | Pending | Privacy and Operations decisions and Product Governance Lead reconciliation of the index and artifact metadata are required before advancement from **Draft**. |
+| Review evidence | Pending | Privacy, Operations, and every other mandatory reviewer must decide on the same fixed version before advancement from **Draft**. |
 
-This contract does not edit the index, invent reviewer approval, or treat the mismatch as waived.
+This reviewer-routing reconciliation does not invent approval or satisfy any recovery evidence requirement.
 
 ## Independent state domains
 
@@ -218,5 +218,5 @@ All observations must use the same fixed product version reviewed by Product, Ac
 | Do positioning loss, an ETA change, no verified arrival, and an unverified accessibility alternative remain bounded without invented route invalidation, cancellation, or unsafe exit direction? | Yes by contract; not observed. | Fixed non-invalidation and underway-accessibility branches |
 | Can acknowledgement, time passage, navigation, or unrelated refresh clear a blocking warning? | No; only explicit governed rider action or accepted evidence resolving the exact invalidation can clear it. | Warning-persistence transition trace |
 | Are station, direction, filters, map tuple, active trip, manual progress, scroll, focus, and reading position unchanged after recovery? | Required here; not observed. | OFF-T23 final tuple comparison |
-| Have Privacy and Operations reviewed the same fixed version and has the index/metadata mismatch been reconciled? | No. | Both decisions and Product Governance Lead reconciliation |
-| Does this Draft claim Gate 0 passage, OFF-T23 passage, companion approval, Privacy or Operations approval, Task 14 evidence, or release readiness? | No. The decision remains **NO-GO — GATE 0 NOT PASSED**; public boards blocked. | Fixed evidence, all mandatory reviews, governance reconciliation, and later release gate |
+| Are Privacy and Operations routing aligned between the artifact and Draft index row? | Yes; neither role has approved this artifact. | Same-version decisions from all six mandatory reviewers |
+| Does this Draft claim Gate 0 passage, OFF-T23 passage, companion approval, Privacy or Operations approval, Task 14 evidence, or release readiness? | No. The decision remains **NO-GO — GATE 0 NOT PASSED**; public boards blocked. | Fixed evidence, all mandatory reviews, and the later release gate |
