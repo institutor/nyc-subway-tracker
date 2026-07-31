@@ -8,6 +8,8 @@
 | Status | Draft |
 | Last validation date | 2026-07-30 |
 | Supersedes | None |
+| Approval evidence | Pending |
+| Scenario results | [Not run — Pending](#pending-execution-record) |
 | Launch checklist | [Commute alert launch checklist](commute-alert-launch-checklist.md) |
 | Controlling decision | [Commute alert go/no-go record](commute-alert-go-no-go-record.md) |
 
