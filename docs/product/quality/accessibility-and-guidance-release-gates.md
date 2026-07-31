@@ -2,9 +2,9 @@
 
 | Governance field | Value |
 |---|---|
-| Source sections | Approved specification §§29.1, 29.3–29.4, 31.5–31.6, 32.2–32.3, and applying §§33.1–33.3; accessibility and platform-guidance plan `Product artifact map` and Task 12 Steps 1–4 |
+| Source sections | Approved specification §§29.1, 29.3–29.4, 31.5–31.6, 32.2–32.3, and applying §§33.1–33.3; accessibility and platform-guidance plan `Product artifact map` and Task 12 Steps 1–13, including checkpoint-1 and final-checkpoint provenance |
 | Owner | Release Quality Lead |
-| Required reviewers | Product, Accessibility, Data Quality, Content, Operations |
+| Required reviewers | Product, Accessibility, Data Quality, Content, Privacy, Operations |
 | Status | Draft |
 | Last validation date | 2026-07-30 |
 | Supersedes | None |
@@ -17,7 +17,7 @@ This append-only record applies Task 12 Steps 1–4 to the fixed Release 1 acces
 
 The [approved product specification](../../superpowers/specs/2026-07-30-nyc-subway-train-time-tracker-design.md) controls every conflict. The [Release 1 accessibility acceptance pack](../accessibility/accessibility-acceptance-pack.md) owns the Task 6 evidence inventory; this record evaluates that frozen inventory without rewriting it. Artifact lifecycle and reviewer decisions follow the [product artifact review and approval policy](../review-and-approval-policy.md).
 
-The [product artifact index](../artifact-index.md) cites specification §§29.1, 29.3–29.4, 31.5–31.6, and 32.2–32.3 for this record. Its omission of applying risk §§33.1–33.3 and detailed Task 12 Steps 1–4 provenance is **Pending** Product Governance reconciliation. This checkpoint does not edit the index or treat the mismatch as approved.
+The artifact header and Draft [product artifact index](../artifact-index.md) row include applying risk §§33.1–33.3 and full Task 12 Steps 1–13 checkpoint provenance. Product, Accessibility, Data Quality, Content, Privacy, and Operations decisions remain **Pending**; metadata alignment is not approval.
 
 Review-clean SDD task commits show that the documentation tasks passed their task review. They do not establish governed artifact approval, product execution, real-world coverage, reviewer decisions, or release authorization. This artifact therefore remains **Draft** even though the evidence below deterministically requires a no-go.
 
@@ -334,7 +334,7 @@ For an invalidating nonterminal actual-versus-scheduled-track conflict, preserve
 
 Accessibility and safe-platform guidance always outrank fastest exit, quickest transfer, or crowding convenience. No positioning claim may strengthen platform truth; no transfer arithmetic may repair a missing interval, failed path, hard conflict, or Unknown equipment state; no commute push may establish operational truth.
 
-The artifact index does not contain the full Task 12 final-checkpoint provenance and does not include Privacy in the commute-notification reviewer set. Product Governance reconciliation remains **Pending**; this checkpoint does not edit the index or infer approval.
+The artifact header and Draft index row contain the full Task 12 final-checkpoint provenance and include Privacy for the pre-commute accessibility-notification package. No reviewer decision or authorization is inferred.
 
 ### Artifact review and authorization
 

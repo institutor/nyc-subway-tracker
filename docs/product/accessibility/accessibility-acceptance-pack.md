@@ -2,7 +2,7 @@
 
 | Governance field | Value |
 |---|---|
-| Source sections | Approved specification §§20.1, 20.5, 21, 29.1, 31.5, 31.8 cases 45–46, 32.2, and applying §§33.1–33.3; accessibility and platform-guidance plan `Product artifact map`, Task 6 `Product artifacts`, `Dependencies`, `Produces for later tasks`, `Ordered steps`, and `Evidence and acceptance checks`, and Task 12 Steps 1–4 with the checkpoint-1 Release 1 gate handoff |
+| Source sections | Approved specification §§20.1, 20.5, 21, 23.1, 23.3, 23.5, 29.1, 29.4, 31.5, §31.6 scenarios 33–35, 31.8 cases 45–46, 32.2, and applying §§33.1–33.3; accessibility and platform-guidance plan `Product artifact map`, Task 6 `Product artifacts`, `Dependencies`, `Produces for later tasks`, `Ordered steps`, and `Evidence and acceptance checks`, Task 8 positioning-evidence extension, and Task 12 Steps 1–4 with the checkpoint-1 Release 1 gate handoff |
 | Owner | Release Quality Lead |
 | Required reviewers | Product, Accessibility, Data Quality, Content, Operations |
 | Status | Draft |
@@ -31,7 +31,7 @@ Task 6 consolidates evidence definitions. It does not pass Gate 0 or make the Re
 
 ## Governance and wording reconciliation
 
-The [artifact index](../artifact-index.md) cites specification §§21, 31.5, and 32.2 for this pack. Task 6 also applies equipment boundaries §§20.1 and 20.5, the known-outage and Unknown-state targets in §29.1, and §31.8 cases 45–46. The index also omits applying specification §§33.1–33.3 and the detailed Task 12 Steps 1–4 and checkpoint-1 provenance now recorded by this pack. Product Governance Lead reconciliation of all cited omissions and this full applying provenance is **Pending**. This task does not edit the index or treat any mismatch as approved.
+The artifact header and Draft [artifact index](../artifact-index.md) row include the Release 1 equipment, accessibility, risk, and Task 12 checkpoint provenance plus the separate Release 2 Task 8 positioning-evidence extension. This metadata reconciliation does not approve either package; every execution, reviewer decision, and release authorization remains **Pending**.
 
 The plan's broad equipment sentence is applied consistently with the approved specification and accepted Task 4 artifacts:
 
@@ -397,7 +397,7 @@ This Task 8 extension is a separate Release 2 evidence-definition namespace. It 
 | Approval evidence | Pending |
 | Scenario results | Three definitions; all **Not run — Pending** |
 
-The artifact index cites this pack only for Release 1 specification §§21, 31.5, and 32.2. Product Governance Lead reconciliation of this separate Release 2 Task 8 provenance with the index is **Pending**. This task does not edit the index or treat the mismatch as approved.
+The artifact header and Draft index row include this separate Release 2 Task 8 provenance. That metadata alignment does not approve the extension; all three definitions remain **Not run — Pending**.
 
 The [Front, Middle, and Back positioning rider experience](../guidance/positioning-rider-experience.md) owns Task 8 presentation. The [platform guidance evidence standard](../guidance/platform-evidence-standard.md) and [platform state and positioning certainty matrix](../guidance/platform-state-and-certainty-matrix.md) retain Task 7 evidence, state, certainty, hard-conflict, recovery, and reevaluation authority. The [Accessible Route Only state matrix](accessible-route-only-state-matrix.md#aro-17-verified-accessible-zone-outranks-quickest-stairs) retains the appended hard-constraint priority definition.
 
