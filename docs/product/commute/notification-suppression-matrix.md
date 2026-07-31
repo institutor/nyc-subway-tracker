@@ -17,7 +17,7 @@ This matrix applies the [notification eligibility contract](notification-eligibi
 
 Task 1’s [commute window contract](commute-window-contract.md) and [field dictionary](commute-window-field-dictionary.md) remain unchanged. The [fixed relevance examples](disruption-relevance-examples.md) define later execution records. The [approved product specification](../../superpowers/specs/2026-07-30-nyc-subway-train-time-tracker-design.md) controls every conflict.
 
-This artifact is **Draft** and all scenario evidence is **Not run — Pending**. The authoritative **NO-GO — GATE 0 NOT PASSED** in the [Gate 0 exit record](../quality/gate-0-exit-record.md) continues to block public arrival boards and commute-alert release.
+This artifact is **Draft** and all scenario evidence is **Not run — Pending**. Two independent blockers remain in force: **NO-GO — GATE 0 NOT PASSED** in the [Gate 0 exit record](../quality/gate-0-exit-record.md), which continues to block public arrival boards and commute-alert release; and **NO-GO — REQUIRED ACCESSIBILITY EVIDENCE AND COVERAGE ARE NOT DEMONSTRATED** in the [accessibility and guidance release-gate record](../quality/accessibility-and-guidance-release-gates.md). Task 2 does not waive, merge, or pass either independent blocker.
 
 ## Product Governance reconciliation
 
