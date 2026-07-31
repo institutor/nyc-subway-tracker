@@ -440,8 +440,8 @@ Every fixture below must be executed against one immutable product version and t
 | Decision | Authoritative owner | Task 3 boundary |
 |---|---|---|
 | Complete structural path and edge eligibility | Complete-path contract and station-direction coverage artifacts | Consume exact-scope decisions; do not create real coverage. |
-| Current equipment state, freshness, anomaly, and restoration | Planned Task 4 equipment artifacts | Treat absent or unaccepted required decisions as Unknown; wording remains Pending. |
-| Outage impact, alternative order, and underway warnings | Planned Task 5 impact and warning artifacts | Preserve the hard constraint; warning wording remains Pending. |
+| Current equipment state, freshness, anomaly, and restoration | Draft Task 4 equipment artifacts | Treat Pending or unaccepted required decisions as Unknown; wording and observed evidence remain Pending. |
+| Outage impact, alternative order, and underway warnings | Draft Task 5 impact and warning artifacts | Preserve the hard constraint; reviewer decisions, observed evidence, and warning wording remain Pending. |
 | Accessible Route Only persistence, candidate exclusion, bus boundary, offline structural rule, and ranking order | This matrix | Own the deterministic behavior defined here. |
 | Rider-visible Task 3 accessibility wording | Accessibility copy catalog | Use only the exact accepted phrases and evidence scopes. |
 | Release approval | Release governance | This Draft supplies no approval or observed evidence. |

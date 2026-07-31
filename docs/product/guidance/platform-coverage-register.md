@@ -31,7 +31,7 @@ The separate Release 1 accessibility decision remains **NO-GO — REQUIRED ACCES
 
 ## Product Governance reconciliation
 
-The [product artifact index](../artifact-index.md) cites approved specification §§23.7, 29.4, and 32.3 for this register. Task 10 also applies station-geometry risk §33.2, supporting measure §30.2, Release 3 expansion §32.4, the full Task 10 plan provenance, and the upstream boundaries linked above. Product Governance Lead reconciliation of the index omission of §§30.2, 32.4, and 33.2 is **Pending**. This task does not edit the index or treat the mismatch as approved.
+The artifact header and Draft [product artifact index](../artifact-index.md) row now align on approved specification §§23.7, 29.4, 30.2, 32.3–32.4, and 33.2, full Task 10 provenance, and Product, Accessibility, Data Quality, Content, and Operations review. That metadata alignment is not approval; every real coverage row, reviewer decision, and lifecycle advancement remains **Pending**.
 
 ## Accepted upstream documentation bindings
 

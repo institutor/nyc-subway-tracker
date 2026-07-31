@@ -36,7 +36,7 @@ The arrival-truth Gate 0, Nearby/offline, accessibility, and platform-guidance g
 
 ## Product Governance reconciliation
 
-The [product artifact index](../artifact-index.md) cites approved specification §§23.3–23.4 for this matrix. Task 7 also applies positioning target §29.4, direction-reversal and track-conflict scenarios 33–34 in §31.6, data-limitation and station-geometry risks §§33.1–33.2, the full Task 7 plan provenance, and the upstream truth, accessibility, review, terminology, and rider-language boundaries linked above. Product Governance Lead reconciliation of the narrower index citation and this full applying provenance is **Pending**. This task does not edit the index or treat the mismatch as approved.
+The artifact header and Draft [product artifact index](../artifact-index.md) row now align on approved specification §§23.3–23.4, 29.4, 31.6 scenarios 33–34, and 33.1–33.2, full Task 7 provenance, and Product, Accessibility, Data Quality, Content, and Operations review. That metadata alignment is not approval; every platform-state fixture, reviewer decision, and lifecycle advancement remains **Pending**.
 
 ## The axes are independent
 
@@ -660,7 +660,7 @@ Every unchecked required item blocks review completion and Release 2 considerati
 
 Task 10 changes none of the Task 7 axes, states, decision conditions, two-update rules, recovery rules, conflict copy, actual-track horizon, direction-reversal rules, or PG01–PG13 fixture definitions and statuses above. It applies approved specification §§23.7, 29.4, 30.2, 32.3–32.4, and 33.2; the accessibility and platform-guidance plan `Product artifact map` and full Task 10 `Product artifacts`, `Dependencies`, `Produces for later tasks`, `Ordered steps`, and `Evidence and acceptance checks`; accepted Task 7 commit `3d39129a58b497c92d0125569edebd894c47a71d` with this file's accepted pre-append blob `cc937eb46b0493236dd2be67589f147049dbee26`; accepted Task 8 commit `0fcb00265a23ea859681dfef7b6edad213c674df`; and accepted Task 9 commit `8e27ae2bd3b69c3946a9aba41adf7c76f36e00a5`.
 
-The [platform guidance coverage register](platform-coverage-register.md) owns the atomic 38-field coverage row, eligibility disposition, priority, reverification, feedback, and Release 2 package. Its product artifact index citation omits applying §§30.2, 32.4, and 33.2; Product Governance Lead reconciliation remains **Pending**. This task does not edit the index or invent approval.
+The [platform guidance coverage register](platform-coverage-register.md) owns the atomic 38-field coverage row, eligibility disposition, priority, reverification, feedback, and Release 2 package. Its artifact header and Draft index row align on §§23.7, 29.4, 30.2, 32.3–32.4, and 33.2 plus full Task 10 provenance. That metadata alignment does not invent approval; every real coverage row, reviewer decision, and release disposition remains **Pending**.
 
 ### Coverage is the first positioning gate
 

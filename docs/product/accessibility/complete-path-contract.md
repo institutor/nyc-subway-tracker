@@ -31,7 +31,7 @@ Task 1 neither passes Gate 0 nor makes an accessibility release decision.
 
 ## Governance provenance reconciliation
 
-The [artifact index](../artifact-index.md) currently cites specification §19.1 for this contract. The Task 1 brief requires the broader §§19.1, 20.2, 21, and 33.3 provenance recorded above because the contract also governs elevator/escalator substitution, acceptance traps, and fail-closed accessibility completeness. Product Governance Lead reconciliation of the index and this metadata is **Pending** before this artifact may advance from **Draft**. This task does not edit the index or manufacture approval.
+The artifact header and Draft [artifact index](../artifact-index.md) row now align on approved specification §§19.1, 20.2, 21, and 33.3, full Task 1 provenance, and Product, Accessibility, Data Quality, and Content review. That metadata alignment does not manufacture approval or advance this artifact from **Draft**; every reviewer decision and complete-path scenario result remains **Pending**.
 
 ## Controlling street-to-street path
 
@@ -162,11 +162,11 @@ All four are **Not run — Pending**. Expected contract prose and this documenta
 |---|---|---|
 | Complete street-to-street definition, seven edge evidence fields, cumulative failure, and redundancy rule | This contract, Task 1 | Draft; no real coverage or observed evidence |
 | Deterministic review record and four representative traps | [Path-edge review checklist](path-edge-review-checklist.md), Task 1 | Draft; all traps Not run — Pending |
-| Constituent-station, entrance, route, direction, platform, and verified chain coverage | Planned Task 2 accessibility artifacts | Absent; no coverage claim |
-| Accessible Route Only behavior, offline wording, and valid-path ranking | Planned Task 3 accessibility artifacts | Absent; no rider-facing claim |
-| Current equipment truth, matching, freshness, anomaly, and restoration | Planned Task 4 equipment artifacts | Absent; current availability cannot be claimed |
-| Path impact, rerouting, and underway warnings | Planned Task 5 accessibility artifacts | Absent |
-| Fixed scenario and Release 1 accessibility evidence | Planned Tasks 6 and 12 quality artifacts | Absent; no accessibility release decision |
+| Constituent-station, entrance, route, direction, platform, and verified chain coverage | Draft Task 2 accessibility artifacts | Same-version approval and observed coverage evidence Pending; no coverage claim |
+| Accessible Route Only behavior, offline wording, and valid-path ranking | Draft Task 3 accessibility artifacts | Same-version approval and observed evidence Pending; no rider-facing claim |
+| Current equipment truth, matching, freshness, anomaly, and restoration | Draft Task 4 equipment artifacts | Same-version approval and observed evidence Pending; current availability cannot be claimed |
+| Path impact, rerouting, and underway warnings | Draft Task 5 accessibility artifacts | Same-version approval and observed evidence Pending |
+| Fixed scenario and Release 1 accessibility evidence | Draft Tasks 6 and 12 quality artifacts | Same-version approval and observed evidence Pending; no accessibility release decision |
 
 ## Draft review checklist
 

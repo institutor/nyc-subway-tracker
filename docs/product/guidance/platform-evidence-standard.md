@@ -31,7 +31,7 @@ Accessibility, Nearby/offline, arrival-truth Gate 0, and platform-guidance relea
 
 ## Product Governance reconciliation
 
-The [product artifact index](../artifact-index.md) cites approved specification §§23.2 and 33.2 for this standard. Task 7 also applies positioning target §29.4, scenarios 33–34 in §31.6, data-limitation risk §33.1, the full Task 7 plan provenance, and the upstream truth, accessibility, review, terminology, and rider-language boundaries linked above. Product Governance Lead reconciliation of the narrower index citation and this full applying provenance is **Pending**. This task does not edit the index or treat the mismatch as approved.
+The artifact header and Draft [product artifact index](../artifact-index.md) row now align on approved specification §§23.2, 29.4, 31.6 scenarios 33–34, and 33.1–33.2, full Task 7 provenance, and Product, Accessibility, Data Quality, Content, and Operations review. That metadata alignment is not approval; every evidence package, reviewer decision, and lifecycle advancement remains **Pending**.
 
 ## Evidence layers remain separate
 
@@ -205,7 +205,7 @@ Every unchecked required item blocks evidence completeness. This Draft and its d
 
 Task 10 changes none of the Task 7 rules or 30-field record definitions above. It applies approved specification §§23.7, 29.4, 30.2, 32.3–32.4, and 33.2; the accessibility and platform-guidance plan `Product artifact map` and full Task 10 `Product artifacts`, `Dependencies`, `Produces for later tasks`, `Ordered steps`, and `Evidence and acceptance checks`; accepted Task 7 commit `3d39129a58b497c92d0125569edebd894c47a71d` with this file's accepted pre-append blob `5aa640263da812458a6005de6e691801d24374f5`; accepted Task 8 commit `0fcb00265a23ea859681dfef7b6edad213c674df`; and accepted Task 9 commit `8e27ae2bd3b69c3946a9aba41adf7c76f36e00a5`.
 
-The [platform guidance coverage register](platform-coverage-register.md) now owns the station-by-station eligibility row, review priority, coverage reverification, feedback taxonomy, and Release 2 evidence package. The product artifact index cites §§23.7, 29.4, and 32.3 for that register but omits applying §§30.2, 32.4, and 33.2. Product Governance Lead reconciliation remains **Pending**; this task does not edit the index or invent approval.
+The [platform guidance coverage register](platform-coverage-register.md) now owns the station-by-station eligibility row, review priority, coverage reverification, feedback taxonomy, and Release 2 evidence package. Its artifact header and Draft index row align on §§23.7, 29.4, 30.2, 32.3–32.4, and 33.2 plus full Task 10 provenance. That metadata alignment does not invent approval; every real coverage row, reviewer decision, and release disposition remains **Pending**.
 
 ### Required coverage handoff
 

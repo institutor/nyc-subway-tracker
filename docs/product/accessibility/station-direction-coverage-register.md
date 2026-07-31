@@ -29,7 +29,7 @@ Tasks 2 and 6 do not pass Gate 0, approve a station-direction combination, or ma
 
 ## Governance provenance reconciliation
 
-The [artifact index](../artifact-index.md) cites specification §§19.2 and 33.3 for this register. Task 2 also applies the scenario branches in §§21 and 31.5 and the plan's full Task 2 provenance. Task 6 adds the Release 1 evidence handoff and applies the applicable §§21 and 31.5 cases plus §32.2, as recorded above. Product Governance Lead reconciliation of the index and this broader metadata is **Pending** before this artifact may advance from **Draft**. Task 6 does not edit the index or manufacture approval.
+The artifact header and Draft [artifact index](../artifact-index.md) row now align on approved specification §§19.2, 21, 31.5, 32.2, and 33.3, full Task 2 and Task 6 provenance, and Product, Accessibility, Data Quality, Content, and Operations review. That metadata alignment records the Release 1 handoff but does not manufacture approval; every coverage result, reviewer decision, and lifecycle advancement remains **Pending**.
 
 ## Atomic coverage unit
 

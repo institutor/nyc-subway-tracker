@@ -33,7 +33,7 @@ The separate Release 1 accessibility decision remains **NO-GO — REQUIRED ACCES
 
 ## Product Governance reconciliation
 
-The Task 9 plan cites specification §31.6, but the transfer-threshold boundary case is scenario 47 in §31.8. Section 31.6 scenarios 33–35 remain Task 8 positioning inputs; Task 9 does not own alarm scenarios 36–39. The [product artifact index](../artifact-index.md) cites §§23.6, 31.6, and 31.8 for this artifact but omits applying release boundaries §§32.2–32.3. Product Governance Lead reconciliation of those mismatches with the applying provenance above is **Pending**. This task does not edit the index or treat the mismatch as approved.
+The Task 9 plan's broad §31.6 citation is bounded here to retained Task 8 positioning scenarios 33–35; the transfer-threshold boundary case remains scenario 47 in §31.8, and Task 9 does not own alarm scenarios 36–39. The artifact header and Draft [product artifact index](../artifact-index.md) row now align on §23.6, §31.8 scenario 47, §§32.2–32.3, the retained Task 8 boundary, full Task 9 provenance, and Product, Accessibility, Data Quality, and Content review. That metadata alignment is not approval; every transfer result, reviewer decision, and lifecycle advancement remains **Pending**.
 
 ## Accepted upstream documentation bindings
 

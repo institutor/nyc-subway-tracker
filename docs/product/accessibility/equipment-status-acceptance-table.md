@@ -29,7 +29,7 @@ Tasks 4 and 6 do not pass Gate 0 or the Release 1 accessibility gate.
 
 ## Governance provenance reconciliation
 
-The [artifact index](../artifact-index.md) cites specification §§20, 31.5, and 31.8 for this table. Task 4 additionally applies acceptance case §21.9, accessibility target §29.1, and the plan's full Task 4 provenance. Task 6 adds the first-empty, confirmed-empty, one-omission, restoration, failed-response, cross-artifact, and Release 1 handoff controls and applies §32.2, as recorded above. Product Governance Lead reconciliation of the narrower index citation and this broader metadata is **Pending** before this artifact may advance from **Draft**. Task 6 does not edit the index or treat the mismatch as approved.
+The artifact header and Draft [artifact index](../artifact-index.md) row now align on approved specification §§20, 21.9, 29.1, 31.5, 31.8, and 32.2, the full Task 4 and Task 6 provenance, and Product, Accessibility, Data Quality, Content, and Operations review. That metadata alignment records the Release 1 handoff controls but is not approval; every fixture observation, reviewer decision, and lifecycle advancement remains **Pending**.
 
 ## Fixture execution contract
 

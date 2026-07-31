@@ -29,7 +29,7 @@ Task 4 does not pass Gate 0, approve public equipment-status copy, or make the R
 
 ## Governance provenance reconciliation
 
-The [artifact index](../artifact-index.md) cites specification §20 for this policy. Task 4 additionally applies acceptance case §21.9, accessibility target §29.1, accessibility scenarios §31.5, cross-feature scenario §31.8, and the plan's full Task 4 provenance, as recorded above. Product Governance Lead reconciliation of the narrower index citation and this metadata is **Pending** before this artifact may advance from **Draft**. This task does not edit the index or treat the mismatch as approved.
+The artifact header and Draft [artifact index](../artifact-index.md) row now align on approved specification §§20, 21.9, 29.1, 31.5, and 31.8, full Task 4 provenance, and Product, Accessibility, Data Quality, Content, and Operations review. That metadata alignment is not approval; every equipment-state observation, reviewer decision, and lifecycle advancement remains **Pending**.
 
 ## Decision model
 

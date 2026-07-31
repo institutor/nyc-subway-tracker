@@ -29,7 +29,7 @@ Task 5 does not pass Gate 0, approve an underway warning or notification, prove 
 
 ## Governance provenance reconciliation
 
-The [artifact index](../artifact-index.md) cites specification §§20.5 and 31.5 for this matrix. Task 5 also applies path relevance, impact classification, and rerouting §§20.2–20.4; planned-work alternatives §20.6; accessibility case 6 in §21; scenario 39 in §31.6; and the plan's full Task 5 provenance, as recorded above. Product Governance Lead reconciliation of the narrower index citation and this metadata is **Pending** before this artifact may advance from **Draft**. This task does not edit the index or treat the mismatch as approved.
+The artifact header and Draft [artifact index](../artifact-index.md) row now align on approved specification §§20.2–20.6, 21 case 6, 31.5, and 31.6 scenario 39, full Task 5 provenance, and Product, Accessibility, Data Quality, Content, and Operations review. That metadata alignment is not approval; every underway-warning fixture, reviewer decision, and lifecycle advancement remains **Pending**.
 
 ## Fixed journey and warning inputs
 

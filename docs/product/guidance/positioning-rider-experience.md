@@ -33,7 +33,7 @@ The separate Release 1 accessibility decision remains **NO-GO — REQUIRED ACCES
 
 ## Product Governance reconciliation
 
-The [product artifact index](../artifact-index.md) cites approved specification §§23.1, 23.5, and 31.6 and lists Product, Accessibility, Data Quality, and Content review for this artifact. Task 8 additionally applies guidance certainty §23.3, positioning target §29.4, the exact scenario range §31.6 scenarios 33–35, the plan's full Task 8 provenance, the controlling Task 7 boundaries, and Operations review required by the Task 8 brief. Product Governance Lead reconciliation of the narrower index provenance and reviewer set with this broader applying provenance and five-role review is **Pending**. This task does not edit the index or treat the mismatch as approved.
+The artifact header and Draft [product artifact index](../artifact-index.md) row now align on approved specification §§23.1, 23.3, 23.5, 29.4, and 31.6 scenarios 33–35, full Task 8 provenance, and Product, Accessibility, Data Quality, Content, and Operations review. That metadata alignment is not approval; every positioning fixture, reviewer decision, and lifecycle advancement remains **Pending**.
 
 ## Controlling input and decision order
 
@@ -235,7 +235,7 @@ Task 9 adds no new positioning objective and changes none of the Task 8 rules or
 
 Task 9 applies approved specification §23.6, §31.8 scenario 47, and §§32.2–32.3; the accessibility and platform-guidance plan `Product artifact map` and full Task 9 `Product artifacts`, `Dependencies`, `Produces for later tasks`, `Ordered steps`, and `Evidence and acceptance checks`; accepted Task 7 commit `3d39129a58b497c92d0125569edebd894c47a71d`; and accepted Task 8 commit `0fcb00265a23ea859681dfef7b6edad213c674df` with this file's accepted pre-append blob `38e7e5fda00dd4b4ed577a2a37c7eb5fb596499d`.
 
-The Task 9 plan cites §31.6, while the transfer-threshold case is scenario 47 in §31.8. Section 31.6 scenarios 33–35 remain the Task 8 positioning inputs above; Task 9 does not own alarm scenarios 36–39. The [product artifact index](../artifact-index.md) cites §§23.6, 31.6, and 31.8 for the transfer artifact but omits applying §§32.2–32.3. Product Governance Lead reconciliation remains **Pending**. This task does not edit the index or invent approval.
+The Task 9 plan's broad §31.6 citation is bounded here to Task 8 positioning scenarios 33–35; the transfer-threshold case remains scenario 47 in §31.8, and Task 9 does not own alarm scenarios 36–39. The transfer artifact's Draft index row now records §23.6, §31.8 scenario 47, §§32.2–32.3, retained Task 8 positioning provenance, full Task 9 provenance, and its four-role review path. That metadata alignment does not invent approval; every transfer fixture and reviewer decision remains **Pending**.
 
 ### Combined positioning and connection presentation
 

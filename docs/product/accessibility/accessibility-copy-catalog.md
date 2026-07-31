@@ -29,7 +29,7 @@ Tasks 3 through 5 do not approve rider-facing accessibility copy for release, pa
 
 ## Governance provenance reconciliation
 
-The [artifact index](../artifact-index.md) cites specification §§19–20 and reviewers Product, Accessibility, Data Quality, and Content for this catalog. Task 3 additionally applies acceptance case §21.10, accessibility scenarios §31.5, completeness risk §33.3, and the plan's full Task 3 provenance. Task 4 additionally applies acceptance case §21.9, accessibility target §29.1, cross-feature scenario §31.8, and the plan's full Task 4 provenance. Task 5 additionally applies accessibility case 6 in §21, scenario 39 in §31.6, §§20.2–20.6, and the plan's full Task 5 provenance. Operations is mandatory for Task 5 operational warnings under the review policy. Product Governance Lead reconciliation of the narrower index citation and reviewer set is **Pending** before this artifact may advance from **Draft**. This task does not edit the index or treat either mismatch as approved.
+The artifact header and Draft [artifact index](../artifact-index.md) row now align on the full Task 3–5 provenance, including approved specification §§19–20, 21 case 6, 21.9–21.10, 29.1, 31.5, 31.6 scenario 39, 31.8, and 33.3, plus Product, Accessibility, Data Quality, Content, and Operations review. That metadata alignment is not approval; every rendered copy result, reviewer decision, and lifecycle advancement remains **Pending**.
 
 ## Copy-use contract
 

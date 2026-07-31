@@ -29,7 +29,7 @@ Task 2 does not pass Gate 0, approve any coverage record, or make the Release 1 
 
 ## Governance provenance reconciliation
 
-The [artifact index](../artifact-index.md) cites specification §§19.1–19.2 for this guide. Task 2 also applies the acceptance and risk branches in §§21, 31.5, and 33.3 and the plan's full Task 2 provenance, as recorded above. Product Governance Lead reconciliation of the index and this metadata is **Pending** before this artifact may advance from **Draft**. This task does not edit the index or treat the mismatch as approved.
+The artifact header and Draft [artifact index](../artifact-index.md) row now align on approved specification §§19.1–19.2, 21, 31.5, and 33.3, full Task 2 provenance, and Product, Accessibility, Data Quality, and Content review. That metadata alignment is not approval; every station-direction review, reviewer decision, and lifecycle advancement remains **Pending**.
 
 ## Review method
 

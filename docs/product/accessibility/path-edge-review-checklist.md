@@ -33,7 +33,7 @@ Task 2 preserves that boundary. It does not approve a station-direction row, pas
 
 ## Governance provenance reconciliation
 
-The [artifact index](../artifact-index.md) currently cites specification §§19.1 and 21 for this checklist. The Task 1 brief requires the broader §§19.1, 20.2, 21, and 33.3 provenance because the checklist also reviews escalator substitution, current-owner separation, and fail-closed completeness risk. Task 2 additionally applies specification §§19.2 and 31.5 and the plan's Task 2 provenance without erasing the accepted Task 1 history. Product Governance Lead reconciliation is **Pending** before advancement from **Draft**. This task does not edit the index or treat the mismatch as approved.
+The artifact header and Draft [artifact index](../artifact-index.md) row now align on approved specification §§19.1–19.2, 20.2, 21, 31.5, and 33.3, the full Task 1–2 provenance, and Product, Accessibility, Data Quality, and Content review. That metadata alignment preserves the Task 1 history but is not approval; every same-version reviewer decision, edge review, and lifecycle advancement remains **Pending**.
 
 ## Review dispositions
 
