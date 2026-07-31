@@ -104,7 +104,7 @@ Admission finishes upstream before Task 4 receives a list. Task 4 applies the su
 | **Expected** | Primary arrival list | Yes | Preserve the supplied range and chronological position; do not move it behind a later non-overlapping Live train. |
 | **Holding** | Separate warning row | No | Freeze the supplied time; never promote it to fill the primary list. |
 | Confirmed-pattern **Uncertain** | Expandable secondary area | No | Use the supplied no-exact-minute treatment; it is not a weaker primary row. |
-| **Scheduled** | Clearly separated fallback board | No | Use a clock time with **Scheduled** and **Live data unavailable**; never mix into the live next-three. |
+| **Scheduled** | Clearly separated fallback board | No—never counts toward the Live and Expected three | Consume the fallback owner's deterministic zero-to-three rows for this exact direction in supplied order. Use each clock time with **Scheduled** and persistent **Live data unavailable**; never re-enumerate, reorder, backfill, exceed three, or mix the rows into the live next-three. |
 | Resolved suppression | No arrival row | No | Preserve only the narrowest supported service-change consequence. |
 | **Arrival claim unavailable** | Scoped unavailable explanation | No | Preserve the owning explanation and unrelated service; do not invent a train row. |
 | Quarantined or limited | No arrival row; only supported board-level limitation | No | Never expose quarantine, raw identity, or internal reason as rider copy. |

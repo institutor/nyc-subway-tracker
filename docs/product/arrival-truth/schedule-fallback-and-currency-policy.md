@@ -55,6 +55,38 @@ After the relevant route or feed group is proven Unavailable and the cause-based
 
 Regular GTFS therefore becomes the next candidate when supplemented GTFS is unavailable; has no validated applicable edition; is expired or outside its effective coverage or horizon; lacks service-date or departure coverage; has unusable timestamp evidence; is superseded for the claim without a newer departure-eligible applicable edition; or is **Topology only**. Within overlapping coverage, the selector does not return to an earlier supplemented edition that a later validated edition superseded. Outside that overlap, an earlier edition may remain the newest eligible supplement for a claim inside its own still-valid coverage. If regular GTFS cannot support the claim, the result is no estimate; the product does not invent service.
 
+## Deterministic fallback-board generation
+
+After fallback entry is valid, generate one Scheduled candidate list for each exact station directional stop and rider-facing direction within its passenger-serving operational axis. This process creates static Scheduled claims only. It never creates a live train instance, live stop call, countdown, or proof that service is operating normally.
+
+Apply these steps in order:
+
+1. **Establish the comparison instant and service-day chronology.** Use the authoritative comparison time from the time and train continuity policy. Map each source-supported operating service date and its scheduled stop time, including a time beyond `24:00`, to one unambiguous chronological New York instant. Consider only explicit trips whose source-supported service calendar makes that trip active on its operating service date. Do not derive the service date from the phone date or displayed clock time.
+2. **Enumerate explicit future departures at the exact stop.** From every claim-applicable validated supplemented edition not superseded for the claim and from applicable regular GTFS, enumerate every explicit scheduled departure at the exact directional stop whose chronological instant is strictly later than authoritative comparison time. A departure exactly equal to comparison time or already past is excluded because static evidence cannot prove that it remains boardable. Do not add a grace period, roll a past time forward, repeat a prior-day trip, or synthesize a departure from a route identity, usual pattern, service interval, headway, station-complex match, opposite-direction stop, or missing stop time.
+3. **Require a coherent scheduled occurrence.** Each candidate must retain a source-supported operating service date, route, stable scheduled-occurrence identity, exact directional stop, scheduled stopping pattern, actual scheduled destination, normalized rider-facing direction, and chronological departure instant. The pattern, destination, and direction must agree with the requested board. Missing, ambiguous, one-to-many, contradictory, wrong-stop, wrong-direction, or wrong-destination evidence excludes the affected occurrence; static data is not repaired by inference.
+4. **Select the positive source for each proposed departure.** Apply the supplemented-then-regular source order above independently to each occurrence. When canonical equivalence proves that supplemented and regular records describe the same occurrence, retain only the winning source. A regular record cannot appear as a second copy of a supplemented occurrence. Repeated wrappers or retrievals of unchanged canonical content also create no additional row.
+5. **Apply every exclusion before ordering.** Recheck edition validation, currency, supersession, effective coverage, horizon, service-date coverage, exact-departure coverage, and timestamp eligibility. Then apply all current resolved vetoes, material unresolved high-impact service-change decisions, planned-pattern exclusions, cancellations, short turns, station closures, track conflicts, and hard-suppression carryover. An excluded, suppressed, unavailable, quarantined, duplicate, or unresolved occurrence cannot consume a Scheduled position.
+6. **Resolve duplicates and conflicts fail closed.** Collapse records only when canonical evidence proves they are the same scheduled occurrence. Preserve distinct, coherently identified trains even when their public route, destination, and clock time match. If records conflict and neither one-to-one equivalence nor distinct occurrence identity can be proven, withhold the affected records and retain the supported limitation; do not choose the more optimistic record.
+7. **Order eligible rows deterministically.** Sort first by the full chronological departure instant, never by the formatted clock label. For an exact-time tie, order numbered routes by numeric value, then lettered routes alphabetically, then shuttle routes alphabetically by their full rider-facing shuttle name, then any other source-approved public route identifier alphabetically by its full public label. Within the same route, order by normalized public destination name and then by the source-supported canonical scheduled-occurrence identity. These tie-breakers provide stable presentation only; they do not strengthen evidence, override source precedence, or imply that one tied train is more likely to run.
+8. **Cap after ordering.** Take the first three eligible Scheduled rows for each exact rider-facing direction and operational axis. The cap is independent for the opposite direction and is never a three-row cap across the whole station complex. Where multiple route or feed groups independently qualify for fallback in the same direction, combine only their eligible Scheduled rows for this ordering and cap while retaining each row's route, group, source, and currency provenance. A healthy, Degraded, or preserved-recovery group contributes no Scheduled row, and one group's fallback never changes another group's health.
+
+The Scheduled cap is separate from the Live and Expected next-three count. Scheduled rows neither fill a short live list nor displace an admitted Live or Expected train. Unaffected Live or Expected service may remain in its own governed list while an affected group's Scheduled rows remain visibly separated with **Live data unavailable**.
+
+### Honest complete, partial, and empty results
+
+After every exclusion and the final ordering:
+
+| Eligible result for one exact direction | Required fallback-board state |
+|---|---|
+| Three or more | Show only the earliest three eligible Scheduled rows. Later scheduled records do not appear in the initial list and do not change the first three. |
+| One or two | Show exactly those eligible rows and **No additional scheduled departures available.** Do not backfill from a past, ineligible, superseded, vetoed, ambiguous, opposite-direction, or out-of-coverage record. |
+| Zero because no source can support an eligible future departure | Show no Scheduled row, keep **Live data unavailable** persistent, and show **No scheduled departures available.** This is not a claim that service has ended or that a train was cancelled. |
+| Zero or partial because a resolved veto applies | Show only unaffected eligible rows and the narrowest supported resolved service-change consequence for the excluded scope. Do not expose the vetoed clock time or replace it with neutral gap copy when the narrower consequence controls. |
+| Zero or partial because current high-impact evidence leaves material scope unresolved | Replace only the affected proposed claim with **Service change—arrival unavailable**, show no affected clock time, and preserve unrelated eligible Scheduled rows and official details as governed below. |
+| Zero or partial because prior hard suppression has not cleared | Keep the affected claim absent and use only the neutral evidence-supported no-arrival treatment required below. Do not repeat an ended service-change cause or let static data satisfy recovery. |
+
+The neutral empty and partial copy remains Draft and subject to Content approval with this artifact. Neither copy may be interpreted as proof of no service.
+
 ## Edition identity and supersession
 
 Retain a distinct currency-edition identity, canonical schedule-content identity, transport and metadata wrapper observations, validation result, supported source version or chronology, publication time when supplied, first successful retrieval time, later successful retrieval observations, effective coverage, service-date coverage, and claim-scoped supersession relationships.
@@ -106,7 +138,7 @@ The first qualifying update restores nothing. Static, supplemented, or regular s
 
 ## Rider presentation
 
-An eligible fallback board is visually and semantically separate from the Live and Expected next-three board. For every shown scheduled departure:
+An eligible fallback board is visually and semantically separate from the Live and Expected next-three board. It shows only the deterministic first zero to three rows for the exact direction supplied by the generation rules above. For every shown scheduled departure:
 
 - Show a scheduled New York clock time, never a countdown or advancing minute value.
 - Show **Scheduled** as its evidence state.
@@ -129,6 +161,8 @@ For every fallback, veto, or no-estimate decision, retain:
 5. The regular GTFS eligibility decision when supplemented data did not supply the departure.
 6. Every current veto or unresolved service change, its independent high-impact evidence where applicable, material scope uncertainty, and whether it suppressed or replaced the schedule.
 7. Any prior hard suppression, row-specific prerequisite, both recovery updates, all five Task 9 recovery conditions, and Live-gate result.
-8. The selected source or no-estimate result and the exact rider presentation, including both currency age and last-retrieved age when they differ.
+8. Every explicit scheduled record considered; its service-day chronology and future/past decision; its occurrence identity, exact stop, route, destination, and direction decision; its source-selection, duplicate/conflict, exclusion, veto, and eligibility disposition; and the specific honest partial or empty-state reason when fewer than three rows remain.
+9. The complete pre-cap order, every exact-time tie-break value, the final zero-to-three rows for each exact direction, and proof that the opposite direction and unrelated route or feed-group health were evaluated independently.
+10. The selected source or no-estimate result and the exact rider presentation, including both currency age and last-retrieved age when they differ.
 
 The [schedule currency boundary cases](schedule-currency-boundary-cases.md) define the required acceptance evidence. No scenario becomes approved merely because this policy states its expected decision.

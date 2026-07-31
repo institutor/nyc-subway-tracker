@@ -19,7 +19,7 @@ The [zero-tap startup and location-permission flow](zero-tap-startup-and-permiss
 
 The [approved product specification](../../superpowers/specs/2026-07-30-nyc-subway-train-time-tracker-design.md) controls every conflict. Shared concepts retain their meanings in the [transit product glossary](../contracts/transit-product-glossary.md), and public wording remains subject to the [rider language rules](../contracts/rider-language-rules.md).
 
-This artifact is **Draft**. The authoritative [Gate 0 exit record](../quality/gate-0-exit-record.md) is **NO-GO — GATE 0 NOT PASSED**, so public arrival boards remain blocked. Accessibility owner artifacts, observed scenario 21 evidence, and Release 1 approval are also absent. The cases below are expected review fixtures, not observed passes.
+This artifact is **Draft**. The authoritative [Gate 0 exit record](../quality/gate-0-exit-record.md) is **NO-GO — GATE 0 NOT PASSED**, so public arrival boards remain blocked. Accessibility owner artifacts exist as Drafts, but their approvals, observed scenario 21 evidence, and Release 1 approval remain absent. The cases below are expected review fixtures, not observed passes.
 
 ## Governance and applying-provenance reconciliation
 
@@ -75,6 +75,7 @@ Exclude an entrance from automatic useful-entrance ranking when:
 
 - it is exit-only, restricted against the required entry, or its entry permission is Unknown;
 - a current resolved closure applies to that entrance;
+- the required current entrance-access or closure view is missing, stale, failed, conflicting, incomplete for its declared scope, or cannot establish whether that exact entrance may currently admit the rider;
 - it does not reach the required constituent station;
 - it does not serve the required passenger direction or operational axis;
 - current resolved service evidence establishes that boarding in the exact scope is unavailable;
@@ -93,7 +94,9 @@ Exclusions remain scoped:
 - Missing qualified-arrival evidence does not itself prove the station is not serving passengers.
 - Missing closure evidence does not prove an entrance is open.
 
-A station may remain visible with an honest limited or unavailable arrival state when current evidence has not resolved passenger service as absent. Ranking must not hide it merely to make the result set appear more certain.
+A positive authoritative entry state or an accepted healthy, complete, current closure view covering the exact entrance may establish current entrance usability. A bare omitted closure record, a generic station status, or evidence for another entrance may not.
+
+If all verified entrances for a station fail only because current entrance usability is unconfirmed, the station may remain visible with **Entrance availability not confirmed** and an honest limited or unavailable arrival state, but no entrance is called **useful**, **open**, or **nearest**. Offer the bottom-anchored station picker and station detail without guessing an entrance or promoting another unverified entrance. Ranking must not hide the station merely to make the result set appear more certain.
 
 ## Qualified-arrival and service-change boundary
 
@@ -243,12 +246,25 @@ Each case is an expected fixture. Its result remains **Not run — Pending** unt
 | Prohibited result | Hiding A, calling B nearest, obscuring either walking time, or allowing preference to alter operational truth. |
 | Evidence status | Not run — Pending |
 
+### UR-C06 — Entrance closure status unavailable
+
+| Case field | Fixed value |
+|---|---|
+| Inputs | Complex A entrance A1 is a 2-minute practical walk and has verified entry geometry, but its required current closure view failed. Complex A entrance A2 is 5 minutes away and is covered by an accepted healthy, complete, current closure view with no applicable closure. Complex B entrance B1 is 4 minutes away, but its closure evidence is stale. All three otherwise serve the selected direction. |
+| Winner | **Complex A, entrance A2.** |
+| Rejected or lower candidate | A1 and B1 are excluded from automatic useful-entrance ranking because current usability is unconfirmed. Their stations may remain visible without a specific useful-entrance claim. |
+| Decisive evidence | A2 is the shortest entrance whose entry permission, relationship, and exact current closure scope all pass. Missing or stale closure evidence for A1 and B1 is not evidence that either is open. |
+| Visible explanation | **A2 is the nearest entrance currently confirmed for this direction. Entrance availability is not confirmed for the closer options.** |
+| No-confirmed-entrance branch | If A2 also loses qualifying evidence, show the station with **Entrance availability not confirmed**, offer station detail and the station picker, and make no nearest/useful/open entrance claim. |
+| Prohibited result | Rank A1 or B1 as useful; call an omitted closure record open; borrow A2's evidence; hide the station; use centroid distance; or let a saved preference override the exclusion. |
+| Evidence status | Not run — Pending |
+
 ## Review and release conditions
 
 | Review question | Required Draft result | Evidence needed later |
 |---|---|---|
 | Does ranking start from usable entrances rather than centroids? | Yes. | Scenario 21 and entrance-coverage observation |
-| Are hard exclusions applied before walking comparison and personalization? | Yes. | UR-C01–UR-C05 observed results |
+| Are hard exclusions applied before walking comparison and personalization, including missing or stale entrance-closure evidence? | Yes. | UR-C01–UR-C06 observed results |
 | Does every result preserve exact constituent and direction scope? | Yes. | Multi-axis and direction review |
 | Does Accessible Route Only reject Unknown without silently relaxing? | Yes. | Companion complete-path/equipment evidence and UR-C04 |
 | Can a preference hide or rewrite the closer workable result? | No. | UR-C05 and saved-state evidence |
