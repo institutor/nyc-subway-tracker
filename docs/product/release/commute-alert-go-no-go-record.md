@@ -2,14 +2,15 @@
 
 | Governance field | Value |
 |---|---|
-| Source authority | Approved specification §§25.2–25.7, 26.3, 28.1–28.3, 30, 32.3, 33.5, and 34; commute alerts and launch quality plan Task 10 |
+| Source sections | Approved specification §§25.2–25.7, 26.3, 28.1–28.3, 30, 32.3, 33.5, and 34; commute alerts and launch quality plan Task 10 |
 | Owner | Release Quality Lead |
 | Required reviewers | Product, Accessibility, Data Quality, Content, Privacy, Operations |
 | Status | Draft |
+| Last validation date | 2026-07-30 |
 | Decision date | 2026-07-30 |
 | Supersedes | None |
 | Approval evidence | Pending |
-| Scenario evidence | [Not run — Pending](commute-alert-scenario-results.md#pending-execution-record) |
+| Scenario results | [Not run — Pending](commute-alert-scenario-results.md#pending-execution-record) |
 
 ## Record authority
 

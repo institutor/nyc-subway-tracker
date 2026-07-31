@@ -9,7 +9,7 @@
 | Last validation date | 2026-07-30 |
 | Supersedes | None |
 | Approval evidence | Pending |
-| Drill results | [Not run — Pending](commute-alert-pilot-review-template.md#pending-drill-record) |
+| Scenario results | [Not run — Pending](commute-alert-pilot-review-template.md#pending-drill-record) |
 
 ## Purpose and use
 

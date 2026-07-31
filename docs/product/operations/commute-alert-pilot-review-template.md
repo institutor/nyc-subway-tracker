@@ -9,7 +9,7 @@
 | Last validation date | 2026-07-30 |
 | Supersedes | None |
 | Approval evidence | Pending |
-| Drill results | [Not run — Pending](#pending-drill-record) |
+| Scenario results | [Not run — Pending](#pending-drill-record) |
 
 ## Purpose and authority
 
