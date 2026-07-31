@@ -129,7 +129,7 @@ Each row assumes every prerequisite not named as failing or unresolved Passes. �
 | `DDT-45` | A proposed recovery exception during the proposed interval | **Draft proposal — non-executable; no outcome** |
 | `DDT-46` | A proposed expiry-boundary currentness check | **Draft proposal — non-executable; no outcome** |
 
-No product behavior may collect a quiet-period timestamp, apply the proposed interval, suppress or send because of it, bypass it, or treat it as an evaluation record until Product, Content, Operations, Privacy, and Release Quality approve a replacement policy and fixed evidence.
+No product behavior may collect a quiet-period timestamp, apply the proposed interval, suppress or send because of it, bypass it, or treat it as an evaluation record until every mandatory reviewer in this artifact's fixed route — Product, Accessibility, Data Quality, Content, Operations, and Privacy — approves the same replacement-policy version and Release Quality accepts its versioned executable fixtures and fixed evidence.
 
 ## Conservative Unknown delivery-acknowledgment ledger
 

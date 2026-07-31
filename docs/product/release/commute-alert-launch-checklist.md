@@ -133,7 +133,7 @@ Required Planned and Unplanned results remain separate; either Not measured or I
 | Escalation | Added time `≥300` seconds; 299 Suppresses, exactly 300 and 301 pass |
 | Extension into window | `≥1800` seconds; 1799 Suppresses, exactly 1800 and 1801 pass |
 | Planned content | Accepted before prep start waits until prep start and current recheck |
-| Quiet behavior | Task 6’s 900-second quiet-period proposal is unapproved and is not a gate input |
+| Quiet behavior | Task 6’s 900-second quiet-period proposal is quarantined, non-executable, and not a gate input; any replacement policy requires new approved fixtures |
 
 ## Unchanged Truth and accessibility boundaries
 
@@ -181,7 +181,7 @@ Before any limited pilot or release consideration, prove on the fixed candidate:
 - [ ] Six stages run in order and pilot authorization is not GO.
 - [ ] Result vocabulary and conservative aggregation are exact.
 - [ ] Every mandatory scenario, stratum, threshold, Truth boundary, and accessibility suite is unchanged.
-- [ ] The Task 6 quiet-period proposal is not a gate input.
+- [ ] The Task 6 quiet-period proposal remains quarantined and absent from every executable gate; any replacement has newly approved fixtures.
 - [ ] Every quantitative and zero-tolerance gate has a valid nonzero lineage where required.
 - [ ] Attempt, privacy, correction, signature, and rollback schemas are complete.
 - [ ] Task 10 changes no upstream decision.

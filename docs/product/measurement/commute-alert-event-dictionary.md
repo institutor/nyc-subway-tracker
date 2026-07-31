@@ -75,7 +75,7 @@ The complete package stays in the approved review boundary. Measurement intake r
 | Correct Suppress because evidence was irrelevant, stale, below threshold, equivalent, outside window, or unavailable | `CA-E01 = Suppress`; no `CA-E02`; not failure |
 | Active intent with Denied, restricted, revoked, Paused, Offline, or no capability | Capability-blocked before attempt; not a missed Send; no replay |
 | Final Send followed by failed delivery | `CA-E01 = Send`, `CA-E02 = Failed`; correct decision, delivery failure, and end-to-end miss |
-| Final Send followed by unknown acknowledgment | `CA-E01 = Send`, `CA-E02 = Unknown acknowledgment`; do not assume success, failure, or Hold while semantics remain Pending |
+| Final Send followed by unknown acknowledgment | `CA-E01 = Send`, `CA-E02 = Unknown acknowledgment`; do not reclassify that original decision as success, failure, or Hold. Separately, the governed unresolved-attempt lock Holds covered same-occurrence/group future action until exact authoritative Success, Failed, or occurrence expiry. |
 | Every gate passes but final decision is not Send | Decision false negative and deterministic should-Send miss |
 
 Later evidence does not rewrite an earlier correct classification. Human review uses only evidence available at the authoritative decision time.
@@ -111,7 +111,7 @@ Use fixed synthetic or shadow commutes with non-personal operational evidence fo
 
 ## Pending decisions
 
-Feedback maturity, active-commuter definition, aggregation floor and retention, sample sizes and duration, delivery success versus unknown acknowledgment, “promptly,” attribution beyond the direct flow, seen state, severity ordering, lock-screen privacy, remote token lifecycle, and the Task 6 quiet-period proposal remain Pending. This dictionary invents none.
+Feedback maturity, active-commuter definition, aggregation floor and retention, sample sizes and duration, provider-specific authoritative evidence mappings that can resolve Unknown to Success or Failed, “promptly,” attribution beyond the direct flow, seen state, severity ordering, lock-screen privacy, remote token lifecycle, and the quarantined Task 6 quiet-period proposal remain Pending. The conservative Unknown state, unresolved-attempt lock, and expiry behavior are already governed; this dictionary invents no resolver mapping or quiet-period behavior.
 
 ## Draft review checklist
 

@@ -191,7 +191,7 @@ The [pilot review template](commute-alert-pilot-review-template.md) separates si
 
 ## Pending gaps
 
-Task 6 quiet-period approval, seen state, provider-specific evidence mappings that can authoritatively resolve Unknown to Success or Failed, severity ordering, correction/retraction class/channel/copy, numeric “promptly,” sample size/duration/floor/retention, active-commuter definition, feedback maturity, opt-out attribution window, remote token lifecycle, lock-screen behavior, roster names/pages/response times, and switch implementation remain Pending. The quiet proposal is not collected, applied, or used as gate input. The conservative Unknown state and lock apply without inventing a provider mapping. No operator may invent a missing decision.
+Any replacement quiet-period policy, seen state, provider-specific evidence mappings that can authoritatively resolve Unknown to Success or Failed, severity ordering, correction/retraction class/channel/copy, numeric “promptly,” sample size/duration/floor/retention, active-commuter definition, feedback maturity, opt-out attribution window, remote token lifecycle, lock-screen behavior, roster names/pages/response times, and switch implementation remain Pending. The 900-second quiet proposal is quarantined, non-executable, not collected, not applied, and not used as gate input. The conservative Unknown state and lock apply without inventing a provider mapping. No operator may invent a missing decision.
 
 ## Draft review checklist
 

@@ -15,7 +15,7 @@
 
 This policy defines when subway commute-alert data is retained, stopped, removed, or reported as unresolved. It applies the [commute data inventory](commute-data-inventory.md) to the accepted [commute lifecycle](../commute/commute-window-contract.md), [state matrix](../ux/commute-window-state-matrix.md), [permission moments](../ux/notification-permission-moments.md), [timing policy](../commute/notification-timing-policy.md), [recovery policy](../commute/recovery-notification-policy.md), and [deduplication rules](../commute/deduplication-decision-table.md).
 
-This policy approves product lifecycle boundaries, not numeric retention durations. Where a duration, remote invalidation rule, or diagnostic aggregation end has no approved owner decision, the result is a blocking gap. No implementation may substitute **indefinite**, a convenient default, or a hidden identifier.
+This Draft policy defines proposed product lifecycle boundaries; it approves neither those boundaries nor any numeric retention duration. Where a duration, remote invalidation rule, or diagnostic aggregation end has no approved owner decision, the result is a blocking gap. No implementation may substitute **indefinite**, a convenient default, or a hidden identifier.
 
 This artifact is **Draft** and demonstrates no actual retention, deletion, reset, permission, privacy, reviewer, pilot, or launch evidence. The posture remains **NO-GO — GATE 0 NOT PASSED** and **NO-GO — REQUIRED ACCESSIBILITY EVIDENCE AND COVERAGE ARE NOT DEMONSTRATED**.
 
@@ -188,11 +188,12 @@ The confirmation default focus must not make the destructive action easier to tr
 
 ## Blocking decisions and evidence
 
+The 900-second quiet-period proposal remains quarantined, non-executable design input: it is not collected, applied, or used as gate evidence. An authoritative delivery acknowledgment of **Unknown** creates the conservative unresolved-attempt lock in the [deduplication decision table](../commute/deduplication-decision-table.md); it creates no successful baseline and closes only through authoritative resolution or occurrence expiry.
+
 The following remain **Pending** and block dependent collection or a launch claim:
 
-- approval of the 900-second quiet-period proposal;
-- seen and quiet-period semantics;
-- successful delivery versus unknown acknowledgement;
+- provider-specific authoritative resolver mappings for an Unknown delivery acknowledgment;
+- Seen semantics, which cannot substitute for delivery acknowledgment or baseline identity;
 - severity ordering and version ownership;
 - correction and retraction delivery behavior;
 - remote delivery topology and app-data-clear or reinstall invalidation;

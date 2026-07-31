@@ -137,7 +137,7 @@ Neither Accessibility nor Privacy error may be reduced to “copy only” withou
 
 ## Pending gaps
 
-Correction/retraction class, channel, template, lock-screen behavior, provider-specific evidence mappings that can authoritatively resolve Unknown, seen state, severity ordering, remote token lifecycle, numeric “promptly,” and the Task 6 quiet-period proposal remain Pending. The quiet proposal is not applied or used as gate input. The conservative Unknown state, lock, transitions, and correction prohibition apply without inventing a provider mapping.
+Correction/retraction class, channel, template, lock-screen behavior, provider-specific evidence mappings that can authoritatively resolve Unknown, seen state, severity ordering, remote token lifecycle, numeric “promptly,” and any replacement quiet-period policy remain Pending. The 900-second proposal is quarantined, non-executable, not applied, and not used as gate input. The conservative Unknown state, lock, transitions, and correction prohibition apply without inventing a provider mapping.
 
 ## Draft review checklist
 

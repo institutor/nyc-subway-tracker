@@ -167,7 +167,7 @@ The following remain equivalent and cannot create another initial or escalation 
 - materially equivalent recurring planned work; and
 - an equivalent overlapping window for the same journey occurrence.
 
-Equivalent suppression remains permanent for the represented delivered state; the quiet period does not weaken it.
+Equivalent suppression remains permanent for the represented delivered state; the quarantined quiet-period proposal does not weaken or modify it.
 
 ## Five escalation branches
 
@@ -208,23 +208,13 @@ A bypass veto can replace a pending, undelivered delay candidate with one accura
 - Equivalent overlapping windows share one candidate and all receive its marker, matching corrected `REL-20`.
 - Distinct route, direction, journey, occurrence, or accessible-path requirement remains independently eligible.
 
-## Draft quiet-period proposal
+## Quarantined quiet-period proposal
 
-Task 6 proposes `Q = 900` **authoritative seconds** per journey occurrence after each successfully delivered disruption or escalation. The interval is:
+The former `Q = 900` idea is preserved only as an unapproved **Draft** design question. It is not a product rule, gate, timer, exception, decision input, evaluation record, or measurement input. No product behavior may collect a quiet-period timestamp, calculate a quiet interval, or Send, Suppress, Hold, retry, replay, escalate, recover, or release because of this proposal.
 
-`[delivery time, delivery time + 900 seconds)`
+Unrelated incidents remain independently eligible under the ordinary Tasks 2–6 gates. Equivalent impacts still follow duplicate suppression, same-group worsening still follows the named escalation branches, and opted-in recovery still follows its separate release gates. None receives a special 899-, 900-, or 901-second outcome.
 
-- At elapsed 899 seconds, the interval is active.
-- At exactly 900 seconds, it is expired and a fresh evaluation is eligible.
-- At 901 seconds, a fresh evaluation is eligible.
-
-This gate applies only to an unrelated, non-severe **initial** disruption. It never changes equivalent duplicate suppression, a same-group escalation, or opted-in recovery.
-
-An independent impact may bypass quiet only when the aggregate journey passes one of the five named material branches or the impact is a current confirmed suspension, closure, bypass, short turn, or blocking accessible-path outage for the exact commute. Severe bypass is narrow: route, direction, journey, effective time, and consequence must all pass Tasks 2–5.
-
-Quiet never queues old content. At expiry, rerun Tasks 2–5 using current evidence. Stale, ended, Offline, irrelevant, outside-window, or otherwise failed candidates Suppress; Unresolved candidates Hold.
-
-The 900-second duration is a new, unapproved **Draft** choice requiring Product, Content, and Operations approval. It is not an MTA guarantee or measured service level.
+`DDT-40`–`DDT-46` and `DED-30`–`DED-34` are the only preserved proposal records. They are quarantined, non-executable, outcome-free, and prohibited from scenario execution or gate evidence until a replacement policy and new fixtures receive the required owner approvals. The proposal is not an MTA guarantee or measured service level.
 
 ## Recovery and correction constraints
 
@@ -252,7 +242,7 @@ Every decision records:
 4. episode key fields, controlled type, split/merge lineage, lifecycle, and release state;
 5. occurrence and delivery-group key, represented windows, and path requirement;
 6. current and last successfully delivered fingerprints;
-7. all Task 2 gates, Task 3 decision, Task 4 lifecycle/permission/connectivity, Task 5 opportunity/final checks, cross-source precedence, quiet calculation, and recovery gates;
+7. all Task 2 gates, Task 3 decision, Task 4 lifecycle/permission/connectivity, Task 5 opportunity/final checks, cross-source precedence, confirmation that no quiet-period input was applied, and recovery gates;
 8. exactly one decision outcome, separate class/reason, delivery attempt/result, and baseline write/no-write;
 9. expected and prohibited visible and assistive results; and
 10. actual result, all six reviewer decisions/dates, durable evidence, correction, preserved original, rerun, and status.
@@ -265,7 +255,7 @@ Task 7 owns retention, reset, deletion assurance, notification-token lifecycle, 
 
 ## Unresolved governance
 
-- The 900-second quiet period is proposed and unapproved.
+- The 900-second quiet-period proposal is quarantined, unapproved, and non-executable.
 - No approved cross-source severity ordering exists.
 - No canonical MTA incident or campaign correlation identifier exists.
 - No non-overlap continuity tolerance is approved.
@@ -283,7 +273,7 @@ Task 7 owns retention, reset, deletion assurance, notification-token lifecycle, 
 - [ ] Equivalent updates suppress; the five escalation branches use the last successful baseline and exact boundaries.
 - [ ] Cross-source truth precedence never clears a negative veto with prediction or static data.
 - [ ] Independent incidents/windows and message representation preserve exact scope.
-- [ ] Quiet uses authoritative `[delivery,delivery+900)` behavior and only the narrow severe bypass.
+- [ ] The quiet-period proposal remains quarantined, creates no timer or outcome, and is absent from every executable gate and record.
 - [ ] Recovery and corrections cannot manufacture positive evidence or messages.
 - [ ] Operational and personal records stay separate.
 - [ ] All fixtures, reviewers, evidence, approvals, and launch state remain **Not run — Pending** or **Pending**.

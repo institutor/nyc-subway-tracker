@@ -90,6 +90,6 @@ Every row is an independent run record. A later correction or passing rerun must
 
 ## Blocking gaps and release boundary
 
-Remote cleanup after app-data clear or reinstall needs an approved registration lease or equivalent invalidation design; its duration and mechanism are **Pending**. Seen semantics, delivery acknowledgment, severity order, correction-message behavior, lock-screen privacy, diagnostic retention, aggregation floors, and the Task 6 quiet-period approval are also **Pending**.
+Remote cleanup after app-data clear or reinstall needs an approved registration lease or equivalent invalidation design; its duration and mechanism are **Pending**. Seen semantics, provider-specific authoritative evidence mappings that can resolve Unknown to Success or Failed, severity order, correction-message behavior, lock-screen privacy, diagnostic retention, aggregation floors, and any replacement for the quarantined Task 6 quiet-period proposal are also **Pending**. The conservative Unknown lock and quiet-proposal prohibition are already governed.
 
 No fixture supplies privacy approval, deletion proof, queue/token evidence, implementation behavior, or pilot evidence. Gate 0 remains **NO-GO — GATE 0 NOT PASSED** until one fixed version has complete visible, assistive, storage, queue, token, permission, deletion, diagnostic, reviewer, correction, and rerun evidence.

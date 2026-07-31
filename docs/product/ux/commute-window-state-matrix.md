@@ -2,7 +2,7 @@
 
 | Governance field | Value |
 |---|---|
-| Source sections | Product artifact index row citing approved specification §§25.1 and 28.2–28.3; additional applying approved specification §§13.1–13.3, 14.2, 14.5–14.6, 25.2, 28.1, 31.4 scenarios 22–23, 31.6–31.8 scenarios 36–42, 48, and 51; commute alerts and launch quality plan Task 4; accepted Nearby and Commute Tasks 1–3 artifacts |
+| Source sections | Approved specification §§13.1–13.3, 14.2, 14.5–14.6, 25.1–25.2, 28.1–28.3, 31.4 scenarios 22–23, and 31.6–31.8 scenarios 36–42, 48, and 51; commute alerts and launch quality plan Tasks 4 and 7; accepted Nearby and Commute Tasks 1–3 artifacts |
 | Owner | Commute Product Lead |
 | Required reviewers | Product, Accessibility, Data Quality, Content, Privacy, Operations |
 | Status | Draft |
@@ -194,7 +194,7 @@ The category placeholders require owner-approved current values. Reset and perso
 
 ### Task 7 open gaps
 
-The 900-second quiet-period proposal; seen and quiet-period semantics; successful delivery versus unknown acknowledgement; severity ordering; correction and retraction; remote delivery topology and invalidation after app-data clearing or reinstall; lock-screen disclosure; and numeric diagnostic retention and floors remain **Pending**. No row may invent a duration or mechanism to close them.
+The quarantined 900-second quiet-period proposal; Seen semantics; provider-specific authoritative evidence mappings that can resolve Unknown acknowledgment to Success or Failed; severity ordering; correction and retraction; remote delivery topology and invalidation after app-data clearing or reinstall; lock-screen disclosure; and numeric diagnostic retention and floors remain **Pending**. The conservative Unknown state, same-occurrence/group unresolved-attempt lock, exact Success/Failed or expiry transitions, and prohibition on quiet-period behavior are already governed. No row may invent a resolver mapping, quiet duration, or alternate mechanism.
 
 No observed deletion, permission, privacy, remote cleanup, reviewer, pilot, or launch evidence exists. Every linked [CPR fixture](../test-cases/commute-privacy-scenarios.md#fixture-definitions) remains **Not run — Pending**. Gate 0 and the separate accessibility no-go remain in force.
 

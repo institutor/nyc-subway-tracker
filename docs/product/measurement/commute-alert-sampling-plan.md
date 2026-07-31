@@ -164,7 +164,7 @@ Permission acceptance, message volume, opens, engagement, or quiet incidents can
 
 ## Pending decisions
 
-Active-commuter definition, feedback maturity, aggregation floor and retention, sample sizes, observation duration, delivery success versus unknown acknowledgment, “promptly,” attribution outside the direct flow, seen state, severity ordering, lock-screen privacy, remote token lifecycle, and the Task 6 quiet-period proposal remain Pending. No fixture or cadence invents them.
+Active-commuter definition, feedback maturity, aggregation floor and retention, sample sizes, observation duration, provider-specific authoritative evidence mappings that can resolve Unknown to Success or Failed, “promptly,” attribution outside the direct flow, seen state, severity ordering, lock-screen privacy, remote token lifecycle, and the quarantined Task 6 quiet-period proposal remain Pending. The conservative Unknown lock and quiet-proposal prohibition are governed. No fixture or cadence invents a resolver mapping or quiet behavior.
 
 ## Draft review checklist
 

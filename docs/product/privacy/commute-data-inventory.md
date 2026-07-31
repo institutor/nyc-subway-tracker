@@ -160,8 +160,8 @@ No personal event becomes permissible merely because it may be aggregated later.
 
 The following remain **Pending** and block any dependent collection or launch claim:
 
-- whether the 900-second quiet-period proposal receives final owner approval; until then it is not collected, applied, or used as gate input;
-- the exact Seen definition and any future approved quiet-period semantics;
+- whether a replacement quiet-period policy and newly versioned fixtures receive all required owner approvals; until then the quarantined 900-second proposal is not collected, applied, or used as gate input;
+- the exact Seen definition and any future approved replacement quiet-period semantics;
 - provider-specific evidence mappings that can authoritatively resolve Unknown to Success or Failed, plus the owner-approved lifecycle for expired unresolved records; the conservative Unknown state and lock already apply without inventing those mappings;
 - controlled severity ordering and version ownership;
 - correction and retraction delivery behavior;
