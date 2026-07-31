@@ -37,7 +37,7 @@ This record preserves the approved specification's original cross-domain subway 
 
 ## SPD-15 scope and governance lifecycle
 
-SPD-15 is necessary but not sufficient for a recovery push. Restoration remains Off by default. Later recovery consideration requires a prior push for the same relevant disruption episode and commute impact, a meaningful recovery that would correct or materially update the rider's decision, and permission under the [commute window product contract](../commute/commute-window-contract.md) and the future Task 5 timing and recovery policies. No prior relevant disruption push means no recovery push.
+SPD-15 is necessary but not sufficient for a recovery push. Restoration remains Off by default. Later recovery consideration requires a prior push for the same relevant disruption episode and commute impact, a meaningful recovery that would correct or materially update the rider's decision, and permission under the [commute window product contract](../commute/commute-window-contract.md) and the Draft Task 5 timing and recovery policies. Their reviewer decisions and evidence remain Pending. No prior relevant disruption push means no recovery push.
 
 SPD-15 applies approved specification §§25.2, 25.5, and 33.5 and commute-plan Task 1 Step 8. It is a new workstream decision and is not represented as a fifteenth item in the approved specification §34's original fourteen decisions.
 

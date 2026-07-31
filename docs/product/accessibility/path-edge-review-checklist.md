@@ -4,7 +4,7 @@
 |---|---|
 | Source sections | Approved specification §§19.1–19.2, 20.2, 21, 31.5, and 33.3; accessibility and platform-guidance plan `Product artifact map`; Task 1 `Product artifacts`, `Dependencies`, `Produces for later tasks`, `Ordered steps`, and `Evidence and acceptance checks`; Task 2 `Product artifacts`, `Dependencies`, `Produces for later tasks`, `Ordered steps`, and `Evidence and acceptance checks` |
 | Owner | Accessibility Product Lead |
-| Required reviewers | Product, Accessibility, Data Quality, Content |
+| Required reviewers | Product, Accessibility, Data Quality, Content, Operations |
 | Status | Draft |
 | Last validation date | 2026-07-30 |
 | Supersedes | None |
@@ -33,7 +33,7 @@ Task 2 preserves that boundary. It does not approve a station-direction row, pas
 
 ## Governance provenance reconciliation
 
-The artifact header and Draft [artifact index](../artifact-index.md) row now align on approved specification §§19.1–19.2, 20.2, 21, 31.5, and 33.3, the full Task 1–2 provenance, and Product, Accessibility, Data Quality, and Content review. That metadata alignment preserves the Task 1 history but is not approval; every same-version reviewer decision, edge review, and lifecycle advancement remains **Pending**.
+The artifact header and Draft [artifact index](../artifact-index.md) row now align on approved specification §§19.1–19.2, 20.2, 21, 31.5, and 33.3, the full Task 1–2 provenance, and Product, Accessibility, Data Quality, Content, and Operations review. That metadata alignment preserves the Task 1 history but is not approval; every same-version reviewer decision, edge review, and lifecycle advancement remains **Pending**.
 
 ## Review dispositions
 
@@ -207,7 +207,7 @@ Apply this decision in order:
 | Actual result | Not observed |
 | Fixed product version | Not recorded |
 | Evidence link | None |
-| Required reviewers | Product, Accessibility, Data Quality, Content |
+| Required reviewers | Product, Accessibility, Data Quality, Content, Operations |
 | Review date | Not recorded |
 | Disposition | Pending |
 | Correction | None recorded |
@@ -224,7 +224,7 @@ Apply this decision in order:
 | Actual result | Not observed |
 | Fixed product version | Not recorded |
 | Evidence link | None |
-| Required reviewers | Product, Accessibility, Data Quality, Content |
+| Required reviewers | Product, Accessibility, Data Quality, Content, Operations |
 | Review date | Not recorded |
 | Disposition | Pending |
 | Correction | None recorded |
@@ -241,7 +241,7 @@ Apply this decision in order:
 | Actual result | Not observed |
 | Fixed product version | Not recorded |
 | Evidence link | None |
-| Required reviewers | Product, Accessibility, Data Quality, Content |
+| Required reviewers | Product, Accessibility, Data Quality, Content, Operations |
 | Review date | Not recorded |
 | Disposition | Pending |
 | Correction | None recorded |
@@ -258,7 +258,7 @@ Apply this decision in order:
 | Actual result | Not observed |
 | Fixed product version | Not recorded |
 | Evidence link | None |
-| Required reviewers | Product, Accessibility, Data Quality, Content |
+| Required reviewers | Product, Accessibility, Data Quality, Content, Operations |
 | Review date | Not recorded |
 | Disposition | Pending |
 | Correction | None recorded |

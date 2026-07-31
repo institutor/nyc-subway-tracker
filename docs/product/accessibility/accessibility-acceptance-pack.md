@@ -2,7 +2,7 @@
 
 | Governance field | Value |
 |---|---|
-| Source sections | Approved specification §§20.1, 20.5, 21, 23.1, 23.3, 23.5, 29.1, 29.4, 31.5, §31.6 scenarios 33–35, 31.8 cases 45–46, 32.2, and applying §§33.1–33.3; accessibility and platform-guidance plan `Product artifact map`, Task 6 `Product artifacts`, `Dependencies`, `Produces for later tasks`, `Ordered steps`, and `Evidence and acceptance checks`, Task 8 positioning-evidence extension, and Task 12 Steps 1–4 with the checkpoint-1 Release 1 gate handoff |
+| Source sections | Approved specification §§20.1, 20.5, 21, 23.1, 23.3, 23.5, 29.1, 29.4, 31.5, §31.6 scenarios 33–35, 31.8 cases 45–46, 32.2, and applying §§33.1–33.3; accessibility and platform-guidance plan `Product artifact map`, Task 6 `Product artifacts`, `Dependencies`, `Produces for later tasks`, `Ordered steps`, and `Evidence and acceptance checks`, Task 8 full plan provenance, and Task 12 Steps 1–4 with the checkpoint-1 Release 1 gate handoff |
 | Owner | Release Quality Lead |
 | Required reviewers | Product, Accessibility, Data Quality, Content, Operations |
 | Status | Draft |
@@ -63,7 +63,7 @@ The Task 6 versions of this pack, the coverage register, and the equipment table
 | [Accessibility and platform-guidance plan](../../superpowers/plans/2026-07-30-accessibility-and-platform-guidance-plan.md) | `dd21b3c7228986d3177594788521c4ef7f873492` | Task 6 scope, cases, checks, and Task 12 handoff |
 | [Approved product specification](../../superpowers/specs/2026-07-30-nyc-subway-train-time-tracker-design.md) | `9840d6c5687771d00ce8d0b9a1116ac84347e0e6` | Controlling product requirements |
 | [Product artifact index](../artifact-index.md) | `78f902903d4a07a381e7d6929264a9929822c266` | Indexed ownership and provenance |
-| [Approved transit product glossary](../contracts/transit-product-glossary.md) | `19ac83a9c1b470ed0e5f9becf9c45e0879101bc5` | Shared scope and identity terms |
+| [Approved transit product glossary](../contracts/transit-product-glossary.md) | `61e7370a0a5e7f1db0eaa2c190302d412ab9333f` | Historical Phase 0 shared scope and identity terms; arrival admission remains owned by the core arrival contract |
 | [Approved rider language rules](../contracts/rider-language-rules.md) | `659d6dbabff7b697a210755a0e2dd7df0cdef112` | Rider certainty and accessible-claim boundary |
 | [Product artifact review and approval policy](../review-and-approval-policy.md) | `c70d1795decf4a5a4c276718fd8b5fb36891a06e` | Lifecycle, reviewer, failure, and rerun rules |
 | [Nearby/offline warning and reconnection lifecycle](../nearby-offline/offline-degraded-and-reconnection-states.md) | `34c654273c7d30bbba986a5faaf757165bffc64b` | Preserved warning context and stage-1 accessibility recovery |

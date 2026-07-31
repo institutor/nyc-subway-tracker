@@ -11,6 +11,10 @@
 | Approval evidence | Pending — Truth Gate |
 | Scenario results | [Not run — Gate 0 validation results](gate-0-validation-results.md) |
 
+## Master-plan planned-path mapping
+
+The master delivery plan's `docs/product/release/truth-gate-checklist.md`, `docs/product/release/truth-gate-results.md`, and `docs/product/release/truth-gate-decision.md` labels map respectively to `docs/product/quality/gate-0-truth-validation-protocol.md` (this protocol), the [Gate 0 validation results](gate-0-validation-results.md), and the [Gate 0 exit record](gate-0-exit-record.md) created by the arrival workstream execution plan. The `docs/product/quality/gate-0-*` paths are the sole governed implementations. The uncreated `docs/product/release/truth-gate-*` paths are planning labels, not additional artifacts, aliases that require duplicate files, or separate decision owners.
+
 ## Purpose, authority, and present state
 
 This protocol defines the behavior evidence required before any public arrival board. It does not approve an arrival rule, create a new scenario outcome, or treat a document review as proof of working-product behavior. The [approved product specification](../../superpowers/specs/2026-07-30-nyc-subway-train-time-tracker-design.md), [arrival-truth acceptance catalog](arrival-truth-acceptance-catalog.md), and [arrival-truth requirement traceability](arrival-truth-requirement-traceability.md) retain decision authority.

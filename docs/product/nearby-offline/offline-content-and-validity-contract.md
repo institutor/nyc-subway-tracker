@@ -4,7 +4,7 @@
 |---|---|
 | Source sections | Approved specification §§18.1, 18.3, 31.4, and 31.8; nearby-station and offline-experience plan Product artifact map and Task 8 Product artifacts, Ordered steps, and Acceptance evidence; Task 8 brief |
 | Owner | Experience Product Lead |
-| Required reviewers | Product, Accessibility, Data Quality, Content |
+| Required reviewers | Product, Accessibility, Data Quality, Content, Privacy |
 | Status | Draft |
 | Last validation date | 2026-07-30 |
 | Supersedes | None |
@@ -23,7 +23,7 @@ This artifact is **Draft**. The authoritative [Gate 0 exit record](../quality/ga
 
 ### Provenance reconciliation
 
-The artifact header and Draft [product artifact index](../artifact-index.md) row now align on specification §§18.1, 18.3, 31.4, and 31.8 plus full Task 8 provenance; Task 10 retains §18.4 reconnection ownership. The separate Privacy-review question remains unresolved, and all reviewer decisions, scenario evidence, and lifecycle advancement remain **Pending**.
+The artifact header and Draft [product artifact index](../artifact-index.md) row now align on specification §§18.1, 18.3, 31.4, and 31.8, full Task 8 provenance, and Product, Accessibility, Data Quality, Content, and Privacy review; Task 10 retains §18.4 reconnection ownership. Privacy is mandatory because the stored-content inventory includes rider-saved stations, commutes, and trip cards. This routing alignment is not approval; all reviewer decisions, scenario evidence, and lifecycle advancement remain **Pending**.
 
 ## Always-available inventory
 
