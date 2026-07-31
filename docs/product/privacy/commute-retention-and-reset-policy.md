@@ -19,9 +19,9 @@ This policy approves product lifecycle boundaries, not numeric retention duratio
 
 This artifact is **Draft** and demonstrates no actual retention, deletion, reset, permission, privacy, reviewer, pilot, or launch evidence. The posture remains **NO-GO — GATE 0 NOT PASSED** and **NO-GO — REQUIRED ACCESSIBILITY EVIDENCE AND COVERAGE ARE NOT DEMONSTRATED**.
 
-## Product Governance reconciliation
+## Product Governance status
 
-The product artifact index does not yet carry the full Task 7 provenance, Privacy ownership, or Data Quality review required for these additions. Product Governance reconciliation remains **Pending**. This task does not edit the index or treat the mismatch as approval.
+The artifact header and Draft product artifact index row register the full Task 7 provenance, Privacy ownership, and Product, Accessibility, Data Quality, Content, Privacy, and Operations review. That metadata alignment is not approval; every same-version reviewer decision and scenario result remains **Pending**.
 
 ## Retention principles
 
