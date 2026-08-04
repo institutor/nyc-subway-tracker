@@ -201,6 +201,15 @@ function observedTypeError(source: RemoteSource): Error {
   return new Error(`Source ${source.id} observed content does not match ${source.expectedFormat}`);
 }
 
+const SAFE_CROSS_ORIGIN_HEADERS = new Set([
+  // Read-only representation negotiation and cache validators only.
+  'accept',
+  'if-match',
+  'if-modified-since',
+  'if-none-match',
+  'if-unmodified-since',
+]);
+
 async function fetchFollowingRedirects(
   source: RemoteSource,
   fetchImpl: typeof fetch,
@@ -208,10 +217,11 @@ async function fetchFollowingRedirects(
   signal: AbortSignal,
 ): Promise<{ response: Response; finalUrl: string; redirectCount: number }> {
   let currentUrl = validateSourceUrl(source.url, source);
+  let requestHeaders = new Headers(headers);
   let redirectCount = 0;
 
   while (true) {
-    const response = await fetchImpl(currentUrl.href, { headers, redirect: 'manual', signal });
+    const response = await fetchImpl(currentUrl.href, { headers: requestHeaders, redirect: 'manual', signal });
     if (response.status >= 300 && response.status < 400) {
       try {
         if (redirectCount >= source.retrieval.maxRedirects) {
@@ -222,8 +232,13 @@ async function fetchFollowingRedirects(
           throw new Error(`Source ${source.id} returned a redirect without a location`);
         }
         const redirectedUrl = validateSourceUrl(location, source, currentUrl);
-        if (redirectedUrl.origin !== currentUrl.origin && hasCredentialHeaders(headers)) {
-          throw new Error(`Source ${source.id} refused credential-bearing redirect across origins`);
+        if (redirectedUrl.origin !== currentUrl.origin) {
+          if (source.credentialEnv) {
+            throw new Error(
+              `Source ${source.id} refused a cross-origin redirect for a credentialed source`,
+            );
+          }
+          requestHeaders = safeCrossOriginHeaders(requestHeaders);
         }
         currentUrl = redirectedUrl;
         redirectCount += 1;
@@ -272,16 +287,14 @@ function validateSourceUrl(rawUrl: string, source: RemoteSource, base?: URL): UR
   return parsed;
 }
 
-function hasCredentialHeaders(headers: Readonly<Record<string, string>> | undefined): boolean {
-  if (!headers) return false;
-  const credentialNames = new Set([
-    'authorization',
-    'cookie',
-    'proxy-authorization',
-    'x-api-key',
-    'api-key',
-  ]);
-  return [...new Headers(headers).keys()].some((name) => credentialNames.has(name.toLowerCase()));
+function safeCrossOriginHeaders(headers: Headers): Headers {
+  const safeHeaders = new Headers();
+  for (const [name, value] of headers) {
+    if (SAFE_CROSS_ORIGIN_HEADERS.has(name.toLowerCase())) {
+      safeHeaders.set(name, value);
+    }
+  }
+  return safeHeaders;
 }
 
 function normalizeContentType(value: string | null): string {

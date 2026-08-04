@@ -293,31 +293,83 @@ describe('bounded source retrieval', () => {
     expect(cancelRedirectBody).toHaveBeenCalledOnce();
   });
 
-  test('rejects credential forwarding even when a cross-origin mirror is explicitly allowed', async () => {
-    const destinationPath = await destination();
-    const requestedUrls: string[] = [];
-    const redirectResponse = new Response('redirect body', {
-      status: 302,
-      headers: { location: 'https://mirror.test/final.zip' },
-    });
-    const cancelRedirectBody = vi.spyOn(redirectResponse.body!, 'cancel');
+  test.each([
+    ['custom secret', 'x-client-secret', 'top-secret'],
+    ['mixed-case custom secret', 'X-CliEnT-SeCrEt', 'mixed-secret'],
+    ['cookie', 'Cookie', 'session=top-secret'],
+    ['proxy credential', 'Proxy-Authorization', 'Basic top-secret'],
+    ['API key', 'x-api-key', 'top-secret'],
+    ['authorization credential', 'Authorization', 'Bearer top-secret'],
+    ['language preference', 'Accept-Language', 'en-US-private'],
+  ])(
+    'strips a %s while retaining only safe headers across an allowed cross-origin redirect',
+    async (_caseName, unsafeHeaderName, unsafeHeaderValue) => {
+      const destinationPath = await destination();
+      const requestedUrls: string[] = [];
+      let downstreamHeaders: Headers | undefined;
 
-    await expect(
-      fetchSource(
+      const result = await fetchSource(
         source({ allowedOrigins: ['https://example.test', 'https://mirror.test'] }),
         {
           destinationPath,
-          headers: { authorization: 'Bearer top-secret' },
+          headers: {
+            [unsafeHeaderName]: unsafeHeaderValue,
+            Accept: 'application/zip',
+            'If-None-Match': '"governed-etag"',
+          },
+          fetchImpl: async (input, init) => {
+            const url = String(input);
+            requestedUrls.push(url);
+            if (url === 'https://example.test/source.zip') {
+              return new Response('redirect body', {
+                status: 302,
+                headers: { location: 'https://mirror.test/final.zip' },
+              });
+            }
+            downstreamHeaders = new Headers(init?.headers);
+            return zipResponse('PK\u0003\u0004mirror');
+          },
+        },
+      );
+
+      expect(result.finalUrl).toBe('https://mirror.test/final.zip');
+      expect(requestedUrls).toEqual([
+        'https://example.test/source.zip',
+        'https://mirror.test/final.zip',
+      ]);
+      expect(Object.fromEntries(downstreamHeaders!)).toEqual({
+        accept: 'application/zip',
+        'if-none-match': '"governed-etag"',
+      });
+      expect(downstreamHeaders!.get(unsafeHeaderName)).toBeNull();
+    },
+  );
+
+  test('rejects a cross-origin hop when a credentialed source has unknown authentication headers', async () => {
+    const destinationPath = await destination();
+    const requestedUrls: string[] = [];
+
+    await expect(
+      fetchSource(
+        source({
+          allowedOrigins: ['https://example.test', 'https://mirror.test'],
+          credentialEnv: 'MTA_API_KEY',
+        }),
+        {
+          destinationPath,
+          headers: { 'x-client-secret': 'top-secret' },
           fetchImpl: async (input) => {
             requestedUrls.push(String(input));
-            return redirectResponse;
+            return new Response('redirect body', {
+              status: 302,
+              headers: { location: 'https://mirror.test/final.zip' },
+            });
           },
         },
       ),
-    ).rejects.toThrow('refused credential-bearing redirect across origins');
+    ).rejects.toThrow('refused a cross-origin redirect for a credentialed source');
 
     expect(requestedUrls).toEqual(['https://example.test/source.zip']);
-    expect(cancelRedirectBody).toHaveBeenCalledOnce();
   });
 
   test('follows a safe same-origin redirect and preserves its authorized header', async () => {
