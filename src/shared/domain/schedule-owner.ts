@@ -93,7 +93,13 @@ export class ScheduleEditionRegistry {
       return quarantine('Invalid source-supported chronology');
     }
     const previous = this.#editions.filter((edition) => edition.source === candidate.source);
-    const chronologyFailure = validateChangedEditionChronology(candidate.sourceOrder, publishedAt, previous);
+    const chronologyFailure = validateChangedEditionChronology(
+      candidate.source,
+      candidate.sourceOrder,
+      publishedAt,
+      retrievedAt,
+      previous,
+    );
     if (chronologyFailure) return quarantine(chronologyFailure);
 
     const editionId = `${candidate.source}:${candidate.canonicalContentId}`;
@@ -253,10 +259,28 @@ function validateClaim(claim: ScheduleClaim): void {
 }
 
 function validateChangedEditionChronology(
+  source: StaticScheduleSource,
   sourceOrder: number | undefined,
   publishedAt: string | undefined,
+  retrievedAt: string,
   previous: readonly StoredEdition[],
 ): string | undefined {
+  const isRetrievalOnlyRegularSequence =
+    source === 'regular-gtfs' &&
+    sourceOrder === undefined &&
+    publishedAt === undefined &&
+    previous.every((prior) => prior.sourceOrder === undefined && prior.publishedAt === undefined);
+  if (isRetrievalOnlyRegularSequence) {
+    const latestPriorRetrieval = previous
+      .flatMap((prior) => prior.retrievals)
+      .sort()
+      .at(-1);
+    if (latestPriorRetrieval !== undefined && retrievedAt <= latestPriorRetrieval) {
+      return 'Regressed or contradictory regular retrieval chronology';
+    }
+    return undefined;
+  }
+
   for (const prior of previous) {
     const sharedPublication = publishedAt !== undefined && prior.publishedAt !== undefined;
     const sharedSourceOrder = sourceOrder !== undefined && prior.sourceOrder !== undefined;

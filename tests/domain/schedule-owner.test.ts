@@ -55,6 +55,205 @@ describe('schedule edition observation and currency', () => {
     });
   });
 
+  test('distinct retrieval-only regular content refreshes with its own first-retrieval anchor', () => {
+    const registry = new ScheduleEditionRegistry();
+    const first = registry.observe(candidate('regular-retrieval-first', {
+      source: 'regular-gtfs',
+      retrievedAt: new Date(BASE - HOUR),
+    }));
+    const refreshed = registry.observe(candidate('regular-retrieval-refreshed', {
+      source: 'regular-gtfs',
+      retrievedAt: new Date(BASE),
+    }));
+
+    expect(first.status).toBe('accepted-new');
+    expect(refreshed.status).toBe('accepted-new');
+    expect(registry.editions()).toMatchObject([
+      { editionId: first.editionId, firstRetrievedAt: '2026-08-04T11:00:00.000Z' },
+      { editionId: refreshed.editionId, firstRetrievedAt: '2026-08-04T12:00:00.000Z' },
+    ]);
+    expect(registry.classify(refreshed.editionId!, claim(), new Date(BASE))).toMatchObject({
+      state: 'current',
+      ageAnchorKind: 'first-retrieved',
+      ageMs: 0,
+    });
+    expect(registry.select(claim(), new Date(BASE))).toMatchObject({
+      source: 'regular-gtfs',
+      editionId: refreshed.editionId,
+    });
+  });
+
+  test('retrieval-only regular refresh requires a strictly later successful retrieval', () => {
+    const registry = new ScheduleEditionRegistry();
+    const retained = registry.observe(candidate('regular-retrieval-latest', {
+      source: 'regular-gtfs',
+      retrievedAt: new Date(BASE),
+    }));
+    const regressed = registry.observe(candidate('regular-retrieval-regressed', {
+      source: 'regular-gtfs',
+      retrievedAt: new Date(BASE - 1),
+    }));
+
+    expect(regressed.status).toBe('quarantined');
+    expect(registry.editions()).toHaveLength(1);
+    expect(registry.select(claim(), new Date(BASE))).toMatchObject({ editionId: retained.editionId });
+  });
+
+  test('unchanged retrieval-only regular content retains its original anchor and advances only last retrieval', () => {
+    const registry = new ScheduleEditionRegistry();
+    const first = registry.observe(candidate('regular-retrieval-same', {
+      source: 'regular-gtfs',
+      retrievedAt: new Date(BASE - HOUR),
+      wrapper: { filename: 'regular-first.zip', label: 'first' },
+    }));
+    const repeated = registry.observe(candidate('regular-retrieval-same', {
+      source: 'regular-gtfs',
+      retrievedAt: new Date(BASE + HOUR),
+      wrapper: { filename: 'regular-second.zip', label: 'wrapper-change' },
+    }));
+
+    expect(repeated).toMatchObject({ status: 'accepted-observation', editionId: first.editionId });
+    expect(registry.editions()).toMatchObject([{
+      editionId: first.editionId,
+      firstRetrievedAt: '2026-08-04T11:00:00.000Z',
+      lastRetrievedAt: '2026-08-04T13:00:00.000Z',
+      retrievals: ['2026-08-04T11:00:00.000Z', '2026-08-04T13:00:00.000Z'],
+    }]);
+    expect(registry.classify(first.editionId!, claim(), new Date(BASE + 2 * HOUR))).toMatchObject({
+      state: 'stale',
+      ageAnchorKind: 'first-retrieved',
+      ageMs: 3 * HOUR,
+      lastRetrievalAgeMs: HOUR,
+    });
+  });
+
+  test('distinct retrieval-only supplemented content remains incomparable and quarantined', () => {
+    const registry = new ScheduleEditionRegistry();
+    const retained = registry.observe(candidate('supplement-retrieval-first', {
+      retrievedAt: new Date(BASE - HOUR),
+    }));
+    const changed = registry.observe(candidate('supplement-retrieval-next', {
+      retrievedAt: new Date(BASE),
+    }));
+
+    expect(retained.status).toBe('accepted-new');
+    expect(changed).toMatchObject({
+      status: 'quarantined',
+      reason: expect.stringMatching(/incomparable chronology/i),
+    });
+    expect(registry.editions()).toHaveLength(1);
+  });
+
+  test('regular retrieval-only refresh does not bridge mixed chronology metadata', () => {
+    const publicationThenAbsent = new ScheduleEditionRegistry();
+    publicationThenAbsent.observe(candidate('regular-published-first', {
+      source: 'regular-gtfs',
+      publishedAt: new Date(BASE - HOUR),
+      retrievedAt: new Date(BASE),
+    }));
+    expect(publicationThenAbsent.observe(candidate('regular-absent-next', {
+      source: 'regular-gtfs',
+      retrievedAt: new Date(BASE + HOUR),
+    }))).toMatchObject({
+      status: 'quarantined',
+      reason: expect.stringMatching(/incomparable chronology/i),
+    });
+
+    const absentThenPublication = new ScheduleEditionRegistry();
+    absentThenPublication.observe(candidate('regular-absent-first', {
+      source: 'regular-gtfs',
+      retrievedAt: new Date(BASE),
+    }));
+    expect(absentThenPublication.observe(candidate('regular-published-next', {
+      source: 'regular-gtfs',
+      publishedAt: new Date(BASE),
+      retrievedAt: new Date(BASE + HOUR),
+    }))).toMatchObject({
+      status: 'quarantined',
+      reason: expect.stringMatching(/incomparable chronology/i),
+    });
+
+    const orderThenAbsent = new ScheduleEditionRegistry();
+    orderThenAbsent.observe(candidate('regular-order-first', {
+      source: 'regular-gtfs',
+      sourceOrder: 1,
+      retrievedAt: new Date(BASE),
+    }));
+    expect(orderThenAbsent.observe(candidate('regular-order-absent-next', {
+      source: 'regular-gtfs',
+      retrievedAt: new Date(BASE + HOUR),
+    }))).toMatchObject({
+      status: 'quarantined',
+      reason: expect.stringMatching(/incomparable chronology/i),
+    });
+
+    const absentThenOrder = new ScheduleEditionRegistry();
+    absentThenOrder.observe(candidate('regular-order-absent-first', {
+      source: 'regular-gtfs',
+      retrievedAt: new Date(BASE),
+    }));
+    expect(absentThenOrder.observe(candidate('regular-order-next', {
+      source: 'regular-gtfs',
+      sourceOrder: 2,
+      retrievedAt: new Date(BASE + HOUR),
+    }))).toMatchObject({
+      status: 'quarantined',
+      reason: expect.stringMatching(/incomparable chronology/i),
+    });
+  });
+
+  test('regular publication and source-order regressions remain quarantined', () => {
+    const publicationRegistry = new ScheduleEditionRegistry();
+    publicationRegistry.observe(candidate('regular-publication-retained', {
+      source: 'regular-gtfs',
+      publishedAt: new Date(BASE - HOUR),
+      retrievedAt: new Date(BASE),
+    }));
+    expect(publicationRegistry.observe(candidate('regular-publication-regressed', {
+      source: 'regular-gtfs',
+      publishedAt: new Date(BASE - 2 * HOUR),
+      retrievedAt: new Date(BASE + HOUR),
+    }))).toMatchObject({ status: 'quarantined', reason: expect.stringMatching(/publication chronology/i) });
+
+    const orderRegistry = new ScheduleEditionRegistry();
+    orderRegistry.observe(candidate('regular-order-retained', {
+      source: 'regular-gtfs',
+      sourceOrder: 2,
+      retrievedAt: new Date(BASE),
+    }));
+    expect(orderRegistry.observe(candidate('regular-order-regressed', {
+      source: 'regular-gtfs',
+      sourceOrder: 1,
+      retrievedAt: new Date(BASE + HOUR),
+    }))).toMatchObject({ status: 'quarantined', reason: expect.stringMatching(/source chronology/i) });
+  });
+
+  test('a failed regular refresh preserves the newest accepted retrieval-only edition', () => {
+    const registry = new ScheduleEditionRegistry();
+    registry.observe(candidate('regular-before-refresh', {
+      source: 'regular-gtfs',
+      retrievedAt: new Date(BASE - HOUR),
+    }));
+    const retained = registry.observe(candidate('regular-after-refresh', {
+      source: 'regular-gtfs',
+      retrievedAt: new Date(BASE),
+    }));
+    registry.recordFailedObservation({
+      source: 'regular-gtfs',
+      retrievedAt: new Date(BASE + HOUR),
+      reason: 'invalid replacement archive',
+    });
+
+    expect(retained.status).toBe('accepted-new');
+    expect(registry.select(claim(), new Date(BASE + HOUR))).toMatchObject({
+      source: 'regular-gtfs',
+      editionId: retained.editionId,
+    });
+    expect(registry.failedObservations()).toMatchObject([
+      { source: 'regular-gtfs', reason: 'invalid replacement archive' },
+    ]);
+  });
+
   test('quarantines every future, regressed, contradictory, or retrieval-only changed edition', () => {
     const registry = new ScheduleEditionRegistry();
     expect(
