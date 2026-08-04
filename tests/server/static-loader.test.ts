@@ -214,6 +214,93 @@ describe('static GTFS normalization', () => {
     expect(serviceTimeToInstant('20260803', '25:10:00').toISOString()).toBe('2026-08-04T05:10:00.000Z');
   });
 
+  test('service activation never chooses the first row from duplicate calendar evidence', async () => {
+    const regular = await loadStaticGtfsArchive(await readFile(fixture('regular.zip')), {
+      source: 'regular-gtfs',
+      retrievedAt: new Date('2026-08-04T04:00:00.000Z'),
+      coverage: [coverage('regular-all', ['A', 'B'])],
+    });
+    const exception = regular.data.calendarDates.find(
+      (row) => row.serviceId === 'WEEK' && row.date === '20260803',
+    );
+    const calendar = regular.data.calendars.find((row) => row.serviceId === 'WEEK');
+    expect(exception).toBeDefined();
+    expect(calendar).toBeDefined();
+
+    expect(() => isServiceActive({
+      calendars: regular.data.calendars,
+      calendarDates: [
+        ...regular.data.calendarDates,
+        { ...exception!, exceptionType: 1, rowIdentity: `${exception!.rowIdentity}-conflict` },
+      ],
+    }, 'WEEK', '20260803')).toThrow(/duplicate GTFS calendar_dates service_id,date/i);
+
+    expect(() => isServiceActive({
+      calendars: [
+        ...regular.data.calendars,
+        { ...calendar!, weekdays: calendar!.weekdays.map((active) => !active), rowIdentity: `${calendar!.rowIdentity}-conflict` },
+      ],
+      calendarDates: regular.data.calendarDates,
+    }, 'WEEK', '20260804')).toThrow(/duplicate GTFS calendar service_id/i);
+  });
+
+  test.each([
+    [
+      'duplicate calendar service identity',
+      {
+        'calendar.txt':
+          'service_id,monday,tuesday,wednesday,thursday,friday,saturday,sunday,start_date,end_date\n' +
+          'WEEK,1,1,1,1,1,0,0,20260801,20260831\n' +
+          'WEEK,0,0,0,0,0,1,1,20260801,20260831\n',
+      },
+      /duplicate GTFS calendar service_id/i,
+    ],
+    [
+      'duplicate and contradictory calendar exceptions',
+      {
+        'calendar_dates.txt':
+          'service_id,date,exception_type\nWEEK,20260803,1\nWEEK,20260803,2\n',
+      },
+      /duplicate GTFS calendar_dates service_id,date/i,
+    ],
+    [
+      'invalid weekday flag',
+      {
+        'calendar.txt':
+          'service_id,monday,tuesday,wednesday,thursday,friday,saturday,sunday,start_date,end_date\n' +
+          'WEEK,2,1,1,1,1,0,0,20260801,20260831\n',
+      },
+      /calendar\.txt monday must be 0 or 1/i,
+    ],
+    [
+      'invalid exception type',
+      { 'calendar_dates.txt': 'service_id,date,exception_type\nWEEK,20260803,3\n' },
+      /exception_type must be 1 or 2/i,
+    ],
+    [
+      'invalid Gregorian exception date',
+      { 'calendar_dates.txt': 'service_id,date,exception_type\nWEEK,20260230,1\n' },
+      /invalid GTFS service date/i,
+    ],
+    [
+      'reversed calendar date range',
+      {
+        'calendar.txt':
+          'service_id,monday,tuesday,wednesday,thursday,friday,saturday,sunday,start_date,end_date\n' +
+          'WEEK,1,1,1,1,1,0,0,20260831,20260801\n',
+      },
+      /calendar\.txt start_date must not be after end_date/i,
+    ],
+  ] as const)('rejects %s before service activation', async (_label, overrides, expected) => {
+    await expect(
+      loadStaticGtfsArchive(buildStoredZip(requiredGtfsEntries(overrides)), {
+        source: 'regular-gtfs',
+        retrievedAt: new Date('2026-08-04T04:00:00.000Z'),
+        coverage: [coverage('regular-a', ['A'])],
+      }),
+    ).rejects.toThrow(expected);
+  });
+
   test('canonical semantic identity ignores wrapper, CSV row/header order, and line endings', async () => {
     const baseline = await loadStaticGtfsArchive(await readFile(fixture('regular.zip')), {
       source: 'regular-gtfs',
@@ -303,6 +390,82 @@ describe('exact entrance joins', () => {
       accessiblePathEvidence: false,
     });
   });
+
+  test('a mixed valid and missing GTFS stop reference is wholly unmatched without partial directional inheritance', async () => {
+    const staticFeed = await loadStaticGtfsArchive(await readFile(fixture('regular.zip')), {
+      source: 'regular-gtfs',
+      retrievedAt: new Date('2026-08-04T04:00:00.000Z'),
+      coverage: [coverage('regular-all', ['A', 'B'])],
+    });
+    const catalog = loadEntranceCatalog(
+      [entranceRecord({ gtfs_stop_id: 'C1 MISSING' })],
+      staticFeed.data,
+      { sourceId: 'fixture', retrievedAt: new Date('2026-08-04T04:05:00.000Z') },
+    );
+
+    expect(catalog.entrances[0]).toMatchObject({
+      joinStatus: 'unmatched',
+      gtfsStopIds: [],
+      directionalStopIds: [],
+    });
+  });
+
+  test('a directional stop reference cannot masquerade as an exact entrance-to-base join', async () => {
+    const staticFeed = await loadStaticGtfsArchive(await readFile(fixture('regular.zip')), {
+      source: 'regular-gtfs',
+      retrievedAt: new Date('2026-08-04T04:00:00.000Z'),
+      coverage: [coverage('regular-all', ['A', 'B'])],
+    });
+    const catalog = loadEntranceCatalog(
+      [entranceRecord({ gtfs_stop_id: 'C1N' })],
+      staticFeed.data,
+      { sourceId: 'fixture', retrievedAt: new Date('2026-08-04T04:05:00.000Z') },
+    );
+
+    expect(catalog.entrances[0]).toMatchObject({
+      joinStatus: 'unmatched',
+      gtfsStopIds: [],
+      directionalStopIds: [],
+    });
+  });
+
+  test('rejects conflicting GTFS associations for one constituent across entrance records', async () => {
+    const staticFeed = await loadStaticGtfsArchive(await readFile(fixture('regular.zip')), {
+      source: 'regular-gtfs',
+      retrievedAt: new Date('2026-08-04T04:00:00.000Z'),
+      coverage: [coverage('regular-all', ['A', 'B'])],
+    });
+
+    expect(() =>
+      loadEntranceCatalog(
+        [
+          entranceRecord({ gtfs_stop_id: 'C1', entrance_latitude: '40.700100' }),
+          entranceRecord({ gtfs_stop_id: 'C2', entrance_latitude: '40.700200' }),
+        ],
+        staticFeed.data,
+        { sourceId: 'fixture', retrievedAt: new Date('2026-08-04T04:05:00.000Z') },
+      ),
+    ).toThrow(/conflicting GTFS stop associations/i);
+  });
+
+  test('rejects one constituent assigned to multiple complexes', async () => {
+    const staticFeed = await loadStaticGtfsArchive(await readFile(fixture('regular.zip')), {
+      source: 'regular-gtfs',
+      retrievedAt: new Date('2026-08-04T04:00:00.000Z'),
+      coverage: [coverage('regular-all', ['A', 'B'])],
+    });
+
+    expect(() =>
+      loadEntranceCatalog(
+        [
+          entranceRecord({ complex_id: '100', entrance_latitude: '40.700100' }),
+          entranceRecord({ complex_id: '200', entrance_latitude: '40.700200' }),
+        ],
+        staticFeed.data,
+        { sourceId: 'fixture', retrievedAt: new Date('2026-08-04T04:05:00.000Z') },
+      ),
+    ).toThrow(/constituent.*multiple complexes/i);
+  });
 });
 
 function coverage(id: string, routeIds: string[]) {
@@ -313,6 +476,23 @@ function coverage(id: string, routeIds: string[]) {
     effectiveFrom: '2026-08-03T04:00:00.000Z',
     effectiveUntil: '2026-08-05T04:00:00.000Z',
     directions: ['northbound', 'southbound'] as const,
+  };
+}
+
+function entranceRecord(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    complex_id: '100',
+    stop_name: 'Fixture Complex',
+    constituent_station_name: 'Fixture Station',
+    station_id: '10',
+    gtfs_stop_id: 'C1',
+    daytime_routes: 'A B',
+    entrance_type: 'Stair',
+    entry_allowed: 'YES',
+    exit_allowed: 'YES',
+    entrance_latitude: '40.700100',
+    entrance_longitude: '-74.000100',
+    ...overrides,
   };
 }
 

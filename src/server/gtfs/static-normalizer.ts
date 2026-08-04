@@ -184,7 +184,7 @@ export function normalizeGtfsTables(tables: ReadonlyMap<string, ParsedCsv>): Nor
     serviceId: required(row, 'service_id', 'calendar.txt'),
     weekdays: Object.freeze(
       ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'].map(
-        (day) => required(row, day, 'calendar.txt') === '1',
+        (day) => weekdayFlag(row, day),
       ),
     ),
     startDate: requiredDate(row, 'start_date', 'calendar.txt'),
@@ -224,6 +224,13 @@ export function normalizeGtfsTables(tables: ReadonlyMap<string, ParsedCsv>): Nor
   validateUnique(stops, (row) => row.stopId, 'stop_id');
   validateUnique(trips, (row) => row.tripId, 'trip_id');
   validateUnique(stopTimes, (row) => `${row.tripId}\0${row.stopSequence}`, 'stop_times primary key');
+  validateUnique(calendars, (row) => row.serviceId, 'calendar service_id');
+  validateUnique(calendarDates, (row) => `${row.serviceId}\0${row.date}`, 'calendar_dates service_id,date');
+  for (const calendar of calendars) {
+    if (calendar.startDate > calendar.endDate) {
+      throw new Error('calendar.txt start_date must not be after end_date');
+    }
+  }
   validateJoins(routes, stops, trips, stopTimes, transfers);
 
   const tripById = new Map(trips.map((trip) => [trip.tripId, trip]));
@@ -286,9 +293,19 @@ export function isServiceActive(
   serviceDate: string,
 ): boolean {
   assertServiceDate(serviceDate);
-  const exception = data.calendarDates.find((row) => row.serviceId === serviceId && row.date === serviceDate);
+  const exceptions = data.calendarDates.filter(
+    (row) => row.serviceId === serviceId && row.date === serviceDate,
+  );
+  if (exceptions.length > 1) {
+    throw new Error(`Duplicate GTFS calendar_dates service_id,date: ${serviceId},${serviceDate}`);
+  }
+  const exception = exceptions[0];
   if (exception) return exception.exceptionType === 1;
-  const calendar = data.calendars.find((row) => row.serviceId === serviceId);
+  const calendars = data.calendars.filter((row) => row.serviceId === serviceId);
+  if (calendars.length > 1) {
+    throw new Error(`Duplicate GTFS calendar service_id: ${serviceId}`);
+  }
+  const calendar = calendars[0];
   if (!calendar || serviceDate < calendar.startDate || serviceDate > calendar.endDate) return false;
   const date = serviceDateToUtcDate(serviceDate);
   const mondayIndex = (date.getUTCDay() + 6) % 7;
@@ -388,6 +405,12 @@ function requiredDate(row: Readonly<Record<string, string>>, field: string, tabl
   const value = required(row, field, table);
   assertServiceDate(value);
   return value;
+}
+
+function weekdayFlag(row: Readonly<Record<string, string>>, field: string): boolean {
+  const value = required(row, field, 'calendar.txt');
+  if (value !== '0' && value !== '1') throw new Error(`calendar.txt ${field} must be 0 or 1`);
+  return value === '1';
 }
 
 function assertServiceDate(value: string): void {

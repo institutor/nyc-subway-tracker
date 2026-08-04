@@ -19,6 +19,8 @@ export interface ScheduleClaim {
   readonly at: string;
   readonly direction: Direction;
   readonly occurrenceId?: string;
+  readonly stopId?: string;
+  readonly stopTimeOccurrenceId?: string;
 }
 
 export type ScheduleCurrencyState = 'current' | 'stale' | 'topology' | 'quarantined';
@@ -87,29 +89,12 @@ export class ScheduleEditionRegistry {
     if (publishedAt && publishedAt > retrievedAt) {
       return quarantine('Future publication timestamp cannot anchor a schedule edition');
     }
-    const previous = this.#editions.filter((edition) => edition.source === candidate.source);
-    if (candidate.source === 'supplemented-gtfs' && previous.length > 0) {
-      const priorOrders = previous.map((edition) => edition.sourceOrder).filter((value): value is number => value !== undefined);
-      const priorPublications = previous
-        .map((edition) => edition.publishedAt)
-        .filter((value): value is string => value !== undefined);
-      const latestPriorPublication = [...priorPublications].sort().at(-1);
-      if (candidate.sourceOrder !== undefined && priorOrders.length > 0 && candidate.sourceOrder <= Math.max(...priorOrders)) {
-        return quarantine('Regressed or contradictory source chronology');
-      }
-      if (publishedAt && latestPriorPublication && publishedAt < latestPriorPublication) {
-        return quarantine('Regressed publication chronology');
-      }
-      if (
-        candidate.sourceOrder === undefined &&
-        (publishedAt === undefined || latestPriorPublication === undefined || publishedAt <= latestPriorPublication)
-      ) {
-        return quarantine('Changed schedule content requires source-supported chronology');
-      }
-    }
     if (candidate.sourceOrder !== undefined && (!Number.isSafeInteger(candidate.sourceOrder) || candidate.sourceOrder < 0)) {
       return quarantine('Invalid source-supported chronology');
     }
+    const previous = this.#editions.filter((edition) => edition.source === candidate.source);
+    const chronologyFailure = validateChangedEditionChronology(candidate.sourceOrder, publishedAt, previous);
+    if (chronologyFailure) return quarantine(chronologyFailure);
 
     const editionId = `${candidate.source}:${candidate.canonicalContentId}`;
     const edition: StoredEdition = {
@@ -236,8 +221,7 @@ export class ScheduleEditionRegistry {
 }
 
 function selection(edition: StoredEdition, claim: ScheduleClaim, currency: ScheduleCurrencyState): ScheduleSelection {
-  const occurrencePresent =
-    claim.occurrenceId === undefined || edition.candidate.data.trips.some((trip) => trip.tripId === claim.occurrenceId);
+  const occurrencePresent = hasExactOccurrence(edition.candidate, claim);
   return Object.freeze({
     source: edition.source,
     editionId: edition.editionId,
@@ -262,7 +246,60 @@ function maskContains(mask: ScheduleCoverageMask, claim: ScheduleClaim): boolean
 
 function validateClaim(claim: ScheduleClaim): void {
   if (!claim.routeId || !/^\d{8}$/.test(claim.serviceDate)) throw new Error('Invalid schedule claim scope');
+  if (claim.occurrenceId === '' || claim.stopId === '' || claim.stopTimeOccurrenceId === '') {
+    throw new Error('Invalid empty schedule occurrence scope');
+  }
   exactIso(claim.at, 'schedule claim instant');
+}
+
+function validateChangedEditionChronology(
+  sourceOrder: number | undefined,
+  publishedAt: string | undefined,
+  previous: readonly StoredEdition[],
+): string | undefined {
+  for (const prior of previous) {
+    const sharedPublication = publishedAt !== undefined && prior.publishedAt !== undefined;
+    const sharedSourceOrder = sourceOrder !== undefined && prior.sourceOrder !== undefined;
+    if (!sharedPublication && !sharedSourceOrder) {
+      return 'Changed schedule content has incomparable chronology with a prior accepted edition';
+    }
+
+    if (sharedPublication && sharedSourceOrder) {
+      if (publishedAt! <= prior.publishedAt! || sourceOrder! <= prior.sourceOrder!) {
+        return 'Contradictory chronology across multiple supported axes';
+      }
+      continue;
+    }
+    if (sharedPublication) {
+      if (publishedAt! < prior.publishedAt!) return 'Regressed publication chronology';
+      if (publishedAt === prior.publishedAt) {
+        return 'Changed schedule content lacks strict source-supported chronology';
+      }
+      continue;
+    }
+    if (sourceOrder! <= prior.sourceOrder!) return 'Regressed or contradictory source chronology';
+  }
+  return undefined;
+}
+
+function hasExactOccurrence(candidate: StaticGtfsEditionCandidate, claim: ScheduleClaim): boolean {
+  if (claim.occurrenceId && !candidate.data.trips.some((trip) => trip.tripId === claim.occurrenceId)) return false;
+  if (claim.stopTimeOccurrenceId) {
+    return candidate.data.stopTimes.some(
+      (stopTime) =>
+        stopTime.rowIdentity === claim.stopTimeOccurrenceId &&
+        (claim.occurrenceId === undefined || stopTime.tripId === claim.occurrenceId) &&
+        (claim.stopId === undefined || stopTime.stopId === claim.stopId),
+    );
+  }
+  if (claim.stopId) {
+    return candidate.data.stopTimes.some(
+      (stopTime) =>
+        stopTime.stopId === claim.stopId &&
+        (claim.occurrenceId === undefined || stopTime.tripId === claim.occurrenceId),
+    );
+  }
+  return claim.occurrenceId === undefined || candidate.data.trips.some((trip) => trip.tripId === claim.occurrenceId);
 }
 
 function exactIso(value: string, label: string): string {

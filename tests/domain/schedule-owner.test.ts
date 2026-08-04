@@ -73,17 +73,17 @@ describe('schedule edition observation and currency', () => {
         retrievedAt: new Date(BASE + HOUR),
         sourceOrder: 3,
       })),
-    ).toMatchObject({ status: 'quarantined', reason: expect.stringMatching(/publication chronology/i) });
+    ).toMatchObject({ status: 'quarantined', reason: expect.stringMatching(/contradictory chronology/i) });
     expect(
       registry.observe(candidate('source-order-regressed', {
         publishedAt: new Date(BASE + HOUR),
         retrievedAt: new Date(BASE + HOUR),
         sourceOrder: 1,
       })),
-    ).toMatchObject({ status: 'quarantined', reason: expect.stringMatching(/source chronology/i) });
+    ).toMatchObject({ status: 'quarantined', reason: expect.stringMatching(/contradictory chronology/i) });
     expect(
       registry.observe(candidate('retrieval-is-not-chronology', { retrievedAt: new Date(BASE + 2 * HOUR) })),
-    ).toMatchObject({ status: 'quarantined', reason: expect.stringMatching(/source-supported chronology/i) });
+    ).toMatchObject({ status: 'quarantined', reason: expect.stringMatching(/incomparable chronology/i) });
     expect(
       registry.observe(candidate('equal-publication-is-not-later', {
         publishedAt: new Date(BASE - HOUR),
@@ -141,6 +141,106 @@ describe('schedule edition observation and currency', () => {
       editionId: retained.editionId,
     });
     expect(registry.failedObservations()).toHaveLength(1);
+  });
+
+  test('changed regular content cannot gain selection order from regressed publication chronology', () => {
+    const registry = new ScheduleEditionRegistry();
+    const retained = registry.observe(candidate('regular-retained', {
+      source: 'regular-gtfs',
+      publishedAt: new Date(BASE - HOUR),
+      retrievedAt: new Date(BASE),
+    }));
+    const regressed = registry.observe(candidate('regular-regressed', {
+      source: 'regular-gtfs',
+      publishedAt: new Date(BASE - 2 * HOUR),
+      retrievedAt: new Date(BASE + HOUR),
+    }));
+
+    expect(regressed).toMatchObject({
+      status: 'quarantined',
+      reason: expect.stringMatching(/publication chronology/i),
+    });
+    expect(registry.editions()).toHaveLength(1);
+    expect(registry.select(claim(), new Date(BASE + HOUR))).toMatchObject({
+      source: 'regular-gtfs',
+      editionId: retained.editionId,
+    });
+  });
+
+  test('changed supplemented content is quarantined when chronology axes are incomparable in either direction', () => {
+    const publicationFirst = new ScheduleEditionRegistry();
+    const retainedPublication = publicationFirst.observe(candidate('publication-first', {
+      publishedAt: new Date(BASE - HOUR),
+      retrievedAt: new Date(BASE),
+    }));
+    expect(publicationFirst.observe(candidate('order-only-next', {
+      sourceOrder: 2,
+      retrievedAt: new Date(BASE + HOUR),
+    }))).toMatchObject({
+      status: 'quarantined',
+      reason: expect.stringMatching(/incomparable chronology/i),
+    });
+    expect(publicationFirst.editions()).toHaveLength(1);
+    expect(publicationFirst.select(claim(), new Date(BASE + HOUR))).toMatchObject({
+      editionId: retainedPublication.editionId,
+    });
+
+    const orderFirst = new ScheduleEditionRegistry();
+    const retainedOrder = orderFirst.observe(candidate('order-first', {
+      sourceOrder: 1,
+      retrievedAt: new Date(BASE),
+    }));
+    expect(orderFirst.observe(candidate('publication-only-next', {
+      publishedAt: new Date(BASE),
+      retrievedAt: new Date(BASE + HOUR),
+    }))).toMatchObject({
+      status: 'quarantined',
+      reason: expect.stringMatching(/incomparable chronology/i),
+    });
+    expect(orderFirst.editions()).toHaveLength(1);
+    expect(orderFirst.select(claim(), new Date(BASE + HOUR))).toMatchObject({
+      editionId: retainedOrder.editionId,
+    });
+  });
+
+  test('multiple chronology axes must all establish the same strict later ordering', () => {
+    const equalRegistry = new ScheduleEditionRegistry();
+    const equalRetained = equalRegistry.observe(candidate('both-retained-equal', {
+      publishedAt: new Date(BASE - HOUR),
+      sourceOrder: 1,
+      retrievedAt: new Date(BASE),
+    }));
+    expect(equalRegistry.observe(candidate('equal-publication', {
+      publishedAt: new Date(BASE - HOUR),
+      sourceOrder: 2,
+      retrievedAt: new Date(BASE + HOUR),
+    }))).toMatchObject({
+      status: 'quarantined',
+      reason: expect.stringMatching(/contradictory chronology/i),
+    });
+    expect(equalRegistry.editions()).toHaveLength(1);
+    expect(equalRegistry.select(claim(), new Date(BASE + HOUR))).toMatchObject({
+      editionId: equalRetained.editionId,
+    });
+
+    const conflictRegistry = new ScheduleEditionRegistry();
+    const conflictRetained = conflictRegistry.observe(candidate('both-retained-conflict', {
+      publishedAt: new Date(BASE - HOUR),
+      sourceOrder: 2,
+      retrievedAt: new Date(BASE),
+    }));
+    expect(conflictRegistry.observe(candidate('axes-disagree', {
+      publishedAt: new Date(BASE),
+      sourceOrder: 1,
+      retrievedAt: new Date(BASE + HOUR),
+    }))).toMatchObject({
+      status: 'quarantined',
+      reason: expect.stringMatching(/contradictory chronology/i),
+    });
+    expect(conflictRegistry.editions()).toHaveLength(1);
+    expect(conflictRegistry.select(claim(), new Date(BASE + HOUR))).toMatchObject({
+      editionId: conflictRetained.editionId,
+    });
   });
 });
 
@@ -207,6 +307,7 @@ describe('claim-scoped supersession and schedule ownership', () => {
     const regular = registry.observe(candidate('regular-has-omitted-trip', {
       source: 'regular-gtfs',
       retrievedAt: new Date(BASE),
+      sourceOrder: 1,
       coverage: [mask('regular', ['A', 'B'])],
       tripIds: ['regular-omitted'],
     }));
@@ -231,6 +332,7 @@ describe('claim-scoped supersession and schedule ownership', () => {
     const refreshedRegular = registry.observe(candidate('regular-refreshed', {
       source: 'regular-gtfs',
       retrievedAt: new Date(BASE + 24 * HOUR),
+      sourceOrder: 2,
       coverage: [mask('regular', ['A', 'B'])],
       tripIds: ['regular-omitted'],
     }));
@@ -239,6 +341,50 @@ describe('claim-scoped supersession and schedule ownership', () => {
       editionId: refreshedRegular.editionId,
       occurrencePresent: true,
     });
+  });
+
+  test('a supplemented trip that omits the exact claimed stop still owns the occurrence without regular resurrection', () => {
+    const registry = new ScheduleEditionRegistry();
+    const regular = registry.observe(candidate('regular-full-pattern', {
+      source: 'regular-gtfs',
+      retrievedAt: new Date(BASE),
+      coverage: [mask('regular-a', ['A'])],
+      tripIds: ['shared-trip'],
+      stopCalls: [
+        { tripId: 'shared-trip', stopId: 'C1N', rowIdentity: 'regular-c1' },
+        { tripId: 'shared-trip', stopId: 'C2N', rowIdentity: 'regular-c2' },
+      ],
+    }));
+    const supplement = registry.observe(candidate('supplement-short-pattern', {
+      publishedAt: new Date(BASE),
+      retrievedAt: new Date(BASE),
+      sourceOrder: 1,
+      coverage: [mask('supplement-a', ['A'])],
+      tripIds: ['shared-trip'],
+      stopCalls: [{ tripId: 'shared-trip', stopId: 'C1N', rowIdentity: 'supplement-c1' }],
+    }));
+
+    expect(registry.select(claim({ occurrenceId: 'shared-trip', stopId: 'C2N' }), new Date(BASE))).toMatchObject({
+      source: 'supplemented-gtfs',
+      editionId: supplement.editionId,
+      occurrencePresent: false,
+    });
+    expect(registry.select(claim({ occurrenceId: 'shared-trip', stopId: 'C1N' }), new Date(BASE))).toMatchObject({
+      source: 'supplemented-gtfs',
+      editionId: supplement.editionId,
+      occurrencePresent: true,
+    });
+    expect(
+      registry.select(
+        claim({ occurrenceId: 'shared-trip', stopTimeOccurrenceId: 'supplement-c1' }),
+        new Date(BASE),
+      ),
+    ).toMatchObject({
+      source: 'supplemented-gtfs',
+      editionId: supplement.editionId,
+      occurrencePresent: true,
+    });
+    expect(regular.status).toBe('accepted-new');
   });
 
   test('a topology-only regular edition cannot emit a scheduled occurrence', () => {
@@ -284,6 +430,7 @@ function candidate(
     retrievedAt?: Date;
     publishedAt?: Date;
     tripIds?: string[];
+    stopCalls?: Array<{ tripId: string; stopId: string; rowIdentity: string }>;
   } = {},
 ): StaticGtfsEditionCandidate {
   const coverage = overrides.coverage ?? [mask('default', ['A'])];
@@ -297,7 +444,14 @@ function candidate(
     semanticTables: new Map(),
     data: {
       agencies: [], routes: [], stops: [], trips: tripIds.map((tripId) => ({ tripId, routeId: 'A', serviceId: 'WEEK', headsign: 'Uptown', directionId: '0', shapeId: '' , rowIdentity: tripId })),
-      stopTimes: [], calendars: [], calendarDates: [], transfers: [], shapes: [], servicePatterns: [], structuralTransfers: [], stationComplexes: [],
+      stopTimes: (overrides.stopCalls ?? []).map((call, index) => ({
+        ...call,
+        arrivalTime: '10:00:00',
+        departureTime: '10:00:00',
+        arrivalSeconds: 36_000,
+        departureSeconds: 36_000,
+        stopSequence: index + 1,
+      })), calendars: [], calendarDates: [], transfers: [], shapes: [], servicePatterns: [], structuralTransfers: [], stationComplexes: [],
     },
     ...overrides,
     retrievedAt: (overrides.retrievedAt ?? new Date(BASE)).toISOString(),

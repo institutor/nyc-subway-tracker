@@ -59,26 +59,43 @@ export function loadEntranceCatalog(
   const retrievedAt = validDate(metadata.retrievedAt).toISOString();
   if (!metadata.sourceId) throw new Error('Entrance source identity is required');
   const stopById = new Map(staticGtfs.stops.map((stop) => [stop.stopId, stop]));
+  validateConstituentRelationships(rawRecords);
   const entrances = rawRecords.map((raw) => {
     const complexId = requiredText(raw, 'complex_id');
     const complexName = requiredText(raw, 'stop_name');
     const constituentStationId = requiredText(raw, 'station_id');
     const constituentStationName = requiredText(raw, 'constituent_station_name');
-    const gtfsStopIds = splitIds(requiredText(raw, 'gtfs_stop_id'));
+    const referencedGtfsStopIds = splitIds(requiredText(raw, 'gtfs_stop_id'));
     const latitude = finiteCoordinate(raw.entrance_latitude, 'entrance_latitude', -90, 90);
     const longitude = finiteCoordinate(raw.entrance_longitude, 'entrance_longitude', -180, 180);
     const entranceType = optionalText(raw.entrance_type);
     const entryPermission = parseEntryPermission(raw.entry_allowed, raw.exit_allowed);
     const exitAllowed = parseYesNo(raw.exit_allowed);
-    const directionalStopIds = staticGtfs.stops
-      .filter(
-        (stop) =>
-          stop.direction !== 'unknown' &&
-          (gtfsStopIds.includes(stop.stopId) || (stop.parentStation !== '' && gtfsStopIds.includes(stop.parentStation))),
-      )
-      .map((stop) => stop.stopId)
-      .sort(compareText);
-    const matchedBase = gtfsStopIds.some((stopId) => stopById.has(stopId));
+    const referencedBaseStops = referencedGtfsStopIds.map((stopId) => stopById.get(stopId));
+    const allReferencesAreBases = referencedBaseStops.every(
+      (stop) => stop !== undefined && stop.locationType === '1' && stop.parentStation === '',
+    );
+    const referencedDirectionalStopIds = allReferencesAreBases
+      ? staticGtfs.stops
+          .filter(
+            (stop) =>
+              stop.direction !== 'unknown' &&
+              stop.parentStation !== '' &&
+              referencedGtfsStopIds.includes(stop.parentStation),
+          )
+          .map((stop) => stop.stopId)
+          .sort(compareText)
+      : [];
+    const eachBaseHasDirectionalStops =
+      allReferencesAreBases &&
+      referencedGtfsStopIds.every((baseId) =>
+        staticGtfs.stops.some(
+          (stop) => stop.parentStation === baseId && stop.direction !== 'unknown',
+        ),
+      );
+    const matched = allReferencesAreBases && eachBaseHasDirectionalStops;
+    const gtfsStopIds = matched ? referencedGtfsStopIds : [];
+    const directionalStopIds = matched ? referencedDirectionalStopIds : [];
     const identityRow = Object.fromEntries(
       Object.entries(raw).map(([key, value]) => [key, value === null || value === undefined ? '' : String(value)]),
     );
@@ -87,7 +104,7 @@ export function loadEntranceCatalog(
       'entrance',
       complexId,
       constituentStationId,
-      gtfsStopIds.join('+'),
+      referencedGtfsStopIds.join('+'),
       latitude.toFixed(7),
       longitude.toFixed(7),
       entranceType,
@@ -109,7 +126,7 @@ export function loadEntranceCatalog(
       exitAllowed,
       latitude,
       longitude,
-      joinStatus: matchedBase && directionalStopIds.length > 0 ? ('matched' as const) : ('unmatched' as const),
+      joinStatus: matched ? ('matched' as const) : ('unmatched' as const),
       practicalWalkEvidence: false as const,
       accessiblePathEvidence: false as const,
       sourceId: metadata.sourceId,
@@ -145,6 +162,22 @@ export function loadEntranceCatalog(
     entrances: Object.freeze(entrances),
     complexes: Object.freeze(complexes.sort((left, right) => compareText(left.complexId, right.complexId))),
   });
+}
+
+function validateConstituentRelationships(rawRecords: readonly Readonly<Record<string, unknown>>[]): void {
+  const byConstituent = groupBy(rawRecords, (record) => requiredText(record, 'station_id'));
+  for (const [stationId, records] of byConstituent) {
+    const complexIds = uniqueSorted(records.map((record) => requiredText(record, 'complex_id')));
+    if (complexIds.length !== 1) {
+      throw new Error(`Entrance constituent ${stationId} appears under multiple complexes`);
+    }
+    const gtfsAssociations = uniqueSorted(
+      records.map((record) => splitIds(requiredText(record, 'gtfs_stop_id')).join('\0')),
+    );
+    if (gtfsAssociations.length !== 1) {
+      throw new Error(`Conflicting GTFS stop associations for entrance constituent ${stationId}`);
+    }
+  }
 }
 
 function parseEntryPermission(entry: unknown, exit: unknown): EntryPermission {
