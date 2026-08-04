@@ -1,0 +1,297 @@
+import type { StaticGtfsEditionCandidate, StaticScheduleSource } from '../../server/gtfs/static-normalizer';
+import type { Direction } from './types';
+
+const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
+const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
+
+export interface ScheduleCoverageMask {
+  readonly id: string;
+  readonly routeIds: readonly string[];
+  readonly serviceDates: readonly string[];
+  readonly effectiveFrom: string;
+  readonly effectiveUntil: string;
+  readonly directions: readonly Direction[];
+}
+
+export interface ScheduleClaim {
+  readonly routeId: string;
+  readonly serviceDate: string;
+  readonly at: string;
+  readonly direction: Direction;
+  readonly occurrenceId?: string;
+}
+
+export type ScheduleCurrencyState = 'current' | 'stale' | 'topology' | 'quarantined';
+
+export interface ScheduleCurrencyDecision {
+  readonly state: ScheduleCurrencyState;
+  readonly ageAnchorKind: 'published' | 'first-retrieved';
+  readonly ageMs: number;
+  readonly lastRetrievalAgeMs: number;
+  readonly superseded: boolean;
+  readonly inCoverage: boolean;
+  readonly reason: string;
+}
+
+export interface EditionObservationResult {
+  readonly status: 'accepted-new' | 'accepted-observation' | 'quarantined';
+  readonly editionId?: string;
+  readonly reason?: string;
+}
+
+export interface ScheduleSelection {
+  readonly source: StaticScheduleSource | 'none';
+  readonly editionId?: string;
+  readonly currency?: ScheduleCurrencyState;
+  readonly occurrencePresent?: boolean;
+  readonly reason: string;
+}
+
+export interface FailedScheduleObservation {
+  readonly source: StaticScheduleSource;
+  readonly retrievedAt: Date | string;
+  readonly reason: string;
+}
+
+interface StoredEdition {
+  readonly editionId: string;
+  readonly source: StaticScheduleSource;
+  readonly canonicalContentId: string;
+  readonly publishedAt?: string;
+  readonly firstRetrievedAt: string;
+  readonly sourceOrder?: number;
+  readonly coverage: readonly ScheduleCoverageMask[];
+  readonly candidate: StaticGtfsEditionCandidate;
+  readonly ordinal: number;
+  retrievals: string[];
+  wrappers: readonly Readonly<Record<string, string>>[];
+}
+
+export class ScheduleEditionRegistry {
+  readonly #editions: StoredEdition[] = [];
+  readonly #failed: Array<{ source: StaticScheduleSource; retrievedAt: string; reason: string }> = [];
+  #ordinal = 0;
+
+  observe(candidate: StaticGtfsEditionCandidate): EditionObservationResult {
+    const retrievedAt = exactIso(candidate.retrievedAt, 'schedule retrieval time');
+    const existing = this.#editions.find(
+      (edition) => edition.source === candidate.source && edition.canonicalContentId === candidate.canonicalContentId,
+    );
+    if (existing) {
+      existing.retrievals = uniqueSorted([...existing.retrievals, retrievedAt]);
+      existing.wrappers = Object.freeze([...existing.wrappers, Object.freeze({ ...candidate.wrapper })]);
+      return Object.freeze({ status: 'accepted-observation', editionId: existing.editionId });
+    }
+
+    const publishedAt = candidate.publishedAt ? exactIso(candidate.publishedAt, 'schedule publication time') : undefined;
+    if (publishedAt && publishedAt > retrievedAt) {
+      return quarantine('Future publication timestamp cannot anchor a schedule edition');
+    }
+    const previous = this.#editions.filter((edition) => edition.source === candidate.source);
+    if (candidate.source === 'supplemented-gtfs' && previous.length > 0) {
+      const priorOrders = previous.map((edition) => edition.sourceOrder).filter((value): value is number => value !== undefined);
+      const priorPublications = previous
+        .map((edition) => edition.publishedAt)
+        .filter((value): value is string => value !== undefined);
+      const latestPriorPublication = [...priorPublications].sort().at(-1);
+      if (candidate.sourceOrder !== undefined && priorOrders.length > 0 && candidate.sourceOrder <= Math.max(...priorOrders)) {
+        return quarantine('Regressed or contradictory source chronology');
+      }
+      if (publishedAt && latestPriorPublication && publishedAt < latestPriorPublication) {
+        return quarantine('Regressed publication chronology');
+      }
+      if (
+        candidate.sourceOrder === undefined &&
+        (publishedAt === undefined || latestPriorPublication === undefined || publishedAt <= latestPriorPublication)
+      ) {
+        return quarantine('Changed schedule content requires source-supported chronology');
+      }
+    }
+    if (candidate.sourceOrder !== undefined && (!Number.isSafeInteger(candidate.sourceOrder) || candidate.sourceOrder < 0)) {
+      return quarantine('Invalid source-supported chronology');
+    }
+
+    const editionId = `${candidate.source}:${candidate.canonicalContentId}`;
+    const edition: StoredEdition = {
+      editionId,
+      source: candidate.source,
+      canonicalContentId: candidate.canonicalContentId,
+      ...(publishedAt ? { publishedAt } : {}),
+      firstRetrievedAt: retrievedAt,
+      ...(candidate.sourceOrder === undefined ? {} : { sourceOrder: candidate.sourceOrder }),
+      coverage: candidate.coverage,
+      candidate,
+      ordinal: ++this.#ordinal,
+      retrievals: [retrievedAt],
+      wrappers: [Object.freeze({ ...candidate.wrapper })],
+    };
+    this.#editions.push(edition);
+    return Object.freeze({ status: 'accepted-new', editionId });
+  }
+
+  recordFailedObservation(observation: FailedScheduleObservation): void {
+    if (!observation.reason) throw new Error('Failed schedule observation reason is required');
+    const value =
+      observation.retrievedAt instanceof Date
+        ? validDate(observation.retrievedAt, 'failed observation retrieval').toISOString()
+        : exactIso(observation.retrievedAt, 'failed observation retrieval');
+    this.#failed.push(Object.freeze({ source: observation.source, retrievedAt: value, reason: observation.reason }));
+  }
+
+  failedObservations(): readonly Readonly<{ source: StaticScheduleSource; retrievedAt: string; reason: string }>[] {
+    return Object.freeze([...this.#failed]);
+  }
+
+  editions(): readonly Readonly<{
+    editionId: string;
+    source: StaticScheduleSource;
+    canonicalContentId: string;
+    publishedAt?: string;
+    firstRetrievedAt: string;
+    lastRetrievedAt: string;
+    retrievals: readonly string[];
+    wrappers: readonly Readonly<Record<string, string>>[];
+  }>[] {
+    return Object.freeze(
+      this.#editions.map((edition) =>
+        Object.freeze({
+          editionId: edition.editionId,
+          source: edition.source,
+          canonicalContentId: edition.canonicalContentId,
+          ...(edition.publishedAt ? { publishedAt: edition.publishedAt } : {}),
+          firstRetrievedAt: edition.firstRetrievedAt,
+          lastRetrievedAt: edition.retrievals.at(-1)!,
+          retrievals: Object.freeze([...edition.retrievals]),
+          wrappers: Object.freeze([...edition.wrappers]),
+        }),
+      ),
+    );
+  }
+
+  classify(editionId: string, claim: ScheduleClaim, comparisonAt: Date): ScheduleCurrencyDecision {
+    const edition = this.#editions.find((candidate) => candidate.editionId === editionId);
+    if (!edition) throw new Error(`Unknown schedule edition: ${editionId}`);
+    const comparison = validDate(comparisonAt, 'authoritative schedule comparison').getTime();
+    validateClaim(claim);
+    const anchor = edition.publishedAt ?? edition.firstRetrievedAt;
+    const ageMs = comparison - Date.parse(anchor);
+    const lastRetrievalAgeMs = comparison - Date.parse(edition.retrievals.at(-1)!);
+    const inCoverage = edition.coverage.some((mask) => maskContains(mask, claim));
+    const superseded = this.#isSuperseded(edition, claim);
+    const ageAnchorKind = edition.publishedAt ? ('published' as const) : ('first-retrieved' as const);
+
+    if (ageMs < 0) {
+      return decision('quarantined', 'Edition age is negative', ageAnchorKind, ageMs, lastRetrievalAgeMs, superseded, inCoverage);
+    }
+    if (!inCoverage) {
+      return decision('topology', 'Claim is outside edition coverage', ageAnchorKind, ageMs, lastRetrievalAgeMs, superseded, false);
+    }
+    if (superseded) {
+      return decision('topology', 'Edition is superseded for this claim', ageAnchorKind, ageMs, lastRetrievalAgeMs, true, true);
+    }
+    if (ageMs <= TWO_HOURS_MS) {
+      return decision('current', 'Current schedule', ageAnchorKind, ageMs, lastRetrievalAgeMs, false, true);
+    }
+    if (ageMs <= TWENTY_FOUR_HOURS_MS) {
+      return decision('stale', 'Stored schedule—service changes may differ', ageAnchorKind, ageMs, lastRetrievalAgeMs, false, true);
+    }
+    return decision('topology', 'Edition is older than 24 hours', ageAnchorKind, ageMs, lastRetrievalAgeMs, false, true);
+  }
+
+  select(claim: ScheduleClaim, comparisonAt: Date): ScheduleSelection {
+    validateClaim(claim);
+    validDate(comparisonAt, 'authoritative schedule comparison');
+    const supplemented = this.#editions
+      .filter(
+        (edition) =>
+          edition.source === 'supplemented-gtfs' && edition.coverage.some((mask) => maskContains(mask, claim)),
+      )
+      .sort((left, right) => right.ordinal - left.ordinal);
+    for (const edition of supplemented) {
+      const currency = this.classify(edition.editionId, claim, comparisonAt);
+      if (currency.state === 'current' || currency.state === 'stale') return selection(edition, claim, currency.state);
+    }
+
+    const regular = this.#editions
+      .filter(
+        (edition) => edition.source === 'regular-gtfs' && edition.coverage.some((mask) => maskContains(mask, claim)),
+      )
+      .sort((left, right) => right.ordinal - left.ordinal);
+    for (const edition of regular) {
+      const currency = this.classify(edition.editionId, claim, comparisonAt);
+      if (currency.state === 'current' || currency.state === 'stale') return selection(edition, claim, currency.state);
+    }
+    return Object.freeze({ source: 'none', reason: 'No usable schedule covers this claim' });
+  }
+
+  #isSuperseded(edition: StoredEdition, claim: ScheduleClaim): boolean {
+    if (edition.source !== 'supplemented-gtfs' || !edition.coverage.some((mask) => maskContains(mask, claim))) return false;
+    return this.#editions.some(
+      (candidate) =>
+        candidate.source === 'supplemented-gtfs' &&
+        candidate.ordinal > edition.ordinal &&
+        candidate.coverage.some((mask) => maskContains(mask, claim)),
+    );
+  }
+}
+
+function selection(edition: StoredEdition, claim: ScheduleClaim, currency: ScheduleCurrencyState): ScheduleSelection {
+  const occurrencePresent =
+    claim.occurrenceId === undefined || edition.candidate.data.trips.some((trip) => trip.tripId === claim.occurrenceId);
+  return Object.freeze({
+    source: edition.source,
+    editionId: edition.editionId,
+    currency,
+    occurrencePresent,
+    reason:
+      edition.source === 'supplemented-gtfs'
+        ? 'Usable supplemented coverage mask owns the claim independently of occurrence presence'
+        : 'Regular GTFS owns an otherwise uncovered claim',
+  });
+}
+
+function maskContains(mask: ScheduleCoverageMask, claim: ScheduleClaim): boolean {
+  return (
+    mask.routeIds.includes(claim.routeId) &&
+    mask.serviceDates.includes(claim.serviceDate) &&
+    claim.at >= mask.effectiveFrom &&
+    claim.at <= mask.effectiveUntil &&
+    (mask.directions.length === 0 || mask.directions.includes(claim.direction))
+  );
+}
+
+function validateClaim(claim: ScheduleClaim): void {
+  if (!claim.routeId || !/^\d{8}$/.test(claim.serviceDate)) throw new Error('Invalid schedule claim scope');
+  exactIso(claim.at, 'schedule claim instant');
+}
+
+function exactIso(value: string, label: string): string {
+  const parsed = new Date(value);
+  if (!Number.isFinite(parsed.getTime()) || parsed.toISOString() !== value) throw new Error(`Invalid ${label}`);
+  return value;
+}
+
+function validDate(value: Date, label: string): Date {
+  if (!(value instanceof Date) || !Number.isFinite(value.getTime())) throw new Error(`Invalid ${label}`);
+  return value;
+}
+
+function quarantine(reason: string): EditionObservationResult {
+  return Object.freeze({ status: 'quarantined', reason });
+}
+
+function decision(
+  state: ScheduleCurrencyState,
+  reason: string,
+  ageAnchorKind: 'published' | 'first-retrieved',
+  ageMs: number,
+  lastRetrievalAgeMs: number,
+  superseded: boolean,
+  inCoverage: boolean,
+): ScheduleCurrencyDecision {
+  return Object.freeze({ state, reason, ageAnchorKind, ageMs, lastRetrievalAgeMs, superseded, inCoverage });
+}
+
+function uniqueSorted(values: string[]): string[] {
+  return [...new Set(values)].sort();
+}
