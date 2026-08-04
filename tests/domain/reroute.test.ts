@@ -21,6 +21,10 @@ const reroute = (overrides: Partial<RerouteClaimInput> = {}): RerouteClaimInput 
     routeId: 'F',
     direction: 'northbound',
     orderedDirectionalStopIds: ['B02N', 'F14N', 'A24N', 'A25N', 'A27N'],
+    provenance: {
+      source: 'supplemented-gtfs', acceptance: 'accepted', currency: 'current',
+      editionId: 'supplemented-gtfs:20260804-weekend', observedAt: BASE,
+    },
   },
   liveRemainingStopIds: ['F14N', 'A24N', 'A25N', 'A27N'],
   pathEvidence: [{
@@ -90,6 +94,26 @@ describe('route-on-route and stopping-pattern resolution', () => {
       .toMatchObject({ kind: 'quarantine-or-limitation', reason: 'target-not-in-coherent-live-remaining-stops' });
   });
 
+  test('requires accepted current supplemented-GTFS pattern provenance and a nonempty usable edition', () => {
+    const valid = reroute().effectiveSupplementedPattern!;
+    const invalidPatterns = [
+      { ...valid, provenance: { ...valid.provenance, source: 'regular-gtfs' as const } },
+      { ...valid, provenance: { ...valid.provenance, currency: 'stale' as const } },
+      { ...valid, provenance: { ...valid.provenance, acceptance: 'quarantined' as const } },
+      { ...valid, provenance: { ...valid.provenance, editionId: '' } },
+      { ...valid, orderedDirectionalStopIds: [] },
+      { ...valid, orderedDirectionalStopIds: ['A24N', 'A24N'] },
+    ];
+    for (const effectiveSupplementedPattern of invalidPatterns) {
+      expect(resolveRerouteClaim(reroute({ effectiveSupplementedPattern }))).toMatchObject({
+        kind: 'quarantine-or-limitation',
+      });
+    }
+    expect(resolveRerouteClaim(reroute({
+      effectiveSupplementedPattern: { ...valid, provenance: { ...valid.provenance, source: 'forged' as never } },
+    }))).toMatchObject({ kind: 'quarantine-or-limitation' });
+  });
+
   test('resolves alert scope after the planned pattern and before live reroute evidence', () => {
     expect(resolveRerouteClaim(reroute({ alertScope: 'unrelated' }))).toMatchObject({
       kind: 'quarantine-or-limitation', reason: 'alert-scope-unrelated',
@@ -118,6 +142,42 @@ describe('route-on-route and stopping-pattern resolution', () => {
     const reverse = resolveRerouteClaim(reroute({ pathEvidence: [contradicting, supporting] }));
     expect(forward).toEqual(reverse);
     expect(forward).toMatchObject({ kind: 'quarantine-or-limitation', reason: 'conflicting-path-evidence' });
+  });
+
+  test('requires cross-sequence stop order coherence, allowing only valid ordered partial proofs', () => {
+    expect(resolveRerouteClaim(reroute({
+      liveRemainingStopIds: ['A25N', 'A24N', 'F14N'],
+    }))).toMatchObject({ kind: 'quarantine-or-limitation', reason: 'divergent-ordered-path-evidence' });
+    expect(resolveRerouteClaim(reroute({
+      pathEvidence: [{
+        evidenceId: 'reversed-proof', routeId: 'F', direction: 'northbound',
+        orderedDirectionalStopIds: ['A25N', 'A24N', 'F14N'], supportedViaLabel: 'Via E',
+      }],
+    }))).toMatchObject({ kind: 'quarantine-or-limitation', reason: 'divergent-ordered-path-evidence' });
+    expect(resolveRerouteClaim(reroute({
+      liveRemainingStopIds: ['A24N', 'A25N'],
+      pathEvidence: [{
+        evidenceId: 'ordered-partial', routeId: 'F', direction: 'northbound',
+        orderedDirectionalStopIds: ['F14N', 'A24N', 'A25N', 'A27N'], supportedViaLabel: 'Via E',
+      }],
+    }))).toMatchObject({ kind: 'admitted', supportedViaLabel: 'Via E' });
+    expect(resolveRerouteClaim(reroute({
+      liveRemainingStopIds: ['F14N', 'A24N', 'A24N'],
+    }))).toMatchObject({ kind: 'quarantine-or-limitation', reason: 'invalid-ordered-stop-evidence' });
+  });
+
+  test('sanitizes and bounds optional rider-facing Via labels', () => {
+    const withLabel = (supportedViaLabel: string) => resolveRerouteClaim(reroute({
+      pathEvidence: [{
+        evidenceId: 'label-proof', routeId: 'F', direction: 'northbound',
+        orderedDirectionalStopIds: ['F14N', 'A24N', 'A25N'], supportedViaLabel,
+      }],
+    }));
+    expect(withLabel('<b>Via E</b>')).toMatchObject({ kind: 'admitted', supportedViaLabel: 'Via E' });
+    for (const malformed of ['<b></b>', 'Via\u0001E', 'E line', `Via ${'E'.repeat(80)}`]) {
+      expect(withLabel(malformed)).toMatchObject({ kind: 'quarantine-or-limitation', reason: 'invalid-via-label' });
+    }
+    expect(withLabel('Via Cafe\u0301')).toMatchObject({ kind: 'admitted', supportedViaLabel: 'Via Caf\u00e9' });
   });
 
   test('admits express-running-local only at an explicitly added stop and suppresses local-running-express only at an omitted local', () => {

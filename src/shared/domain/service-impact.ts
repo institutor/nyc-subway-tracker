@@ -49,9 +49,15 @@ export interface ServiceAuditEvidence {
   readonly assessment: 'context' | 'resolved-hard-risk' | 'high-impact-unresolved' | 'quarantined';
 }
 
+export interface ServiceContextDetail {
+  readonly relation: 'unrelated' | 'informational';
+  readonly official: ResolvedOfficialAlertDetails;
+}
+
 export interface ServiceRiskCarryover {
   readonly kind: 'resolved-suppression' | 'arrival-claim-unavailable';
   readonly claimIdentity: string;
+  readonly evaluatedClaim: ServiceClaimScope;
   readonly adverseAt: Date;
   readonly riderCopy: string;
   readonly officialDetails: readonly ResolvedOfficialAlertDetails[];
@@ -63,8 +69,11 @@ export interface ServiceRiskCarryover {
 export interface ServiceChangeDecision {
   readonly kind: ServiceChangeDecisionKind;
   readonly disposition: ServiceChangeGateDisposition;
+  readonly claimIdentity: string;
+  readonly evaluatedClaim: ServiceClaimScope;
   readonly riderCopy: string | null;
   readonly officialDetails: readonly ResolvedOfficialAlertDetails[];
+  readonly contextDetails: readonly ServiceContextDetail[];
   readonly rawOfficialAudit: readonly RawOfficialAlertAudit[];
   readonly auditEvidence: readonly ServiceAuditEvidence[];
   readonly suppressedProducts: readonly ClaimSuppressedProduct[];
@@ -87,6 +96,11 @@ interface EvaluatedAlert {
   readonly assessment: ServiceAuditEvidence['assessment'];
 }
 
+interface CanonicalAlert {
+  readonly alert: ServiceAlertEvidence;
+  readonly identityConflict: boolean;
+}
+
 const DESTRUCTIVE = new Set<ServiceAlertEvidence['declaredConsequence']>([
   'local-running-express',
   'reroute',
@@ -98,48 +112,73 @@ const DESTRUCTIVE = new Set<ServiceAlertEvidence['declaredConsequence']>([
 
 export function evaluateServiceChanges(input: ServiceChangeEvaluationInput): ServiceChangeDecision {
   validateEvaluationInput(input);
-  const claimIdentity = serviceClaimIdentity(input.claim);
+  const evaluatedClaim = freezeClaim(input.claim);
+  const claimIdentity = serviceClaimIdentity(evaluatedClaim);
   const priorRisk = input.priorRisk && input.priorRisk.claimIdentity === claimIdentity ? input.priorRisk : null;
 
   if (input.snapshot.kind !== 'current') {
-    if (priorRisk) return carryForward(priorRisk, input.snapshot.kind, 0);
-    return freezeDecision('eligible-context', 'eligible', null, [], [], [], [], null, false, 0, input.snapshot.kind);
+    if (priorRisk) return carryForward(priorRisk, evaluatedClaim, input.snapshot.kind, 0);
+    return freezeDecision('eligible-context', 'eligible', evaluatedClaim, null, [], [], [], [], [], null, false, 0,
+      input.snapshot.kind);
   }
 
   const alerts = canonicalAlerts(input.snapshot.alerts);
-  const evaluated = alerts.map((alert) => evaluateAlert(alert, input.claim, input.snapshot.assessedAt));
-  const officialDetails = canonicalOfficial(evaluated.map((item) => item.scope.official));
+  const evaluated = alerts.map(({ alert, identityConflict }) =>
+    evaluateAlert(alert, evaluatedClaim, input.snapshot.assessedAt, identityConflict));
+  const related = evaluated.filter((item) => item.scope.kind !== 'unrelated');
+  const contextual = evaluated.filter((item) => item.scope.kind === 'unrelated');
+  const officialDetails = canonicalOfficial(related.map((item) => item.scope.official));
+  const contextDetails = canonicalContext(contextual.map((item) => Object.freeze({
+    relation: item.scope.temporalState === 'active' ? 'unrelated' as const : 'informational' as const,
+    official: item.scope.official,
+  })));
   const rawOfficialAudit = canonicalRawOfficial(input.snapshot.alerts.map(toRawOfficialAudit));
   const auditEvidence = canonicalAudit(evaluated.map(toAudit));
   const hard = evaluated.filter((item) => item.assessment === 'resolved-hard-risk');
   const unavailable = evaluated.filter((item) => item.assessment === 'high-impact-unresolved');
   const quarantined = evaluated.filter((item) => item.assessment === 'quarantined');
+  const adverseAt = input.snapshot.feedTimestamp ?? input.snapshot.assessedAt;
 
   if (hard.length > 0) {
     const riderCopy = hard.map((item) => item.scope.official.header).filter(Boolean).sort(compareText)[0]
       ?? 'Service change—this train is not serving this stop.';
-    return adverseDecision('resolved-suppression', 'resolved-ineligible', riderCopy,
-      officialDetails, rawOfficialAudit, auditEvidence, claimIdentity, input.snapshot.feedTimestamp ?? input.snapshot.assessedAt,
-      input.snapshot.kind);
-  }
-  if (unavailable.length > 0) {
-    return adverseDecision('arrival-claim-unavailable', 'high-impact-unresolved', SERVICE_CHANGE_UNAVAILABLE_COPY,
-      officialDetails, rawOfficialAudit, auditEvidence, claimIdentity, input.snapshot.feedTimestamp ?? input.snapshot.assessedAt,
-      input.snapshot.kind);
-  }
-  if (quarantined.length > 0) {
-    return freezeDecision('quarantine-or-limitation', 'quarantined', SERVICE_CHANGE_LIMITATION_COPY,
-      officialDetails, rawOfficialAudit, auditEvidence, [], null, false, 0, input.snapshot.kind);
+    return adverseDecision('resolved-suppression', 'resolved-ineligible', evaluatedClaim, riderCopy, officialDetails,
+      contextDetails, rawOfficialAudit, auditEvidence, adverseAt, input.snapshot.kind);
   }
 
-  if (priorRisk) {
-    const recoveryCount = countQualifyingRecovery(input.recoveryUpdates ?? [], priorRisk.adverseAt, input.snapshot.assessedAt);
-    if (recoveryCount < 2) return carryForward(priorRisk, input.snapshot.kind, recoveryCount);
-    return freezeDecision('eligible-context', 'eligible', null, officialDetails, rawOfficialAudit, auditEvidence, [], null, false, 2,
+  // A current ambiguity cannot clear a prior hard veto. It starts a new recovery
+  // boundary so updates captured before the contradiction cannot be donated later.
+  if (priorRisk?.kind === 'resolved-suppression' && (unavailable.length > 0 || quarantined.length > 0)) {
+    const reset = resetRiskBoundary(priorRisk, evaluatedClaim, adverseAt);
+    return carryForward(reset, evaluatedClaim, input.snapshot.kind, 0, contextDetails);
+  }
+
+  if (priorRisk?.kind === 'resolved-suppression') {
+    return recoverOrCarry(priorRisk, evaluatedClaim, input, officialDetails, contextDetails, rawOfficialAudit, auditEvidence);
+  }
+
+  if (unavailable.length > 0) {
+    return adverseDecision('arrival-claim-unavailable', 'high-impact-unresolved', evaluatedClaim,
+      SERVICE_CHANGE_UNAVAILABLE_COPY, officialDetails, contextDetails, rawOfficialAudit, auditEvidence, adverseAt,
       input.snapshot.kind);
   }
-  return freezeDecision('eligible-context', 'eligible', null, officialDetails, rawOfficialAudit, auditEvidence, [], null, false, 0,
-    input.snapshot.kind);
+
+  if (priorRisk?.kind === 'arrival-claim-unavailable' && quarantined.length > 0) {
+    const reset = resetRiskBoundary(priorRisk, evaluatedClaim, adverseAt);
+    return carryForward(reset, evaluatedClaim, input.snapshot.kind, 0, contextDetails);
+  }
+
+  if (priorRisk?.kind === 'arrival-claim-unavailable') {
+    return recoverOrCarry(priorRisk, evaluatedClaim, input, officialDetails, contextDetails, rawOfficialAudit, auditEvidence);
+  }
+
+  if (quarantined.length > 0) {
+    return freezeDecision('quarantine-or-limitation', 'quarantined', evaluatedClaim, SERVICE_CHANGE_LIMITATION_COPY,
+      officialDetails, contextDetails, rawOfficialAudit, auditEvidence, [], null, false, 0, input.snapshot.kind);
+  }
+
+  return freezeDecision('eligible-context', 'eligible', evaluatedClaim, null, officialDetails, contextDetails,
+    rawOfficialAudit, auditEvidence, [], null, false, 0, input.snapshot.kind);
 }
 
 export function serviceChangeClaimDisposition(decision: ServiceChangeDecision): ServiceChangeGateDisposition {
@@ -151,7 +190,11 @@ export function validateServiceChangeDecision(decision: ServiceChangeDecision): 
   if (!decision || typeof decision !== 'object'
     || !['eligible-context', 'resolved-suppression', 'arrival-claim-unavailable', 'quarantine-or-limitation'].includes(decision.kind)
     || !['eligible', 'resolved-ineligible', 'high-impact-unresolved', 'quarantined'].includes(decision.disposition)
-    || !Array.isArray(decision.officialDetails) || !Array.isArray(decision.rawOfficialAudit) || !Array.isArray(decision.auditEvidence)
+    || typeof decision.claimIdentity !== 'string' || !decision.claimIdentity
+    || !isExactClaim(decision.evaluatedClaim)
+    || decision.claimIdentity !== serviceClaimIdentity(decision.evaluatedClaim)
+    || !Array.isArray(decision.officialDetails) || !Array.isArray(decision.contextDetails)
+    || !Array.isArray(decision.rawOfficialAudit) || !Array.isArray(decision.auditEvidence)
     || !Array.isArray(decision.suppressedProducts) || ![0, 1, 2].includes(decision.recoveryCount)
     || !['current', 'stale', 'missing', 'failed', 'quarantined'].includes(decision.contextKind)) {
     throw new Error('Invalid service-change decision');
@@ -168,6 +211,10 @@ export function validateServiceChangeDecision(decision: ServiceChangeDecision): 
     || decision.suppressedProducts.some((item, index) => item !== CLAIM_SUPPRESSED_PRODUCTS[index])) {
     throw new Error('Invalid service-change suppressed products');
   }
+  if (decision.carryover && (decision.carryover.claimIdentity !== decision.claimIdentity
+    || serviceClaimIdentity(decision.carryover.evaluatedClaim) !== decision.claimIdentity)) {
+    throw new Error('Invalid service-change carryover claim');
+  }
 }
 
 /** Shared by service and track hard-risk recovery. */
@@ -176,20 +223,25 @@ export function countQualifyingRecovery(updates: readonly ServiceRecoveryUpdate[
   const afterMs = after === undefined ? Number.NEGATIVE_INFINITY : validDate(after, 'adverse service-change instant');
   const throughMs = through === undefined ? Number.POSITIVE_INFINITY : validDate(through, 'recovery assessment instant');
   if (throughMs < afterMs) throw new Error('Recovery assessment precedes adverse service-change evidence');
-  const seenIds = new Set<string>();
-  const ordered: ServiceRecoveryUpdate[] = [];
+
+  const groups = new Map<string, Map<string, ServiceRecoveryUpdate>>();
   for (const update of updates) {
     validateRecoveryUpdate(update);
     const id = normalizeCanonicalIdentity(update.evidenceId);
-    if (seenIds.has(id)) continue;
-    seenIds.add(id);
-    if (update.sourceTimestamp.getTime() > afterMs && update.sourceTimestamp.getTime() <= throughMs) ordered.push(update);
+    const variants = groups.get(id) ?? new Map<string, ServiceRecoveryUpdate>();
+    variants.set(recoverySignature(update), update);
+    groups.set(id, variants);
   }
-  ordered.sort((left, right) => left.sourceTimestamp.getTime() - right.sourceTimestamp.getTime()
-    || compareText(left.evidenceId, right.evidenceId));
+  if ([...groups.values()].some((variants) => variants.size > 1)) return 0;
+
+  const ordered = [...groups.entries()]
+    .map(([id, variants]) => ({ id, update: variants.values().next().value as ServiceRecoveryUpdate }))
+    .filter(({ update }) => update.sourceTimestamp.getTime() > afterMs && update.sourceTimestamp.getTime() <= throughMs)
+    .sort((left, right) => left.update.sourceTimestamp.getTime() - right.update.sourceTimestamp.getTime()
+      || compareText(left.id, right.id));
   let count: 0 | 1 | 2 = 0;
   let priorTimestamp = afterMs;
-  for (const update of ordered) {
+  for (const { update } of ordered) {
     const timestamp = update.sourceTimestamp.getTime();
     const strictlyNew = timestamp > priorTimestamp;
     const qualifies = strictlyNew && update.currentFeed && update.coherentIdentity && update.exactDirectionalStop
@@ -200,16 +252,32 @@ export function countQualifyingRecovery(updates: readonly ServiceRecoveryUpdate[
   return count;
 }
 
-function evaluateAlert(alert: ServiceAlertEvidence, claim: ServiceClaimScope, comparisonAt: Date): EvaluatedAlert {
+function evaluateAlert(
+  alert: ServiceAlertEvidence,
+  claim: ServiceClaimScope,
+  comparisonAt: Date,
+  identityConflict: boolean,
+): EvaluatedAlert {
   const scope = resolveAlertScope(alert, claim, comparisonAt);
   if (scope.temporalState === 'preactive' || scope.temporalState === 'expired' || scope.kind === 'unrelated') {
     return { alert, scope, assessment: 'context' };
   }
+  if (identityConflict) return { alert, scope, assessment: 'quarantined' };
   if (scope.temporalState === 'indeterminate') {
     return { alert, scope, assessment: DESTRUCTIVE.has(alert.declaredConsequence) ? 'quarantined' : 'context' };
   }
   if (!DESTRUCTIVE.has(alert.declaredConsequence)) return { alert, scope, assessment: 'context' };
   if (!destructiveFieldsAgree(alert, scope.official)) return { alert, scope, assessment: 'quarantined' };
+
+  if (alert.declaredConsequence === 'short-turn') {
+    if (scope.kind === 'unresolved') {
+      return { alert, scope, assessment: alert.independentHighImpactBasis?.kind === 'verified-terminal-change'
+        ? 'high-impact-unresolved' : 'quarantined' };
+    }
+    return { alert, scope, assessment: hasExactShortTurnScope(alert, scope, claim)
+      ? 'resolved-hard-risk' : 'quarantined' };
+  }
+
   if (scope.kind === 'unresolved') return { alert, scope, assessment: 'high-impact-unresolved' };
   if (!hasNarrowClaimScope(alert, scope)) {
     if (alert.declaredConsequence === 'full-suspension') return { alert, scope, assessment: 'resolved-hard-risk' };
@@ -220,22 +288,31 @@ function evaluateAlert(alert: ServiceAlertEvidence, claim: ServiceClaimScope, co
 
 function destructiveFieldsAgree(alert: ServiceAlertEvidence, official: ResolvedOfficialAlertDetails): boolean {
   const text = `${official.header} ${official.description}`.toLocaleLowerCase('en-US');
+  if (contradictsDestructiveEffect(text)) return false;
   switch (alert.declaredConsequence) {
     case 'local-running-express':
       return ['MODIFIED_SERVICE', 'NO_SERVICE'].includes(alert.structuredEffect)
-        && /(run(?:ning)? express|skip|not stopp)/.test(text);
+        && /\b(?:trains?\s+)?(?:run|runs|running)\s+express\b|\bnot\s+stopping\b|\bskip(?:s|ping)?\b/.test(text);
     case 'reroute':
-      return alert.structuredEffect === 'MODIFIED_SERVICE' && /(rerout|running on|run via| via )/.test(` ${text} `);
+      return alert.structuredEffect === 'MODIFIED_SERVICE'
+        && /\brerout(?:e|ed|ing)\b|\brunn?ing\s+on\b|\brun(?:s|ning)?\s+via\b|\bvia\s+[a-z0-9]/.test(text);
     case 'short-turn':
-      return alert.structuredEffect === 'MODIFIED_SERVICE' && /(terminat|last stop|end(?:s|ing)? early)/.test(text);
+      return alert.structuredEffect === 'MODIFIED_SERVICE'
+        && /\bterminat(?:e|es|ed|ing)\b|\blast\s+stop\b|\bend(?:s|ed|ing)?\s+early\b/.test(text);
     case 'partial-suspension':
     case 'full-suspension':
-      return alert.structuredEffect === 'NO_SERVICE' && /(suspend|no [a-z0-9 ]*trains?|not running)/.test(text);
+      return alert.structuredEffect === 'NO_SERVICE'
+        && /\bsuspend(?:ed|ing|s)?\b|\bno\s+[a-z0-9 -]*trains?\b|\bnot\s+running\b/.test(text);
     case 'station-closure':
-      return alert.structuredEffect === 'NO_SERVICE' && /(clos|not stopp|skip)/.test(text);
+      return alert.structuredEffect === 'NO_SERVICE'
+        && /\bstation\s+(?:is\s+)?closed\b|\btrains?\s+(?:are\s+)?not\s+stopping\b|\btrains?\s+(?:skip|skips|are\s+skipping)\b|\bskip(?:ping)?\s+(?:this\s+|the\s+)?(?:station|stop)\b/.test(text);
     default:
       return false;
   }
+}
+
+function contradictsDestructiveEffect(text: string): boolean {
+  return /\bnot\s+closed\b|\bremain(?:s|ed|ing)?\s+open\b|\bcontinue(?:s|d|ing)?\s+(?:to\s+)?(?:stop|stopping|serve|serving|make)\b|\ball\s+[a-z0-9 -]*stops?\s+continue\b|\ball\s+(?:scheduled\s+)?stops?\b/.test(text);
 }
 
 function hasNarrowClaimScope(alert: ServiceAlertEvidence, scope: AlertScopeDecision): boolean {
@@ -249,7 +326,21 @@ function hasNarrowClaimScope(alert: ServiceAlertEvidence, scope: AlertScopeDecis
     || selector.claimId != null));
 }
 
-function canonicalAlerts(alerts: readonly ServiceAlertEvidence[]): ServiceAlertEvidence[] {
+function hasExactShortTurnScope(
+  alert: ServiceAlertEvidence,
+  scope: AlertScopeDecision,
+  claim: ServiceClaimScope,
+): boolean {
+  const matching = new Set(scope.matchingSelectorIds.map(normalizeCanonicalIdentity));
+  const stopId = normalizeCanonicalIdentity(claim.exactDirectionalStopId);
+  return alert.selectors.some((selector) => matching.has(normalizeCanonicalIdentity(selector.selectorId))
+    && (selector.exactDirectionalStopId != null
+      && normalizeCanonicalIdentity(selector.exactDirectionalStopId) === stopId
+      || selector.exactDirectionalSegmentStopIds != null
+      && selector.exactDirectionalSegmentStopIds.some((id) => normalizeCanonicalIdentity(id) === stopId)));
+}
+
+function canonicalAlerts(alerts: readonly ServiceAlertEvidence[]): CanonicalAlert[] {
   const groups = new Map<string, Map<string, ServiceAlertEvidence>>();
   for (const alert of alerts) {
     const id = normalizeCanonicalIdentity(alert.alertId);
@@ -257,41 +348,47 @@ function canonicalAlerts(alerts: readonly ServiceAlertEvidence[]): ServiceAlertE
     variants.set(alertSignature(alert), alert);
     groups.set(id, variants);
   }
-  const result: ServiceAlertEvidence[] = [];
-  for (const variants of groups.values()) {
+  const result: CanonicalAlert[] = [];
+  for (const [id, variants] of groups) {
     const ordered = [...variants.entries()].sort((left, right) => compareText(left[0], right[0]));
-    // Preserve contradictory same-ID records as separate audit evidence; evaluateServiceChanges
-    // will deterministically quarantine the identity by replacing their consequence agreement.
-    if (ordered.length === 1) {
-      result.push(ordered[0][1]);
-    } else {
-      for (const [, alert] of ordered) result.push({
-        ...alert,
-        structuredEffect: 'OTHER_EFFECT',
-        declaredConsequence: DESTRUCTIVE.has(alert.declaredConsequence) ? alert.declaredConsequence : 'generic-affected',
-      });
-    }
+    for (const [, alert] of ordered) result.push(Object.freeze({
+      alert: Object.freeze({ ...alert, alertId: id }),
+      identityConflict: ordered.length > 1,
+    }));
   }
-  result.sort((left, right) => compareText(left.alertId, right.alertId) || compareText(alertSignature(left), alertSignature(right)));
+  result.sort((left, right) => compareText(left.alert.alertId, right.alert.alertId)
+    || compareText(alertSignature(left.alert), alertSignature(right.alert)));
   return result;
 }
 
 function alertSignature(alert: ServiceAlertEvidence): string {
   const periods = alert.activePeriods.map((period) => `${dateSignature(period.startsAt)}/${dateSignature(period.endsAt)}`).sort();
   const selectors = alert.selectors.map((selector) => JSON.stringify({
-    selectorId: selector.selectorId,
-    routeId: selector.routeId,
-    exactDirectionalStopId: selector.exactDirectionalStopId,
-    constituentStopIds: selector.constituentStopIds ? [...selector.constituentStopIds].sort(compareText) : selector.constituentStopIds,
+    selectorId: normalizeCanonicalIdentity(selector.selectorId),
+    routeId: selector.routeId == null ? selector.routeId : normalizeCanonicalIdentity(selector.routeId),
+    exactDirectionalStopId: selector.exactDirectionalStopId == null ? selector.exactDirectionalStopId
+      : normalizeCanonicalIdentity(selector.exactDirectionalStopId),
+    constituentStopIds: selector.constituentStopIds
+      ? selector.constituentStopIds.map(normalizeCanonicalIdentity).sort(compareText) : selector.constituentStopIds,
     exactDirectionalSegmentStopIds: selector.exactDirectionalSegmentStopIds
-      ? [...selector.exactDirectionalSegmentStopIds].sort(compareText) : selector.exactDirectionalSegmentStopIds,
+      ? selector.exactDirectionalSegmentStopIds.map(normalizeCanonicalIdentity).sort(compareText)
+      : selector.exactDirectionalSegmentStopIds,
     direction: selector.direction,
-    tripId: selector.tripId,
-    trainId: selector.trainId,
-    claimId: selector.claimId,
+    tripId: selector.tripId == null ? selector.tripId : normalizeCanonicalIdentity(selector.tripId),
+    trainId: selector.trainId == null ? selector.trainId : normalizeCanonicalIdentity(selector.trainId),
+    claimId: selector.claimId == null ? selector.claimId : normalizeCanonicalIdentity(selector.claimId),
   })).sort(compareText);
-  return JSON.stringify({ periods, selectors, effect: alert.structuredEffect, consequence: alert.declaredConsequence,
-    header: alert.official.headerRaw, description: alert.official.descriptionRaw });
+  return JSON.stringify({
+    periods,
+    selectors,
+    effect: alert.structuredEffect,
+    consequence: alert.declaredConsequence,
+    header: alert.official.headerRaw.normalize('NFC'),
+    description: alert.official.descriptionRaw.normalize('NFC'),
+    independentHighImpactBasis: alert.independentHighImpactBasis
+      ? { kind: alert.independentHighImpactBasis.kind,
+        evidenceId: normalizeCanonicalIdentity(alert.independentHighImpactBasis.evidenceId) } : null,
+  });
 }
 
 function dateSignature(value: Date | null | undefined): string {
@@ -301,16 +398,33 @@ function dateSignature(value: Date | null | undefined): string {
 
 function canonicalOfficial(details: readonly ResolvedOfficialAlertDetails[]): readonly ResolvedOfficialAlertDetails[] {
   const byKey = new Map<string, ResolvedOfficialAlertDetails>();
-  for (const item of details) byKey.set(`${normalizeCanonicalIdentity(item.alertId)}\0${item.header}\0${item.description}`, item);
+  for (const item of details) {
+    const normalized = Object.freeze({ ...item, alertId: normalizeCanonicalIdentity(item.alertId) });
+    byKey.set(`${normalized.alertId}\0${normalized.header}\0${normalized.description}`, normalized);
+  }
   return Object.freeze([...byKey.values()].sort((left, right) => compareText(left.alertId, right.alertId)
     || compareText(left.header, right.header) || compareText(left.description, right.description)));
+}
+
+function canonicalContext(details: readonly ServiceContextDetail[]): readonly ServiceContextDetail[] {
+  const byKey = new Map<string, ServiceContextDetail>();
+  for (const item of details) {
+    const normalized = Object.freeze({ relation: item.relation, official: Object.freeze({
+      ...item.official, alertId: normalizeCanonicalIdentity(item.official.alertId),
+    }) });
+    byKey.set(`${normalized.relation}\0${normalized.official.alertId}\0${normalized.official.header}\0${normalized.official.description}`,
+      normalized);
+  }
+  return Object.freeze([...byKey.values()].sort((left, right) => compareText(left.official.alertId, right.official.alertId)
+    || compareText(left.relation, right.relation) || compareText(left.official.header, right.official.header)));
 }
 
 function canonicalRawOfficial(details: readonly RawOfficialAlertAudit[]): readonly RawOfficialAlertAudit[] {
   const byKey = new Map<string, RawOfficialAlertAudit>();
   for (const item of details) {
-    const key = `${normalizeCanonicalIdentity(item.alertId)}\0${item.rawHeader}\0${item.rawDescription}\0${stableAuditFields(item.rawAuditFields)}`;
-    byKey.set(key, item);
+    const normalized = Object.freeze({ ...item, alertId: normalizeCanonicalIdentity(item.alertId) });
+    const key = `${normalized.alertId}\0${normalized.rawHeader}\0${normalized.rawDescription}\0${stableAuditFields(normalized.rawAuditFields)}`;
+    byKey.set(key, normalized);
   }
   return Object.freeze([...byKey.values()].sort((left, right) => compareText(left.alertId, right.alertId)
     || compareText(left.rawHeader, right.rawHeader) || compareText(left.rawDescription, right.rawDescription)
@@ -319,28 +433,39 @@ function canonicalRawOfficial(details: readonly RawOfficialAlertAudit[]): readon
 
 function toRawOfficialAudit(alert: ServiceAlertEvidence): RawOfficialAlertAudit {
   return Object.freeze({
-    alertId: alert.alertId,
+    alertId: normalizeCanonicalIdentity(alert.alertId),
     rawHeader: alert.official.headerRaw,
     rawDescription: alert.official.descriptionRaw,
-    ...(alert.rawAuditFields ? { rawAuditFields: Object.freeze({ ...alert.rawAuditFields }) } : {}),
+    ...(alert.rawAuditFields ? { rawAuditFields: alert.rawAuditFields } : {}),
   });
 }
 
 function stableAuditFields(fields: Readonly<Record<string, unknown>> | undefined): string {
   if (!fields) return '';
-  return JSON.stringify(Object.fromEntries(Object.entries(fields).sort(([left], [right]) => compareText(left, right))));
+  return stableValue(fields);
+}
+
+function stableValue(value: unknown): string {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(stableValue).join(',')}]`;
+  return `{${Object.entries(value as Record<string, unknown>).sort(([left], [right]) => compareText(left, right))
+    .map(([key, item]) => `${JSON.stringify(key)}:${stableValue(item)}`).join(',')}}`;
 }
 
 function canonicalAudit(items: readonly ServiceAuditEvidence[]): readonly ServiceAuditEvidence[] {
   const byKey = new Map<string, ServiceAuditEvidence>();
-  for (const item of items) byKey.set(`${normalizeCanonicalIdentity(item.alertId)}\0${item.consequence}\0${item.structuredEffect}\0${item.scope}\0${item.assessment}`, Object.freeze({ ...item }));
+  for (const item of items) {
+    const normalized = Object.freeze({ ...item, alertId: normalizeCanonicalIdentity(item.alertId) });
+    byKey.set(`${normalized.alertId}\0${normalized.consequence}\0${normalized.structuredEffect}\0${normalized.temporalState}\0${normalized.scope}\0${normalized.assessment}`,
+      normalized);
+  }
   return Object.freeze([...byKey.values()].sort((left, right) => compareText(left.alertId, right.alertId)
     || compareText(left.consequence, right.consequence) || compareText(left.assessment, right.assessment)));
 }
 
 function toAudit(item: EvaluatedAlert): ServiceAuditEvidence {
   return Object.freeze({
-    alertId: item.alert.alertId,
+    alertId: normalizeCanonicalIdentity(item.alert.alertId),
     consequence: item.alert.declaredConsequence,
     structuredEffect: item.alert.structuredEffect,
     temporalState: item.scope.temporalState,
@@ -352,43 +477,88 @@ function toAudit(item: EvaluatedAlert): ServiceAuditEvidence {
 function adverseDecision(
   kind: 'resolved-suppression' | 'arrival-claim-unavailable',
   disposition: 'resolved-ineligible' | 'high-impact-unresolved',
+  evaluatedClaim: ServiceClaimScope,
   riderCopy: string,
   officialDetails: readonly ResolvedOfficialAlertDetails[],
+  contextDetails: readonly ServiceContextDetail[],
   rawOfficialAudit: readonly RawOfficialAlertAudit[],
   auditEvidence: readonly ServiceAuditEvidence[],
-  claimIdentity: string,
   adverseAt: Date,
   contextKind: AlertSnapshotDecision['kind'],
 ): ServiceChangeDecision {
-  const carryover: ServiceRiskCarryover = Object.freeze({
-    kind,
-    claimIdentity,
-    adverseAt: new Date(adverseAt),
-    riderCopy,
-    officialDetails,
-    rawOfficialAudit,
-    auditEvidence,
-    suppressedProducts: CLAIM_SUPPRESSED_PRODUCTS,
-  });
-  return freezeDecision(kind, disposition, riderCopy, officialDetails, rawOfficialAudit, auditEvidence, CLAIM_SUPPRESSED_PRODUCTS,
-    carryover, false, 0, contextKind);
+  const carryover = freezeRisk(kind, evaluatedClaim, adverseAt, riderCopy, officialDetails, rawOfficialAudit, auditEvidence);
+  return freezeDecision(kind, disposition, evaluatedClaim, riderCopy, officialDetails, contextDetails, rawOfficialAudit,
+    auditEvidence, CLAIM_SUPPRESSED_PRODUCTS, carryover, false, 0, contextKind);
+}
+
+function recoverOrCarry(
+  risk: ServiceRiskCarryover,
+  evaluatedClaim: ServiceClaimScope,
+  input: ServiceChangeEvaluationInput,
+  officialDetails: readonly ResolvedOfficialAlertDetails[],
+  contextDetails: readonly ServiceContextDetail[],
+  rawOfficialAudit: readonly RawOfficialAlertAudit[],
+  auditEvidence: readonly ServiceAuditEvidence[],
+): ServiceChangeDecision {
+  const recoveryCount = countQualifyingRecovery(input.recoveryUpdates ?? [], risk.adverseAt, input.snapshot.assessedAt);
+  if (recoveryCount < 2) return carryForward(risk, evaluatedClaim, input.snapshot.kind, recoveryCount, contextDetails);
+  return freezeDecision('eligible-context', 'eligible', evaluatedClaim, null, officialDetails, contextDetails,
+    rawOfficialAudit, auditEvidence, [], null, false, 2, input.snapshot.kind);
 }
 
 function carryForward(
   risk: ServiceRiskCarryover,
+  evaluatedClaim: ServiceClaimScope,
   contextKind: AlertSnapshotDecision['kind'],
   recoveryCount: 0 | 1 | 2,
+  contextDetails: readonly ServiceContextDetail[] = [],
 ): ServiceChangeDecision {
   const disposition = risk.kind === 'resolved-suppression' ? 'resolved-ineligible' : 'high-impact-unresolved';
-  return freezeDecision(risk.kind, disposition, risk.riderCopy, risk.officialDetails, risk.rawOfficialAudit, risk.auditEvidence,
-    risk.suppressedProducts, risk, true, recoveryCount, contextKind);
+  return freezeDecision(risk.kind, disposition, evaluatedClaim, risk.riderCopy, risk.officialDetails, contextDetails,
+    risk.rawOfficialAudit, risk.auditEvidence, risk.suppressedProducts, risk, true, recoveryCount, contextKind);
+}
+
+function resetRiskBoundary(
+  risk: ServiceRiskCarryover,
+  evaluatedClaim: ServiceClaimScope,
+  adverseAt: Date,
+): ServiceRiskCarryover {
+  return freezeRisk(risk.kind, evaluatedClaim, adverseAt, risk.riderCopy, risk.officialDetails, risk.rawOfficialAudit,
+    risk.auditEvidence);
+}
+
+function freezeRisk(
+  kind: ServiceRiskCarryover['kind'],
+  evaluatedClaim: ServiceClaimScope,
+  adverseAt: Date,
+  riderCopy: string,
+  officialDetails: readonly ResolvedOfficialAlertDetails[],
+  rawOfficialAudit: readonly RawOfficialAlertAudit[],
+  auditEvidence: readonly ServiceAuditEvidence[],
+): ServiceRiskCarryover {
+  const claim = freezeClaim(evaluatedClaim);
+  const adverseAtMs = validDate(adverseAt, 'adverse service-change instant');
+  const risk = {
+    kind,
+    claimIdentity: serviceClaimIdentity(claim),
+    evaluatedClaim: claim,
+    get adverseAt(): Date { return new Date(adverseAtMs); },
+    riderCopy,
+    officialDetails: Object.freeze([...officialDetails]),
+    rawOfficialAudit: Object.freeze([...rawOfficialAudit]),
+    auditEvidence: Object.freeze([...auditEvidence]),
+    suppressedProducts: CLAIM_SUPPRESSED_PRODUCTS,
+  } satisfies ServiceRiskCarryover;
+  return Object.freeze(risk);
 }
 
 function freezeDecision(
   kind: ServiceChangeDecisionKind,
   disposition: ServiceChangeGateDisposition,
+  evaluatedClaim: ServiceClaimScope,
   riderCopy: string | null,
   officialDetails: readonly ResolvedOfficialAlertDetails[],
+  contextDetails: readonly ServiceContextDetail[],
   rawOfficialAudit: readonly RawOfficialAlertAudit[],
   auditEvidence: readonly ServiceAuditEvidence[],
   suppressedProducts: readonly ClaimSuppressedProduct[],
@@ -397,10 +567,35 @@ function freezeDecision(
   recoveryCount: 0 | 1 | 2,
   contextKind: AlertSnapshotDecision['kind'],
 ): ServiceChangeDecision {
-  return Object.freeze({ kind, disposition, riderCopy, officialDetails: Object.freeze([...officialDetails]),
+  const claim = freezeClaim(evaluatedClaim);
+  return Object.freeze({
+    kind,
+    disposition,
+    claimIdentity: serviceClaimIdentity(claim),
+    evaluatedClaim: claim,
+    riderCopy,
+    officialDetails: Object.freeze([...officialDetails]),
+    contextDetails: Object.freeze([...contextDetails]),
     rawOfficialAudit: Object.freeze([...rawOfficialAudit]),
-    auditEvidence: Object.freeze([...auditEvidence]), suppressedProducts: Object.freeze([...suppressedProducts]),
-    carryover, carriedForward, recoveryCount, contextKind });
+    auditEvidence: Object.freeze([...auditEvidence]),
+    suppressedProducts: Object.freeze([...suppressedProducts]),
+    carryover,
+    carriedForward,
+    recoveryCount,
+    contextKind,
+  });
+}
+
+function freezeClaim(claim: ServiceClaimScope): ServiceClaimScope {
+  return Object.freeze({
+    claimId: normalizeCanonicalIdentity(claim.claimId),
+    routeId: normalizeCanonicalIdentity(claim.routeId),
+    exactDirectionalStopId: normalizeCanonicalIdentity(claim.exactDirectionalStopId),
+    constituentStopId: normalizeCanonicalIdentity(claim.constituentStopId),
+    direction: claim.direction,
+    ...(claim.tripId !== undefined ? { tripId: normalizeCanonicalIdentity(claim.tripId) } : {}),
+    ...(claim.trainId !== undefined ? { trainId: normalizeCanonicalIdentity(claim.trainId) } : {}),
+  });
 }
 
 function serviceClaimIdentity(claim: ServiceClaimScope): string {
@@ -413,10 +608,16 @@ function validateEvaluationInput(input: ServiceChangeEvaluationInput): void {
   if (!['current', 'stale', 'missing', 'failed', 'quarantined'].includes(input.snapshot.kind)
     || !Array.isArray(input.snapshot.alerts) || !(input.snapshot.assessedAt instanceof Date)
     || !Number.isFinite(input.snapshot.assessedAt.getTime())) throw new Error('Invalid alert snapshot decision');
-  if (!input.claim.claimId || !input.claim.routeId || !input.claim.exactDirectionalStopId || !input.claim.constituentStopId) {
-    throw new Error('Exact service claim is required');
-  }
+  if (!isExactClaim(input.claim)) throw new Error('Exact service claim is required');
   if (input.recoveryUpdates !== undefined && !Array.isArray(input.recoveryUpdates)) throw new Error('Invalid service recovery updates');
+}
+
+function isExactClaim(claim: ServiceClaimScope): boolean {
+  return Boolean(claim && typeof claim === 'object' && claim.claimId?.trim() && claim.routeId?.trim()
+    && claim.exactDirectionalStopId?.trim() && claim.constituentStopId?.trim()
+    && ['northbound', 'southbound', 'eastbound', 'westbound', 'inbound', 'outbound'].includes(claim.direction)
+    && (claim.tripId === undefined || Boolean(claim.tripId.trim()))
+    && (claim.trainId === undefined || Boolean(claim.trainId.trim())));
 }
 
 function validateRecoveryUpdate(update: ServiceRecoveryUpdate): void {
@@ -424,6 +625,17 @@ function validateRecoveryUpdate(update: ServiceRecoveryUpdate): void {
     || !(update.sourceTimestamp instanceof Date) || !Number.isFinite(update.sourceTimestamp.getTime())
     || [update.currentFeed, update.coherentIdentity, update.exactDirectionalStop, update.coherentPath, update.noCurrentVeto]
       .some((value) => typeof value !== 'boolean')) throw new Error('Invalid service recovery evidence');
+}
+
+function recoverySignature(update: ServiceRecoveryUpdate): string {
+  return JSON.stringify({
+    sourceTimestamp: update.sourceTimestamp.toISOString(),
+    currentFeed: update.currentFeed,
+    coherentIdentity: update.coherentIdentity,
+    exactDirectionalStop: update.exactDirectionalStop,
+    coherentPath: update.coherentPath,
+    noCurrentVeto: update.noCurrentVeto,
+  });
 }
 
 function validDate(value: Date, label: string): number {

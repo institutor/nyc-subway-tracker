@@ -43,6 +43,8 @@ export interface ArrivalAdmissionCandidate {
   readonly remainingStopCalls: readonly ArrivalStopCallEvidence[];
   /** Structured Task 8 gate. When present it is evaluated before every feed-confidence gate. */
   readonly serviceChangeGate?: ServiceChangeDecision;
+  /** Immutable claim identity used to prove the structured service gate belongs to this candidate. */
+  readonly serviceClaimId?: string;
   readonly serviceDisposition: TypedGateDisposition;
   readonly trackDisposition: TypedGateDisposition;
   readonly freshness: 'current' | 'degraded' | 'unavailable' | 'quarantined';
@@ -104,13 +106,21 @@ export function admitArrivalCandidate(
     || normalizeCanonicalIdentity(candidate.destination) !== normalizeCanonicalIdentity(scope.destination)) {
     return rejected('destination-direction', 'resolved-board-context-mismatch');
   }
-  const structuredServiceDisposition = candidate.serviceChangeGate?.disposition ?? 'eligible';
+  const serviceGateBinding = candidate.serviceChangeGate
+    ? bindServiceChangeGate(candidate.serviceChangeGate, candidate, scope)
+    : 'absent';
+  const structuredServiceDisposition = serviceGateBinding === 'mismatch'
+    ? 'quarantined'
+    : candidate.serviceChangeGate?.disposition ?? 'eligible';
   const serviceDisposition = worseDisposition(structuredServiceDisposition, candidate.serviceDisposition);
   if (dispositionRank(candidate.trackDisposition) > dispositionRank(serviceDisposition)) {
     return rejected('track', candidate.trackDisposition);
   }
   if (serviceDisposition !== 'eligible') {
-    if (candidate.serviceChangeGate && structuredServiceDisposition === serviceDisposition) {
+    if (serviceGateBinding === 'mismatch' && serviceDisposition === 'quarantined') {
+      return rejected('service', 'claim-scope-mismatch');
+    }
+    if (candidate.serviceChangeGate && serviceGateBinding === 'bound' && structuredServiceDisposition === serviceDisposition) {
       return rejectedServiceChange(candidate.serviceChangeGate);
     }
     return rejected('service', serviceDisposition);
@@ -200,7 +210,9 @@ function validateCandidate(candidate: ArrivalAdmissionCandidate): void {
     || !['eligible', 'resolved-ineligible', 'high-impact-unresolved', 'quarantined'].includes(candidate.trackDisposition)) {
     throw new Error('Typed service and track gate dispositions are required');
   }
-  if (candidate.serviceChangeGate !== undefined) validateServiceChangeDecision(candidate.serviceChangeGate);
+  if (candidate.serviceClaimId !== undefined && !candidate.serviceClaimId.trim()) {
+    throw new Error('Invalid service claim identity');
+  }
   if (!['current', 'degraded', 'unavailable', 'quarantined'].includes(candidate.freshness)
     || !['coherent', 'ambiguous', 'duplicate', 'quarantined'].includes(candidate.identityDisposition)
     || !['live-continuity', 'precision-withheld', 'hard-suppressed', 'live-readmission-eligible'].includes(candidate.recoveryDisposition)
@@ -226,6 +238,39 @@ function validateCandidate(candidate: ArrivalAdmissionCandidate): void {
   } else if (!Array.isArray(candidate.confidence.updates)) {
     throw new Error('Expected confidence updates are required');
   }
+}
+
+function bindServiceChangeGate(
+  gate: ServiceChangeDecision,
+  candidate: ArrivalAdmissionCandidate,
+  scope: ArrivalBoardScope,
+): 'bound' | 'mismatch' {
+  try {
+    validateServiceChangeDecision(gate);
+  } catch (error) {
+    // Invalid discriminants are malformed program input and retain the existing
+    // throwing contract. Claim metadata is untrusted data and fails closed at
+    // the service gate without allowing its asserted disposition to take effect.
+    if (!gate || typeof gate !== 'object'
+      || !['eligible-context', 'resolved-suppression', 'arrival-claim-unavailable', 'quarantine-or-limitation'].includes(gate.kind)
+      || !['eligible', 'resolved-ineligible', 'high-impact-unresolved', 'quarantined'].includes(gate.disposition)) {
+      throw error;
+    }
+    return 'mismatch';
+  }
+
+  const claim = gate.evaluatedClaim;
+  const matches = candidate.serviceClaimId !== undefined
+    && sameIdentity(claim.claimId, candidate.serviceClaimId)
+    && sameIdentity(claim.routeId, candidate.route.id)
+    && sameIdentity(claim.exactDirectionalStopId, scope.exactStopId)
+    && claim.direction === candidate.direction
+    && claim.direction === scope.direction
+    && claim.tripId !== undefined
+    && sameIdentity(claim.tripId, candidate.publishedTripId)
+    && claim.trainId !== undefined
+    && sameIdentity(claim.trainId, candidate.stableTrainIdentity);
+  return matches ? 'bound' : 'mismatch';
 }
 
 function validateSupportedRange(range: SupportedArrivalRange): void {

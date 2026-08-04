@@ -1,21 +1,29 @@
 import { normalizeCanonicalIdentity } from './canonical';
 import type { RouteIdentity } from './types';
-import type { AlertScopeKind, ResolvedServiceDirection } from './alert-scope';
+import { sanitizeOfficialText, type AlertScopeKind, type ResolvedServiceDirection } from './alert-scope';
 import {
   CLAIM_SUPPRESSED_PRODUCTS,
   countQualifyingRecovery,
   type ClaimSuppressedProduct,
   type ServiceRecoveryUpdate,
-  type ServiceRiskCarryover,
 } from './service-impact';
 
 export type StoppingPatternChangeKind = 'reroute' | 'express-running-local' | 'local-running-express';
+
+export interface SupplementedPatternProvenance {
+  readonly source: 'supplemented-gtfs' | 'regular-gtfs';
+  readonly acceptance: 'accepted' | 'quarantined' | 'rejected';
+  readonly currency: 'current' | 'stale';
+  readonly editionId: string;
+  readonly observedAt: Date;
+}
 
 export interface EffectiveSupplementedPattern {
   readonly sourceId: string;
   readonly routeId: string;
   readonly direction: ResolvedServiceDirection;
   readonly orderedDirectionalStopIds: readonly string[];
+  readonly provenance: SupplementedPatternProvenance;
 }
 
 export interface ReroutePathEvidence {
@@ -67,6 +75,7 @@ export type RerouteClaimDecision =
       readonly reason:
         | 'direction-or-route-conflict'
         | 'invalid-ordered-stop-evidence'
+        | 'unusable-supplemented-pattern'
         | 'planned-pattern-required'
         | 'alert-scope-unrelated'
         | 'alert-scope-unresolved'
@@ -74,7 +83,9 @@ export type RerouteClaimDecision =
         | 'target-not-in-coherent-live-remaining-stops'
         | 'independent-path-proof-missing'
         | 'conflicting-path-evidence'
-        | 'target-not-explicitly-added';
+        | 'target-not-explicitly-added'
+        | 'divergent-ordered-path-evidence'
+        | 'invalid-via-label';
     };
 
 export function resolveRerouteClaim(input: RerouteClaimInput): RerouteClaimDecision {
@@ -83,13 +94,10 @@ export function resolveRerouteClaim(input: RerouteClaimInput): RerouteClaimDecis
   const limited = (reason: Extract<RerouteClaimDecision, { kind: 'quarantine-or-limitation' }>['reason']): RerouteClaimDecision =>
     Object.freeze({ kind: 'quarantine-or-limitation', route, targetExactDirectionalStopId: input.targetExactDirectionalStopId, reason });
 
-  if (!coherentOrderedStops(input.originalDirectionalStopIds)
-    || (input.effectiveSupplementedPattern && !coherentOrderedStops(input.effectiveSupplementedPattern.orderedDirectionalStopIds))) {
-    return limited('invalid-ordered-stop-evidence');
-  }
-
+  if (!coherentOrderedStops(input.originalDirectionalStopIds, true)) return limited('invalid-ordered-stop-evidence');
   if (input.planned && !input.effectiveSupplementedPattern) return limited('planned-pattern-required');
   const effective = input.effectiveSupplementedPattern;
+  if (effective && !usableSupplementedPattern(effective)) return limited('unusable-supplemented-pattern');
   if (effective && (!sameIdentity(effective.routeId, input.originalRoute.id) || effective.direction !== input.direction)) {
     return limited('direction-or-route-conflict');
   }
@@ -128,14 +136,34 @@ export function resolveRerouteClaim(input: RerouteClaimInput): RerouteClaimDecis
   const applicablePaths = input.pathEvidence.filter((item) => sameIdentity(item.routeId, input.originalRoute.id)
     && item.direction === input.direction);
   if (applicablePaths.length === 0) return limited('independent-path-proof-missing');
+
+  if (effective && (!isOrderedSubsequence(input.liveRemainingStopIds, effective.orderedDirectionalStopIds)
+    || applicablePaths.some((item) => !isOrderedSubsequence(item.orderedDirectionalStopIds,
+      effective.orderedDirectionalStopIds)))) {
+    return limited('divergent-ordered-path-evidence');
+  }
+  if (!effective && applicablePaths.some((item) => !relativeOrderCoherent(
+    input.liveRemainingStopIds,
+    item.orderedDirectionalStopIds,
+  ))) return limited('divergent-ordered-path-evidence');
+
   const supportingPaths = applicablePaths.filter((item) => includesIdentity(item.orderedDirectionalStopIds, input.targetExactDirectionalStopId));
   const contradictingPaths = applicablePaths.filter((item) => !includesIdentity(item.orderedDirectionalStopIds, input.targetExactDirectionalStopId));
   if (supportingPaths.length > 0 && contradictingPaths.length > 0) return limited('conflicting-path-evidence');
   if (supportingPaths.length === 0) return limited('independent-path-proof-missing');
 
-  const labels = [...new Set(supportingPaths.map((item) => item.supportedViaLabel?.trim()).filter((value): value is string => Boolean(value)))];
-  labels.sort(compareText);
-  const supportedViaLabel = labels.length === 1 ? labels[0] : undefined;
+  const labels: string[] = [];
+  for (const path of supportingPaths) {
+    if (path.supportedViaLabel === undefined) continue;
+    const sanitized = safeViaLabel(path.supportedViaLabel);
+    if (sanitized === null) return limited('invalid-via-label');
+    labels.push(sanitized);
+  }
+  const distinctLabels = [...new Set(labels.map((item) => item.normalize('NFC')))];
+  if (distinctLabels.length > 1) return limited('conflicting-path-evidence');
+  const canonicalLabels = distinctLabels;
+  canonicalLabels.sort(compareText);
+  const supportedViaLabel = canonicalLabels.length === 1 ? canonicalLabels[0] : undefined;
   return Object.freeze({
     kind: 'admitted',
     route,
@@ -156,8 +184,16 @@ export interface TrackConflictInput {
   readonly terminal: boolean;
   readonly downstreamExactDirectionalStopIds: readonly string[];
   readonly observedAt: Date;
-  readonly priorRisk?: ServiceRiskCarryover | null;
+  readonly priorRisk?: TrackRiskCarryover | null;
   readonly recoveryUpdates?: readonly ServiceRecoveryUpdate[];
+}
+
+export interface TrackRiskCarryover {
+  readonly kind: 'resolved-suppression';
+  readonly claimIdentity: string;
+  readonly adverseAt: Date;
+  readonly riderCopy: string;
+  readonly suppressedProducts: readonly ClaimSuppressedProduct[];
 }
 
 export interface TrackConflictDecision {
@@ -165,7 +201,7 @@ export interface TrackConflictDecision {
   readonly disposition: 'eligible' | 'resolved-ineligible';
   readonly riderCopy: string | null;
   readonly suppressedProducts: readonly ClaimSuppressedProduct[];
-  readonly carryover: ServiceRiskCarryover | null;
+  readonly carryover: TrackRiskCarryover | null;
   readonly carriedForward: boolean;
   readonly recoveryCount: 0 | 1 | 2;
 }
@@ -179,11 +215,7 @@ export function evaluateTrackConflict(input: TrackConflictInput): TrackConflictD
     && includesIdentity(input.downstreamExactDirectionalStopIds, input.targetExactDirectionalStopId);
   if (resolvedConflict) {
     const riderCopy = 'Track change—downstream arrival information is withheld.';
-    const carryover: ServiceRiskCarryover = Object.freeze({
-      kind: 'resolved-suppression', claimIdentity, adverseAt: new Date(input.observedAt), riderCopy,
-      officialDetails: Object.freeze([]), rawOfficialAudit: Object.freeze([]), auditEvidence: Object.freeze([]),
-      suppressedProducts: CLAIM_SUPPRESSED_PRODUCTS,
-    });
+    const carryover = freezeTrackRisk(claimIdentity, input.observedAt, riderCopy);
     return freezeTrack('resolved-suppression', 'resolved-ineligible', riderCopy, CLAIM_SUPPRESSED_PRODUCTS, carryover, false, 0);
   }
   if (priorRisk) {
@@ -222,10 +254,52 @@ function validateTrackInput(input: TrackConflictInput): void {
   }
 }
 
-function coherentOrderedStops(stops: readonly string[]): boolean {
-  if (!Array.isArray(stops) || stops.some((item) => !item?.trim())) return false;
+function coherentOrderedStops(stops: readonly string[], requireNonempty = false): boolean {
+  if (!Array.isArray(stops) || (requireNonempty && stops.length === 0) || stops.some((item) => !item?.trim())) return false;
   const canonical = stops.map(normalizeCanonicalIdentity);
   return new Set(canonical).size === canonical.length;
+}
+
+function usableSupplementedPattern(pattern: EffectiveSupplementedPattern): boolean {
+  const provenance = pattern.provenance as SupplementedPatternProvenance | undefined;
+  return Boolean(pattern.sourceId?.trim()
+    && pattern.routeId?.trim()
+    && isResolvedDirection(pattern.direction)
+    && coherentOrderedStops(pattern.orderedDirectionalStopIds, true)
+    && provenance
+    && provenance.source === 'supplemented-gtfs'
+    && provenance.acceptance === 'accepted'
+    && provenance.currency === 'current'
+    && provenance.editionId?.trim()
+    && provenance.observedAt instanceof Date
+    && Number.isFinite(provenance.observedAt.getTime()));
+}
+
+function isOrderedSubsequence(candidate: readonly string[], reference: readonly string[]): boolean {
+  const positions = new Map(reference.map((stopId, index) => [normalizeCanonicalIdentity(stopId), index]));
+  let prior = -1;
+  for (const stopId of candidate) {
+    const position = positions.get(normalizeCanonicalIdentity(stopId));
+    if (position === undefined || position <= prior) return false;
+    prior = position;
+  }
+  return true;
+}
+
+function relativeOrderCoherent(left: readonly string[], right: readonly string[]): boolean {
+  const rightSet = new Set(right.map(normalizeCanonicalIdentity));
+  const leftCommon = left.map(normalizeCanonicalIdentity).filter((item) => rightSet.has(item));
+  const leftSet = new Set(left.map(normalizeCanonicalIdentity));
+  const rightCommon = right.map(normalizeCanonicalIdentity).filter((item) => leftSet.has(item));
+  return leftCommon.length > 0 && leftCommon.every((item, index) => item === rightCommon[index]);
+}
+
+function safeViaLabel(raw: string): string | null {
+  if (typeof raw !== 'string' || /[\u0000-\u001f\u007f]/.test(raw)) return null;
+  const sanitized = sanitizeOfficialText(raw).normalize('NFC');
+  if (!sanitized || [...sanitized].length > 40
+    || !/^Via\s+[\p{L}\p{N}][\p{L}\p{N}\s.&/()'’\-]*$/u.test(sanitized)) return null;
+  return sanitized;
 }
 
 function includesIdentity(values: readonly string[], expected: string): boolean {
@@ -256,10 +330,22 @@ function freezeTrack(
   disposition: TrackConflictDecision['disposition'],
   riderCopy: string | null,
   suppressedProducts: readonly ClaimSuppressedProduct[],
-  carryover: ServiceRiskCarryover | null,
+  carryover: TrackRiskCarryover | null,
   carriedForward: boolean,
   recoveryCount: 0 | 1 | 2,
 ): TrackConflictDecision {
   return Object.freeze({ kind, disposition, riderCopy, suppressedProducts: Object.freeze([...suppressedProducts]),
     carryover, carriedForward, recoveryCount });
+}
+
+function freezeTrackRisk(claimIdentity: string, adverseAt: Date, riderCopy: string): TrackRiskCarryover {
+  const adverseAtMs = adverseAt.getTime();
+  if (!Number.isFinite(adverseAtMs)) throw new Error('Invalid track conflict observation instant');
+  return Object.freeze({
+    kind: 'resolved-suppression' as const,
+    claimIdentity,
+    get adverseAt(): Date { return new Date(adverseAtMs); },
+    riderCopy,
+    suppressedProducts: CLAIM_SUPPRESSED_PRODUCTS,
+  });
 }

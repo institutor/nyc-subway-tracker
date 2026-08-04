@@ -56,6 +56,11 @@ export interface OfficialAlertFields {
   readonly descriptionRaw: string;
 }
 
+export interface IndependentHighImpactBasis {
+  readonly kind: 'verified-terminal-change' | 'verified-reroute' | 'verified-suspension';
+  readonly evidenceId: string;
+}
+
 /** Shared-domain DTO; deliberately independent of server feed-loader types. */
 export interface ServiceAlertEvidence {
   readonly alertId: string;
@@ -64,6 +69,7 @@ export interface ServiceAlertEvidence {
   readonly structuredEffect: StructuredAlertEffect;
   readonly declaredConsequence: DeclaredServiceConsequence;
   readonly official: OfficialAlertFields;
+  readonly independentHighImpactBasis?: IndependentHighImpactBasis;
   readonly rawAuditFields?: Readonly<Record<string, unknown>>;
 }
 
@@ -129,7 +135,7 @@ export function classifyAlertSnapshot(input: AlertSnapshotInput, assessedAt: Dat
   for (const item of input.alerts) validateAlert(item);
   if (feedTimestampMs > assessedAtMs) return freezeSnapshot('quarantined', input.feedTimestamp!, assessedAt, []);
   const kind = assessedAtMs - feedTimestampMs <= CURRENT_ALERT_MAX_AGE_MS ? 'current' : 'stale';
-  return freezeSnapshot(kind, input.feedTimestamp!, assessedAt, input.alerts);
+  return freezeSnapshot(kind, input.feedTimestamp!, assessedAt, input.alerts.map(freezeAlert));
 }
 
 export function classifyAlertTemporalState(
@@ -198,7 +204,8 @@ export function sanitizeOfficialText(raw: string): string {
     .replace(/<style\b[^>]*>[\s\S]*?<\/style\s*>/gi, ' ')
     .replace(/<!--[\s\S]*?-->/g, ' ')
     .replace(/<[^>]*>/g, ' ');
-  return decodeEntities(withoutExecutable).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+  return decodeEntities(withoutExecutable).replace(/<[^>]*>/g, ' ')
+    .replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().normalize('NFC');
 }
 
 function resolveAtomicSelector(selector: ServiceAlertSelector, claim: ServiceClaimScope): AlertScopeKind {
@@ -255,6 +262,10 @@ function validateAlert(alert: ServiceAlertEvidence): void {
   if (!['delay-only', 'holding', 'express-running-local', 'local-running-express', 'reroute', 'short-turn',
     'partial-suspension', 'full-suspension', 'station-closure', 'entrance-equipment', 'platform-track',
     'generic-affected'].includes(alert.declaredConsequence)) throw new Error('Invalid declared service consequence');
+  if (alert.independentHighImpactBasis !== undefined
+    && (!alert.independentHighImpactBasis || typeof alert.independentHighImpactBasis !== 'object'
+      || !['verified-terminal-change', 'verified-reroute', 'verified-suspension'].includes(alert.independentHighImpactBasis.kind)
+      || !alert.independentHighImpactBasis.evidenceId?.trim())) throw new Error('Invalid independent high-impact basis');
   const seen = new Set<string>();
   for (const selector of alert.selectors) {
     if (!selector || typeof selector !== 'object' || !selector.selectorId?.trim()) throw new Error('Alert selector identity is required');
@@ -294,17 +305,115 @@ function freezeSnapshot(
   assessedAt: Date,
   alerts: readonly ServiceAlertEvidence[],
 ): AlertSnapshotDecision {
-  return Object.freeze({
+  const feedTimestampMs = feedTimestamp?.getTime() ?? null;
+  const assessedAtMs = assessedAt.getTime();
+  const snapshot = {
     kind,
-    feedTimestamp: feedTimestamp ? new Date(feedTimestamp) : null,
-    assessedAt: new Date(assessedAt),
+    get feedTimestamp(): Date | null { return feedTimestampMs === null ? null : new Date(feedTimestampMs); },
+    get assessedAt(): Date { return new Date(assessedAtMs); },
     alerts: Object.freeze([...alerts]),
+  } satisfies AlertSnapshotDecision;
+  return Object.freeze(snapshot);
+}
+
+function freezeAlert(alert: ServiceAlertEvidence): ServiceAlertEvidence {
+  const selectors = alert.selectors.map((selector) => Object.freeze({
+    selectorId: normalizeCanonicalIdentity(selector.selectorId),
+    ...(selector.routeId !== undefined ? { routeId: normalizeOptionalIdentity(selector.routeId) } : {}),
+    ...(selector.constituentStopIds !== undefined ? {
+      constituentStopIds: selector.constituentStopIds === null ? null
+        : Object.freeze(selector.constituentStopIds.map(normalizeCanonicalIdentity)),
+    } : {}),
+    ...(selector.exactDirectionalStopId !== undefined
+      ? { exactDirectionalStopId: normalizeOptionalIdentity(selector.exactDirectionalStopId) } : {}),
+    ...(selector.exactDirectionalSegmentStopIds !== undefined ? {
+      exactDirectionalSegmentStopIds: selector.exactDirectionalSegmentStopIds === null ? null
+        : Object.freeze(selector.exactDirectionalSegmentStopIds.map(normalizeCanonicalIdentity)),
+    } : {}),
+    ...(selector.direction !== undefined ? { direction: selector.direction } : {}),
+    ...(selector.tripId !== undefined ? { tripId: normalizeOptionalIdentity(selector.tripId) } : {}),
+    ...(selector.trainId !== undefined ? { trainId: normalizeOptionalIdentity(selector.trainId) } : {}),
+    ...(selector.claimId !== undefined ? { claimId: normalizeOptionalIdentity(selector.claimId) } : {}),
+  }));
+  const periods = alert.activePeriods.map(freezePeriod);
+  const official = Object.freeze({ headerRaw: alert.official.headerRaw, descriptionRaw: alert.official.descriptionRaw });
+  const basis = alert.independentHighImpactBasis ? Object.freeze({
+    kind: alert.independentHighImpactBasis.kind,
+    evidenceId: normalizeCanonicalIdentity(alert.independentHighImpactBasis.evidenceId),
+  }) : undefined;
+  return Object.freeze({
+    alertId: normalizeCanonicalIdentity(alert.alertId),
+    activePeriods: Object.freeze(periods),
+    selectors: Object.freeze(selectors),
+    structuredEffect: alert.structuredEffect,
+    declaredConsequence: alert.declaredConsequence,
+    official,
+    ...(basis ? { independentHighImpactBasis: basis } : {}),
+    ...(alert.rawAuditFields ? { rawAuditFields: deepFreezeAuditRecord(alert.rawAuditFields) } : {}),
   });
+}
+
+function freezePeriod(period: AlertActivePeriod): AlertActivePeriod {
+  const startsAt = period.startsAt === undefined ? undefined : period.startsAt === null ? null : period.startsAt.getTime();
+  const endsAt = period.endsAt === undefined ? undefined : period.endsAt === null ? null : period.endsAt.getTime();
+  const frozen: { startsAt?: Date | null; endsAt?: Date | null } = {};
+  if (startsAt !== undefined) Object.defineProperty(frozen, 'startsAt', {
+    enumerable: true,
+    get: () => startsAt === null ? null : new Date(startsAt),
+  });
+  if (endsAt !== undefined) Object.defineProperty(frozen, 'endsAt', {
+    enumerable: true,
+    get: () => endsAt === null ? null : new Date(endsAt),
+  });
+  return Object.freeze(frozen);
+}
+
+function normalizeOptionalIdentity(value: string | null): string | null {
+  return value === null ? null : normalizeCanonicalIdentity(value);
+}
+
+function deepFreezeAuditRecord(record: Readonly<Record<string, unknown>>): Readonly<Record<string, unknown>> {
+  const budget = { remaining: 5_000 };
+  const seen = new Set<object>();
+  const normalized = deepFreezeAuditValue(record, 0, budget, seen);
+  if (!normalized || Array.isArray(normalized) || typeof normalized !== 'object') throw new Error('Invalid raw audit record');
+  return normalized as Readonly<Record<string, unknown>>;
+}
+
+function deepFreezeAuditValue(
+  value: unknown,
+  depth: number,
+  budget: { remaining: number },
+  seen: Set<object>,
+): unknown {
+  budget.remaining -= 1;
+  if (budget.remaining < 0 || depth > 16) throw new Error('Raw audit fields exceed normalization limits');
+  if (value === null || typeof value === 'boolean' || typeof value === 'number') return value;
+  if (typeof value === 'string') return value.normalize('NFC');
+  if (value instanceof Date) return new Date(validDate(value, 'raw audit date')).toISOString();
+  if (typeof value !== 'object') throw new Error('Unsupported raw audit field');
+  if (seen.has(value)) throw new Error('Cyclic raw audit fields are not supported');
+  seen.add(value);
+  if (Array.isArray(value)) {
+    if (value.length > 1_000) throw new Error('Raw audit array exceeds normalization limits');
+    const result = Object.freeze(value.map((item) => deepFreezeAuditValue(item, depth + 1, budget, seen)));
+    seen.delete(value);
+    return result;
+  }
+  const prototype = Object.getPrototypeOf(value);
+  if (prototype !== Object.prototype && prototype !== null) throw new Error('Unsupported raw audit object');
+  const entries = Object.entries(value as Record<string, unknown>);
+  if (entries.length > 1_000) throw new Error('Raw audit object exceeds normalization limits');
+  entries.sort(([left], [right]) => compareText(left, right));
+  const result: Record<string, unknown> = {};
+  for (const [key, item] of entries) result[normalizeCanonicalIdentity(key)] = deepFreezeAuditValue(item, depth + 1, budget, seen);
+  seen.delete(value);
+  return Object.freeze(result);
 }
 
 function freezeOfficial(alert: ServiceAlertEvidence): ResolvedOfficialAlertDetails {
   return Object.freeze({
-    alertId: alert.alertId,
+    alertId: normalizeCanonicalIdentity(alert.alertId),
     header: sanitizeOfficialText(alert.official.headerRaw),
     description: sanitizeOfficialText(alert.official.descriptionRaw),
   });
@@ -312,10 +421,10 @@ function freezeOfficial(alert: ServiceAlertEvidence): ResolvedOfficialAlertDetai
 
 function freezeRawOfficialAudit(alert: ServiceAlertEvidence): RawOfficialAlertAudit {
   return Object.freeze({
-    alertId: alert.alertId,
+    alertId: normalizeCanonicalIdentity(alert.alertId),
     rawHeader: alert.official.headerRaw,
     rawDescription: alert.official.descriptionRaw,
-    ...(alert.rawAuditFields ? { rawAuditFields: Object.freeze({ ...alert.rawAuditFields }) } : {}),
+    ...(alert.rawAuditFields ? { rawAuditFields: alert.rawAuditFields } : {}),
   });
 }
 

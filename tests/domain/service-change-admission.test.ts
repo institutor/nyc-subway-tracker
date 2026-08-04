@@ -34,6 +34,7 @@ const candidate = (overrides: Partial<ArrivalAdmissionCandidate> = {}): ArrivalA
   remainingStopCalls: [{
     stopId: 'A24N', sourceStopSequence: 2, arrivalAt: at(180), departureAt: at(190), scheduleRelationship: 'SCHEDULED',
   }],
+  serviceClaimId: 'claim-f-a24n',
   serviceDisposition: 'eligible',
   trackDisposition: 'eligible',
   freshness: 'current',
@@ -189,5 +190,70 @@ describe('service-change arrival admission seam', () => {
       serviceChangeGate: { ...decision([]), kind: 'magically-clear' } as never,
     }), scope)).toThrow(/service-change/i);
     expect(admitArrivalCandidate(candidate(), scope)).toEqual(valid);
+  });
+
+  test('binds a service decision to the exact candidate claim before freshness or identity', () => {
+    const eDecision = evaluateServiceChanges({
+      snapshot: classifyAlertSnapshot({ status: 'accepted', feedTimestamp: BASE, alerts: [] }, BASE),
+      claim: {
+        claimId: 'claim-e-a24n', routeId: 'E', exactDirectionalStopId: 'A24N', constituentStopId: 'A24',
+        direction: 'northbound', tripId: 'trip-e-1', trainId: 'e-train-1',
+      },
+    });
+    expect(admitArrivalCandidate(candidate({
+      serviceChangeGate: eDecision,
+      freshness: 'unavailable', identityDisposition: 'ambiguous', serviceClaimId: 'claim-e-a24n',
+    }), scope)).toMatchObject({
+      kind: 'rejected', failedGate: 'service', disposition: 'claim-scope-mismatch',
+      boardTreatment: 'quarantine-or-limitation',
+    });
+    expect(admitArrivalCandidate(candidate({
+      serviceChangeGate: eDecision, serviceClaimId: 'claim-e-a24n', serviceDisposition: 'resolved-ineligible',
+    }), scope)).toMatchObject({
+      kind: 'rejected', failedGate: 'service', disposition: 'resolved-ineligible',
+      boardTreatment: 'resolved-suppression',
+    });
+
+    const valid = decision([]);
+    expect(admitArrivalCandidate(candidate({ serviceChangeGate: valid }), scope).kind).toBe('admitted');
+    expect(admitArrivalCandidate(candidate({ serviceChangeGate: valid, serviceClaimId: 'wrong-claim' }), scope)).toMatchObject({
+      kind: 'rejected', failedGate: 'service', disposition: 'claim-scope-mismatch',
+    });
+  });
+
+  test('fails closed on forged evaluated claim metadata without trusting its disposition', () => {
+    const legitimate = decision([]);
+    const forged = {
+      ...legitimate,
+      evaluatedClaim: { ...legitimate.evaluatedClaim, routeId: 'E' },
+    } as ServiceChangeDecision;
+    expect(admitArrivalCandidate(candidate({ serviceChangeGate: forged, freshness: 'unavailable' }), scope)).toMatchObject({
+      kind: 'rejected', failedGate: 'service', disposition: 'claim-scope-mismatch',
+      boardTreatment: 'quarantine-or-limitation',
+    });
+  });
+
+  test('checks stop, direction, trip, and train independently and rejects incomplete claim binding', () => {
+    const claims = [
+      { claimId: 'claim-f-a24n', routeId: 'F', exactDirectionalStopId: 'A25N', constituentStopId: 'A25',
+        direction: 'northbound' as const, tripId: 'trip-f-1', trainId: 'f-train-1' },
+      { claimId: 'claim-f-a24n', routeId: 'F', exactDirectionalStopId: 'A24N', constituentStopId: 'A24',
+        direction: 'southbound' as const, tripId: 'trip-f-1', trainId: 'f-train-1' },
+      { claimId: 'claim-f-a24n', routeId: 'F', exactDirectionalStopId: 'A24N', constituentStopId: 'A24',
+        direction: 'northbound' as const, tripId: 'other-trip', trainId: 'f-train-1' },
+      { claimId: 'claim-f-a24n', routeId: 'F', exactDirectionalStopId: 'A24N', constituentStopId: 'A24',
+        direction: 'northbound' as const, tripId: 'trip-f-1', trainId: 'other-train' },
+      { claimId: 'claim-f-a24n', routeId: 'F', exactDirectionalStopId: 'A24N', constituentStopId: 'A24',
+        direction: 'northbound' as const },
+    ];
+    for (const evaluatedClaim of claims) {
+      const gate = evaluateServiceChanges({
+        snapshot: classifyAlertSnapshot({ status: 'accepted', feedTimestamp: BASE, alerts: [] }, BASE),
+        claim: evaluatedClaim,
+      });
+      expect(admitArrivalCandidate(candidate({ serviceChangeGate: gate }), scope)).toMatchObject({
+        kind: 'rejected', failedGate: 'service', disposition: 'claim-scope-mismatch',
+      });
+    }
   });
 });
