@@ -11,6 +11,7 @@ export interface ScheduleCoverageMask {
   readonly effectiveFrom: string;
   readonly effectiveUntil: string;
   readonly directions: readonly Direction[];
+  readonly operationalAxes?: readonly string[];
 }
 
 export interface ScheduleClaim {
@@ -18,6 +19,7 @@ export interface ScheduleClaim {
   readonly serviceDate: string;
   readonly at: string;
   readonly direction: Direction;
+  readonly operationalAxis?: string;
   readonly occurrenceId?: string;
   readonly stopId?: string;
   readonly stopTimeOccurrenceId?: string;
@@ -49,6 +51,12 @@ export interface ScheduleSelection {
   readonly reason: string;
 }
 
+/** The single scope-level positive owner selected before departure enumeration. */
+export interface OwnedScheduleEdition {
+  readonly selection: ScheduleSelection;
+  readonly candidate: StaticGtfsEditionCandidate;
+}
+
 export interface FailedScheduleObservation {
   readonly source: StaticScheduleSource;
   readonly retrievedAt: Date | string;
@@ -75,6 +83,12 @@ export class ScheduleEditionRegistry {
   #ordinal = 0;
 
   observe(candidate: StaticGtfsEditionCandidate): EditionObservationResult {
+    if (!candidate || typeof candidate !== 'object' || !candidate.canonicalContentId
+      || (candidate.source !== 'regular-gtfs' && candidate.source !== 'supplemented-gtfs')) {
+      return quarantine('Invalid schedule edition identity');
+    }
+    const coverageFailure = validateCoverage(candidate.coverage);
+    if (coverageFailure) return quarantine(coverageFailure);
     const retrievedAt = exactIso(candidate.retrievedAt, 'schedule retrieval time');
     const existing = this.#editions.find(
       (edition) => edition.source === candidate.source && edition.canonicalContentId === candidate.canonicalContentId,
@@ -215,6 +229,14 @@ export class ScheduleEditionRegistry {
     return Object.freeze({ source: 'none', reason: 'No usable schedule covers this claim' });
   }
 
+  resolveOwner(claim: ScheduleClaim, comparisonAt: Date): OwnedScheduleEdition | null {
+    const selection = this.select(claim, comparisonAt);
+    if (!selection.editionId || selection.source === 'none') return null;
+    const edition = this.#editions.find((candidate) => candidate.editionId === selection.editionId);
+    if (!edition) throw new Error('Selected schedule edition is unavailable');
+    return Object.freeze({ selection, candidate: edition.candidate });
+  }
+
   #isSuperseded(edition: StoredEdition, claim: ScheduleClaim): boolean {
     if (edition.source !== 'supplemented-gtfs' || !edition.coverage.some((mask) => maskContains(mask, claim))) return false;
     return this.#editions.some(
@@ -247,6 +269,8 @@ function maskContains(mask: ScheduleCoverageMask, claim: ScheduleClaim): boolean
     claim.at >= mask.effectiveFrom &&
     claim.at <= mask.effectiveUntil &&
     (mask.directions.length === 0 || mask.directions.includes(claim.direction))
+    && (!mask.operationalAxes || mask.operationalAxes.length === 0
+      || (claim.operationalAxis !== undefined && mask.operationalAxes.includes(claim.operationalAxis)))
   );
 }
 
@@ -355,4 +379,29 @@ function decision(
 
 function uniqueSorted(values: string[]): string[] {
   return [...new Set(values)].sort();
+}
+
+function validateCoverage(coverage: readonly ScheduleCoverageMask[]): string | undefined {
+  if (!Array.isArray(coverage) || coverage.length === 0) return 'Schedule edition coverage is required';
+  const ids = new Set<string>();
+  for (const mask of coverage) {
+    if (!mask?.id || ids.has(mask.id) || !Array.isArray(mask.routeIds) || mask.routeIds.length === 0
+      || mask.routeIds.some((routeId: string) => !routeId) || !Array.isArray(mask.serviceDates) || mask.serviceDates.length === 0
+      || mask.serviceDates.some((serviceDate: string) => !/^\d{8}$/.test(serviceDate)) || !Array.isArray(mask.directions)
+      || mask.directions.includes('unknown')) return 'Invalid schedule coverage mask';
+    ids.add(mask.id);
+    let effectiveFrom: string;
+    let effectiveUntil: string;
+    try {
+      effectiveFrom = exactIso(mask.effectiveFrom, 'schedule coverage start');
+      effectiveUntil = exactIso(mask.effectiveUntil, 'schedule coverage end');
+    } catch {
+      return 'Invalid schedule coverage interval';
+    }
+    if (effectiveUntil < effectiveFrom) return 'Schedule coverage ends before it starts';
+    if (mask.operationalAxes && (!Array.isArray(mask.operationalAxes) || mask.operationalAxes.some((axis: string) => !axis))) {
+      return 'Invalid schedule operational-axis coverage';
+    }
+  }
+  return undefined;
 }

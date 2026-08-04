@@ -125,12 +125,14 @@ export interface UncertainArrival extends ArrivalBase {
 }
 
 export type Arrival = LiveArrival | ExpectedArrival | ScheduledArrival | HoldingArrival | UncertainArrival;
-export type PrimaryArrival = LiveArrival | ExpectedArrival | ScheduledArrival;
+/** Only evidence-backed Live and Expected rows consume a primary next-three slot. */
+export type PrimaryArrival = LiveArrival | ExpectedArrival;
+export type BoardRowArrival = PrimaryArrival | ScheduledArrival;
 export type SecondaryArrival = HoldingArrival | UncertainArrival;
 
-export interface BoardDirection<Primary extends PrimaryArrival = PrimaryArrival> {
+export interface BoardDirection<Row extends BoardRowArrival = BoardRowArrival> {
   direction: Direction;
-  primary: readonly Primary[];
+  primary: readonly Row[];
   secondary: readonly SecondaryArrival[];
   explanations: readonly BoardExplanation[];
 }
@@ -148,11 +150,11 @@ export interface BoardCapabilities {
   commute: CapabilityState;
 }
 
-interface BoardDecisionBase<Mode extends BoardMode, Primary extends PrimaryArrival> {
+interface BoardDecisionBase<Mode extends BoardMode, Row extends BoardRowArrival> {
   responseIdentity: string;
   mode: Mode;
   station: Station;
-  directions: readonly BoardDirection<Primary>[];
+  directions: readonly BoardDirection<Row>[];
   feedHealth: readonly FeedHealth[];
   alerts: readonly Alert[];
   decidedAt: Instant;
@@ -162,7 +164,7 @@ interface BoardDecisionBase<Mode extends BoardMode, Primary extends PrimaryArriv
 
 export type LiveBoardDecision = BoardDecisionBase<'live', LiveArrival | ExpectedArrival>;
 export type ScheduledFallbackBoardDecision = BoardDecisionBase<'scheduled-fallback', ScheduledArrival>;
-export type DemonstrationBoardDecision = BoardDecisionBase<'demonstration', PrimaryArrival>;
+export type DemonstrationBoardDecision = BoardDecisionBase<'demonstration', BoardRowArrival>;
 export type UnavailableBoardDecision = BoardDecisionBase<'unavailable', never>;
 export type BoardDecision = LiveBoardDecision | ScheduledFallbackBoardDecision | DemonstrationBoardDecision | UnavailableBoardDecision;
 
