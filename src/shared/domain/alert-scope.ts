@@ -1,5 +1,6 @@
 import { normalizeBoundedIdentity, normalizeCanonicalIdentity } from './canonical';
 import type { Direction } from './types';
+import { captureDateEpochMilliseconds } from './temporal';
 
 export type ResolvedServiceDirection = Exclude<Direction, 'unknown'>;
 export type AlertSnapshotStatus = 'accepted' | 'missing' | 'failed' | 'quarantined';
@@ -127,15 +128,15 @@ export function classifyAlertSnapshot(input: AlertSnapshotInput, assessedAt: Dat
     throw new Error('Invalid alert snapshot status');
   }
   if (input.status !== 'accepted') {
-    return freezeSnapshot(input.status, null, assessedAt, []);
+    return freezeSnapshot(input.status, null, assessedAtMs, []);
   }
   const feedTimestampMs = validDate(input.feedTimestamp, 'authoritative alert feed timestamp');
   if (input.retrievedAt !== undefined) validDate(input.retrievedAt, 'alert retrieval instant');
   if (!Array.isArray(input.alerts)) throw new Error('Accepted alert snapshot requires alerts');
   for (const item of input.alerts) validateAlert(item);
-  if (feedTimestampMs > assessedAtMs) return freezeSnapshot('quarantined', input.feedTimestamp!, assessedAt, []);
+  if (feedTimestampMs > assessedAtMs) return freezeSnapshot('quarantined', feedTimestampMs, assessedAtMs, []);
   const kind = assessedAtMs - feedTimestampMs <= CURRENT_ALERT_MAX_AGE_MS ? 'current' : 'stale';
-  return freezeSnapshot(kind, input.feedTimestamp!, assessedAt, input.alerts.map(freezeAlert));
+  return freezeSnapshot(kind, feedTimestampMs, assessedAtMs, input.alerts.map(freezeAlert));
 }
 
 export function classifyAlertTemporalState(
@@ -319,12 +320,10 @@ function compareText(left: string, right: string): number {
 
 function freezeSnapshot(
   kind: AlertSnapshotKind,
-  feedTimestamp: Date | null,
-  assessedAt: Date,
+  feedTimestampMs: number | null,
+  assessedAtMs: number,
   alerts: readonly ServiceAlertEvidence[],
 ): AlertSnapshotDecision {
-  const feedTimestampMs = feedTimestamp?.getTime() ?? null;
-  const assessedAtMs = assessedAt.getTime();
   const snapshot = {
     kind,
     get feedTimestamp(): Date | null { return feedTimestampMs === null ? null : new Date(feedTimestampMs); },
@@ -372,8 +371,12 @@ function freezeAlert(alert: ServiceAlertEvidence): ServiceAlertEvidence {
 }
 
 function freezePeriod(period: AlertActivePeriod): AlertActivePeriod {
-  const startsAt = period.startsAt === undefined ? undefined : period.startsAt === null ? null : period.startsAt.getTime();
-  const endsAt = period.endsAt === undefined ? undefined : period.endsAt === null ? null : period.endsAt.getTime();
+  const startsAtValue = period.startsAt;
+  const endsAtValue = period.endsAt;
+  const startsAt = startsAtValue === undefined ? undefined : startsAtValue === null ? null
+    : captureDateEpochMilliseconds(startsAtValue, 'alert period start', { allowInvalid: true });
+  const endsAt = endsAtValue === undefined ? undefined : endsAtValue === null ? null
+    : captureDateEpochMilliseconds(endsAtValue, 'alert period end', { allowInvalid: true });
   const frozen: { startsAt?: Date | null; endsAt?: Date | null } = {};
   if (startsAt !== undefined) Object.defineProperty(frozen, 'startsAt', {
     enumerable: true,
@@ -504,6 +507,5 @@ function decodeEntities(raw: string): string {
 }
 
 function validDate(value: Date | undefined, label: string): number {
-  if (!(value instanceof Date) || !Number.isFinite(value.getTime())) throw new Error(`Invalid ${label}`);
-  return value.getTime();
+  return captureDateEpochMilliseconds(value, label);
 }

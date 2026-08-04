@@ -422,6 +422,10 @@ describe('resolved track conflict', () => {
     if (!hard.carryover) throw new Error('track conflict must carry risk');
     expect(Object.isFrozen(hard.carryover)).toBe(true);
     expect(Object.isFrozen(hard.carryover.evaluatedClaim)).toBe(true);
+    const exposedAdverseAt = (hard.carryover as unknown as { readonly adverseAt?: Date }).adverseAt;
+    exposedAdverseAt?.setTime(BASE.getTime());
+    expect(hard.carryover.adverseAtMs).toBe(at(10).getTime());
+    expect(hard.carryover).not.toHaveProperty('adverseAt');
     const descriptorCopy = Object.freeze(Object.create(
       Object.getPrototypeOf(hard.carryover),
       Object.getOwnPropertyDescriptors(hard.carryover),
@@ -433,7 +437,7 @@ describe('resolved track conflict', () => {
       JSON.parse(JSON.stringify(hard.carryover)) as TrackRiskCarryover,
       descriptorCopy,
       new Proxy(hard.carryover, {}),
-      Object.freeze({ ...hard.carryover, adverseAt: BASE }) as TrackRiskCarryover,
+      Object.freeze({ ...hard.carryover, adverseAtMs: BASE.getTime() }) as TrackRiskCarryover,
     ] as readonly TrackRiskCarryover[];
     const update = (evidenceId: string, seconds: number) => ({
       evidenceId, sourceTimestamp: at(seconds), currentFeed: true, coherentIdentity: true,
@@ -461,6 +465,20 @@ describe('resolved track conflict', () => {
     });
   });
 
+  test('captures track evidence epochs intrinsically and stores only an immutable primitive boundary', () => {
+    const observedAt = at(10);
+    Object.defineProperty(observedAt, 'getTime', {
+      value: () => { throw new Error('caller getTime must not run'); },
+    });
+    const hard = evaluateTrackConflict({
+      evidenceId: 'intrinsic-track-time', routeId: 'F', direction: 'northbound',
+      conflictStopId: 'D17N', targetExactDirectionalStopId: 'A24N', actualTrack: '2', scheduledTrack: '1',
+      terminal: false, downstreamExactDirectionalStopIds: ['A24N'], observedAt,
+    });
+    expect(hard.carryover).toMatchObject({ adverseAtMs: at(10).getTime() });
+    expect(hard.carryover).not.toHaveProperty('adverseAt');
+  });
+
   test('keeps issued track reassertion boundaries monotonic across replay and recovery', () => {
     const conflict = {
       evidenceId: 'track-t10', routeId: 'F', direction: 'northbound' as const,
@@ -472,12 +490,12 @@ describe('resolved track conflict', () => {
     const replay = evaluateTrackConflict({ ...conflict, evidenceId: 'track-t5', observedAt: at(5),
       priorRisk: hard.carryover });
     expect(replay).toMatchObject({ kind: 'resolved-suppression', carriedForward: true, recoveryCount: 0 });
-    expect(replay.carryover?.adverseAt.toISOString()).toBe(at(10).toISOString());
+    expect(replay.carryover?.adverseAtMs).toBe(at(10).getTime());
     if (!replay.carryover) throw new Error('replayed conflict must retain risk');
 
     const equal = evaluateTrackConflict({ ...conflict, evidenceId: 'track-equal', observedAt: at(10),
       priorRisk: replay.carryover });
-    expect(equal.carryover?.adverseAt.toISOString()).toBe(at(10).toISOString());
+    expect(equal.carryover?.adverseAtMs).toBe(at(10).getTime());
     const update = (evidenceId: string, seconds: number, currentFeed = true) => ({
       evidenceId, sourceTimestamp: at(seconds), currentFeed, coherentIdentity: true,
       exactDirectionalStop: true, coherentPath: true, noCurrentVeto: true,

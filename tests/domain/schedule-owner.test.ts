@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest';
 
 import type { StaticGtfsEditionCandidate } from '../../src/server/gtfs/static-normalizer';
 import {
+  classifyScheduleAge,
   ScheduleEditionRegistry,
   type ScheduleClaim,
   type ScheduleCoverageMask,
@@ -11,6 +12,17 @@ const HOUR = 60 * 60 * 1000;
 const BASE = Date.parse('2026-08-04T12:00:00.000Z');
 
 describe('schedule edition observation and currency', () => {
+  test('classifies real Date slots without invoking caller-overridden temporal methods', () => {
+    const anchor = new Date(BASE - HOUR);
+    const comparison = new Date(BASE);
+    for (const value of [anchor, comparison]) {
+      Object.defineProperty(value, 'getTime', {
+        value: () => { throw new Error('caller getTime must not run'); },
+      });
+    }
+    expect(classifyScheduleAge(anchor, comparison)).toMatchObject({ state: 'current', ageMs: HOUR });
+  });
+
   test.each([
     ['age zero', 0, 'current'],
     ['exactly two hours', 2 * HOUR, 'current'],

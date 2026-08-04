@@ -12,6 +12,7 @@ import {
   type ClaimSuppressedProduct,
   type ServiceRecoveryUpdate,
 } from './service-impact';
+import { captureDateEpochMilliseconds, validateEpochMilliseconds } from './temporal';
 
 export type StoppingPatternChangeKind = 'reroute' | 'express-running-local' | 'local-running-express';
 
@@ -111,7 +112,7 @@ export type RerouteClaimDecision =
     };
 
 export function resolveRerouteClaim(input: RerouteClaimInput): RerouteClaimDecision {
-  validateRerouteInput(input);
+  const assessedAtMs = validateRerouteInput(input);
   const route = Object.freeze({ ...input.originalRoute });
   const limited = (reason: Extract<RerouteClaimDecision, { kind: 'quarantine-or-limitation' }>['reason']): RerouteClaimDecision =>
     Object.freeze({ kind: 'quarantine-or-limitation', route, targetExactDirectionalStopId: input.targetExactDirectionalStopId, reason });
@@ -119,7 +120,7 @@ export function resolveRerouteClaim(input: RerouteClaimInput): RerouteClaimDecis
   if (!coherentOrderedStops(input.originalDirectionalStopIds, true)) return limited('invalid-ordered-stop-evidence');
   if (input.planned && !input.effectiveSupplementedPattern) return limited('planned-pattern-required');
   const effective = input.effectiveSupplementedPattern;
-  if (effective && !usableSupplementedPattern(effective, input.assessedAt)) return limited('unusable-supplemented-pattern');
+  if (effective && !usableSupplementedPattern(effective, assessedAtMs)) return limited('unusable-supplemented-pattern');
   if (effective && (!sameIdentity(effective.routeId, input.originalRoute.id) || effective.direction !== input.direction)) {
     return limited('direction-or-route-conflict');
   }
@@ -221,7 +222,7 @@ export interface TrackRiskCarryover {
   readonly kind: 'resolved-suppression';
   readonly claimIdentity: string;
   readonly evaluatedClaim: TrackClaimScope;
-  readonly adverseAt: Date;
+  readonly adverseAtMs: number;
   readonly riderCopy: string;
   readonly suppressedProducts: readonly ClaimSuppressedProduct[];
 }
@@ -240,7 +241,7 @@ const ISSUED_TRACK_RISK_CARRYOVERS = new WeakSet<object>();
 const TRACK_LIMITATION_COPY = 'Track information could not be verified; downstream arrivals are withheld.';
 
 export function evaluateTrackConflict(input: TrackConflictInput): TrackConflictDecision {
-  validateTrackInput(input);
+  const observedAtMs = validateTrackInput(input);
   const evaluatedClaim = freezeTrackClaim(input);
   const claimIdentity = trackClaimIdentity(evaluatedClaim);
   const priorRiskBinding = bindPriorTrackRisk(input.priorRisk, claimIdentity);
@@ -255,19 +256,19 @@ export function evaluateTrackConflict(input: TrackConflictInput): TrackConflictD
     && includesIdentity(input.downstreamExactDirectionalStopIds, input.targetExactDirectionalStopId);
   if (resolvedConflict) {
     const riderCopy = 'Track change—downstream arrival information is withheld.';
-    if (priorRisk && input.observedAt.getTime() <= priorRisk.adverseAt.getTime()) {
+    if (priorRisk && observedAtMs <= priorRisk.adverseAtMs) {
       return freezeTrack('resolved-suppression', 'resolved-ineligible', priorRisk.riderCopy,
         priorRisk.suppressedProducts, priorRisk, true, 0);
     }
-    const carryover = freezeTrackRisk(evaluatedClaim, input.observedAt, riderCopy);
+    const carryover = freezeTrackRisk(evaluatedClaim, observedAtMs, riderCopy);
     return freezeTrack('resolved-suppression', 'resolved-ineligible', riderCopy, CLAIM_SUPPRESSED_PRODUCTS, carryover, false, 0);
   }
   if (priorRisk) {
-    if (input.observedAt.getTime() <= priorRisk.adverseAt.getTime()) {
+    if (observedAtMs <= priorRisk.adverseAtMs) {
       return freezeTrack('resolved-suppression', 'resolved-ineligible', priorRisk.riderCopy,
         priorRisk.suppressedProducts, priorRisk, true, 0);
     }
-    const recoveryCount = countQualifyingRecovery(input.recoveryUpdates ?? [], priorRisk.adverseAt, input.observedAt);
+    const recoveryCount = countQualifyingRecovery(input.recoveryUpdates ?? [], priorRisk.adverseAtMs, observedAtMs);
     if (recoveryCount < 2) return freezeTrack('resolved-suppression', 'resolved-ineligible', priorRisk.riderCopy,
       priorRisk.suppressedProducts, priorRisk, true, recoveryCount);
     return freezeTrack('eligible-context', 'eligible', null, [], null, false, 2);
@@ -275,14 +276,14 @@ export function evaluateTrackConflict(input: TrackConflictInput): TrackConflictD
   return freezeTrack('eligible-context', 'eligible', null, [], null, false, 0);
 }
 
-function validateRerouteInput(input: RerouteClaimInput): void {
+function validateRerouteInput(input: RerouteClaimInput): number {
   if (!input || typeof input !== 'object' || !['reroute', 'express-running-local', 'local-running-express'].includes(input.changeKind)
     || typeof input.planned !== 'boolean' || !['match', 'unrelated', 'unresolved'].includes(input.alertScope)
     || !input.originalRoute?.id?.trim() || !input.originalRoute.label?.trim()
     || !isResolvedDirection(input.direction) || !input.targetExactDirectionalStopId?.trim()
     || !Array.isArray(input.originalDirectionalStopIds) || !Array.isArray(input.liveRemainingStopIds)
-    || !Array.isArray(input.pathEvidence) || !(input.assessedAt instanceof Date)
-    || !Number.isFinite(input.assessedAt.getTime())) throw new Error('Complete reroute claim evidence is required');
+    || !Array.isArray(input.pathEvidence)) throw new Error('Complete reroute claim evidence is required');
+  const assessedAtMs = captureDateEpochMilliseconds(input.assessedAt, 'reroute assessment instant');
   normalizeBoundedIdentity(input.originalRoute.id, 'reroute route');
   normalizeBoundedIdentity(input.targetExactDirectionalStopId, 'reroute target stop');
   if (input.effectiveSupplementedPattern) {
@@ -296,20 +297,22 @@ function validateRerouteInput(input: RerouteClaimInput): void {
     normalizeBoundedIdentity(proof.evidenceId, 'reroute path evidence');
     normalizeBoundedIdentity(proof.routeId, 'reroute path route');
   }
+  return assessedAtMs;
 }
 
-function validateTrackInput(input: TrackConflictInput): void {
+function validateTrackInput(input: TrackConflictInput): number {
   if (!input || typeof input !== 'object' || !input.evidenceId?.trim() || !input.routeId?.trim()
     || !isResolvedDirection(input.direction) || !input.conflictStopId?.trim() || !input.targetExactDirectionalStopId?.trim()
-    || typeof input.terminal !== 'boolean' || !Array.isArray(input.downstreamExactDirectionalStopIds)
-    || !(input.observedAt instanceof Date) || !Number.isFinite(input.observedAt.getTime())) {
+    || typeof input.terminal !== 'boolean' || !Array.isArray(input.downstreamExactDirectionalStopIds)) {
     throw new Error('Complete resolved track evidence is required');
   }
+  const observedAtMs = captureDateEpochMilliseconds(input.observedAt, 'track observation instant');
   normalizeBoundedIdentity(input.evidenceId, 'track evidence');
   normalizeBoundedIdentity(input.routeId, 'track route');
   normalizeBoundedIdentity(input.conflictStopId, 'track conflict stop');
   normalizeBoundedIdentity(input.targetExactDirectionalStopId, 'track target stop');
   input.downstreamExactDirectionalStopIds.forEach((stopId) => normalizeBoundedIdentity(stopId, 'track downstream stop'));
+  return observedAtMs;
 }
 
 function coherentOrderedStops(stops: readonly string[], requireNonempty = false): boolean {
@@ -323,7 +326,7 @@ function coherentOrderedStops(stops: readonly string[], requireNonempty = false)
   return new Set(canonical).size === canonical.length;
 }
 
-function usableSupplementedPattern(pattern: EffectiveSupplementedPattern, assessedAt: Date): boolean {
+function usableSupplementedPattern(pattern: EffectiveSupplementedPattern, assessedAtMs: number): boolean {
   const provenance = pattern.provenance as SupplementedPatternProvenance | undefined;
   if (!pattern.sourceId?.trim() || !pattern.routeId?.trim() || !isResolvedDirection(pattern.direction)
     || !coherentOrderedStops(pattern.orderedDirectionalStopIds, true) || !provenance
@@ -336,15 +339,19 @@ function usableSupplementedPattern(pattern: EffectiveSupplementedPattern, assess
     const contentId = normalizeBoundedIdentity(provenance.canonicalContentId, 'supplemented content');
     const editionId = normalizeBoundedIdentity(provenance.editionId, 'supplemented edition');
     if (editionId !== `supplemented-gtfs:${contentId}`) return false;
-    const assessed = validInstant(assessedAt);
-    const published = provenance.publishedAt === undefined ? null : validInstant(provenance.publishedAt);
-    const firstAcceptedRetrieved = validInstant(provenance.firstAcceptedRetrievedAt);
-    const observed = validInstant(provenance.observedAt);
-    const accepted = validInstant(provenance.acceptedAt);
+    const assessed = validateEpochMilliseconds(assessedAtMs, 'reroute assessment instant');
+    const publishedAt = provenance.publishedAt;
+    const firstAcceptedRetrievedAt = provenance.firstAcceptedRetrievedAt;
+    const observedAt = provenance.observedAt;
+    const acceptedAt = provenance.acceptedAt;
+    const published = publishedAt === undefined ? null : validInstant(publishedAt);
+    const firstAcceptedRetrieved = validInstant(firstAcceptedRetrievedAt);
+    const observed = validInstant(observedAt);
+    const accepted = validInstant(acceptedAt);
     if ((published !== null && published > firstAcceptedRetrieved)
       || !(firstAcceptedRetrieved <= observed && observed <= accepted && accepted <= assessed)) return false;
     const ageAnchor = published ?? firstAcceptedRetrieved;
-    const age = classifyScheduleAge(new Date(ageAnchor), assessedAt);
+    const age = classifyScheduleAge(new Date(ageAnchor), new Date(assessed));
     if ((age.state !== 'current' && age.state !== 'stale') || age.state !== provenance.currency) return false;
 
     const prior = provenance.priorAcceptedEdition;
@@ -353,10 +360,14 @@ function usableSupplementedPattern(pattern: EffectiveSupplementedPattern, assess
       const priorContentId = normalizeBoundedIdentity(prior.canonicalContentId, 'prior supplemented content');
       const priorEditionId = normalizeBoundedIdentity(prior.editionId, 'prior supplemented edition');
       if (priorEditionId !== `supplemented-gtfs:${priorContentId}` || priorContentId === contentId) return false;
-      const priorPublished = prior.publishedAt === undefined ? null : validInstant(prior.publishedAt);
-      const priorFirstAcceptedRetrieved = validInstant(prior.firstAcceptedRetrievedAt);
-      const priorObserved = validInstant(prior.observedAt);
-      const priorAccepted = validInstant(prior.acceptedAt);
+      const priorPublishedAt = prior.publishedAt;
+      const priorFirstAcceptedRetrievedAt = prior.firstAcceptedRetrievedAt;
+      const priorObservedAt = prior.observedAt;
+      const priorAcceptedAt = prior.acceptedAt;
+      const priorPublished = priorPublishedAt === undefined ? null : validInstant(priorPublishedAt);
+      const priorFirstAcceptedRetrieved = validInstant(priorFirstAcceptedRetrievedAt);
+      const priorObserved = validInstant(priorObservedAt);
+      const priorAccepted = validInstant(priorAcceptedAt);
       const priorAgeAnchor = priorPublished ?? priorFirstAcceptedRetrieved;
       if ((priorPublished !== null && priorPublished > priorFirstAcceptedRetrieved)
         || !(priorFirstAcceptedRetrieved <= priorObserved && priorObserved <= priorAccepted && priorAccepted <= assessed)
@@ -456,12 +467,11 @@ function validateTrackRiskCarryover(
   if (!risk || typeof risk !== 'object' || !ISSUED_TRACK_RISK_CARRYOVERS.has(risk)) {
     throw new Error('Expected an issued track risk carryover');
   }
-  const adverseAt = risk.adverseAt;
   if (!Object.isFrozen(risk) || risk.kind !== 'resolved-suppression'
     || risk.claimIdentity !== expectedClaimIdentity || !Object.isFrozen(risk.evaluatedClaim)
     || !isResolvedDirection(risk.evaluatedClaim.direction)
     || trackClaimIdentity(risk.evaluatedClaim) !== expectedClaimIdentity
-    || !(adverseAt instanceof Date) || !Number.isFinite(adverseAt.getTime())
+    || !Number.isSafeInteger(risk.adverseAtMs)
     || typeof risk.riderCopy !== 'string' || !risk.riderCopy
     || !Array.isArray(risk.suppressedProducts) || !Object.isFrozen(risk.suppressedProducts)
     || risk.suppressedProducts.length !== CLAIM_SUPPRESSED_PRODUCTS.length
@@ -484,8 +494,7 @@ function normalizeTrackId(value: string | null): string | null {
 }
 
 function validInstant(value: Date): number {
-  if (!(value instanceof Date) || !Number.isFinite(value.getTime())) throw new Error('Invalid chronology instant');
-  return value.getTime();
+  return captureDateEpochMilliseconds(value, 'chronology instant');
 }
 
 function freezeTrack(
@@ -501,15 +510,14 @@ function freezeTrack(
     carryover, carriedForward, recoveryCount });
 }
 
-function freezeTrackRisk(evaluatedClaim: TrackClaimScope, adverseAt: Date, riderCopy: string): TrackRiskCarryover {
+function freezeTrackRisk(evaluatedClaim: TrackClaimScope, adverseAtMs: number, riderCopy: string): TrackRiskCarryover {
   const claim = freezeTrackClaim(evaluatedClaim);
-  const adverseAtMs = adverseAt.getTime();
-  if (!Number.isFinite(adverseAtMs)) throw new Error('Invalid track conflict observation instant');
+  const boundaryMs = validateEpochMilliseconds(adverseAtMs, 'track conflict observation instant');
   const risk = Object.freeze({
     kind: 'resolved-suppression' as const,
     claimIdentity: trackClaimIdentity(claim),
     evaluatedClaim: claim,
-    get adverseAt(): Date { return new Date(adverseAtMs); },
+    adverseAtMs: boundaryMs,
     riderCopy,
     suppressedProducts: CLAIM_SUPPRESSED_PRODUCTS,
   });

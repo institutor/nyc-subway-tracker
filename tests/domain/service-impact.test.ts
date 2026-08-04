@@ -54,6 +54,45 @@ const snapshot = (
 }, BASE);
 
 describe('authoritative alert currency and temporal scope', () => {
+  test('captures snapshot and active-period Date slots without invoking caller temporal methods', () => {
+    const hostile = (value: Date): Date => {
+      Object.defineProperty(value, 'getTime', {
+        value: () => { throw new Error('caller getTime must not run'); },
+      });
+      Object.defineProperty(value, 'toISOString', {
+        value: () => { throw new Error('caller toISOString must not run'); },
+      });
+      return value;
+    };
+    const classified = classifyAlertSnapshot({
+      status: 'accepted',
+      feedTimestamp: hostile(at(0)),
+      alerts: [alert({
+        declaredConsequence: 'station-closure', structuredEffect: 'NO_SERVICE',
+        activePeriods: [{ startsAt: hostile(at(-1)), endsAt: hostile(at(1)) }],
+        selectors: [{ selectorId: 'hostile-period', routeId: 'F', exactDirectionalStopId: 'A24N' }],
+        official: { headerRaw: 'Station closed', descriptionRaw: 'F trains are not stopping here.' },
+      })],
+    }, hostile(at(0)));
+    expect(evaluateServiceChanges({ snapshot: classified, claim: claim() })).toMatchObject({
+      kind: 'resolved-suppression', assessedAtMs: BASE.getTime(),
+    });
+    const directHostileSnapshot = Object.freeze({
+      ...classified,
+      alerts: Object.freeze([alert({
+        declaredConsequence: 'station-closure', structuredEffect: 'NO_SERVICE',
+        activePeriods: [{ startsAt: hostile(at(-1)), endsAt: hostile(at(1)) }],
+        selectors: [{ selectorId: 'direct-hostile-period', routeId: 'F', exactDirectionalStopId: 'A24N' }],
+        official: { headerRaw: 'Station closed', descriptionRaw: 'F trains are not stopping here.' },
+      })]),
+    });
+    expect(evaluateServiceChanges({ snapshot: directHostileSnapshot, claim: claim() })).toMatchObject({
+      kind: 'resolved-suppression', assessedAtMs: BASE.getTime(),
+    });
+    expect(() => classifyAlertSnapshot({ status: 'missing' }, new Proxy(at(0), {})))
+      .toThrow(/invalid alert assessment instant/i);
+  });
+
   test('uses feed time, keeps exactly 600 seconds current, and makes the first later instant stale', () => {
     expect(classifyAlertSnapshot({
       status: 'accepted', feedTimestamp: BASE, retrievedAt: at(601), alerts: [],
@@ -199,7 +238,7 @@ describe('authoritative alert currency and temporal scope', () => {
       recoveryUpdates: [update('old-one', 6), update('old-two', 7)],
     });
     expect(carried).toMatchObject({ kind: 'resolved-suppression', recoveryCount: 0, carriedForward: true });
-    expect(carried.carryover?.adverseAt.toISOString()).toBe(at(20).toISOString());
+    expect(carried.carryover?.adverseAtMs).toBe(at(20).getTime());
     if (!carried.carryover) throw new Error('regressed snapshot must retain risk');
 
     const earlierAssessment = classifyAlertSnapshot({
@@ -212,7 +251,7 @@ describe('authoritative alert currency and temporal scope', () => {
     const neverBackward = evaluateServiceChanges({
       snapshot: earlierAssessment, claim: claim(), priorRisk: carried.carryover,
     });
-    expect(neverBackward.carryover?.adverseAt.toISOString()).toBe(at(20).toISOString());
+    expect(neverBackward.carryover?.adverseAtMs).toBe(at(20).getTime());
 
     const clean = classifyAlertSnapshot({ status: 'accepted', feedTimestamp: at(30), alerts: [] }, at(30));
     expect(evaluateServiceChanges({ snapshot: clean, claim: claim(), priorRisk: carried.carryover,
@@ -241,12 +280,16 @@ describe('authoritative alert currency and temporal scope', () => {
     if (!hard.carryover) throw new Error('hard fixture must carry risk');
     expect(Object.isFrozen(hard.carryover)).toBe(true);
     expect(Object.isFrozen(hard.carryover.evaluatedClaim)).toBe(true);
+    const exposedAdverseAt = (hard.carryover as unknown as { readonly adverseAt?: Date }).adverseAt;
+    exposedAdverseAt?.setTime(BASE.getTime());
+    expect(hard.carryover.adverseAtMs).toBe(at(10).getTime());
+    expect(hard.carryover).not.toHaveProperty('adverseAt');
 
     const descriptorCopy = Object.freeze(Object.create(
       Object.getPrototypeOf(hard.carryover),
       Object.getOwnPropertyDescriptors(hard.carryover),
     )) as ServiceRiskCarryover;
-    const rewritten = Object.freeze({ ...hard.carryover, adverseAt: BASE }) as ServiceRiskCarryover;
+    const rewritten = Object.freeze({ ...hard.carryover, adverseAtMs: BASE.getTime() }) as ServiceRiskCarryover;
     const forgedRisks = [
       { ...hard.carryover },
       Object.freeze({ ...hard.carryover }),
@@ -729,6 +772,91 @@ describe('service consequence and deterministic disposition', () => {
       destructive('positive-suspension', 'full-suspension', 'NO_SERVICE', 'F service is suspended.'),
       destructive('positive-short-turn', 'short-turn', 'MODIFIED_SERVICE', 'F trains terminate at 14 St.', true),
       destructive('positive-reroute', 'reroute', 'MODIFIED_SERVICE', 'F trains run via E.'),
+    ];
+    for (const item of positives) {
+      expect(evaluateServiceChanges({ snapshot: snapshot([item]), claim: claim() }).kind).toBe('resolved-suppression');
+    }
+  });
+
+  test('aligns run-express and reroute positive predicates with every destructive negation form', () => {
+    const exactSelector = [{ selectorId: 'exact', routeId: 'F', exactDirectionalStopId: 'A24N' }];
+    const segmentSelector = [{ selectorId: 'segment', routeId: 'F', exactDirectionalSegmentStopIds: ['A24N'] }];
+    const proseAlert = (
+      alertId: string,
+      declaredConsequence: 'local-running-express' | 'reroute',
+      descriptionRaw: string,
+    ): ServiceAlertEvidence => alert({
+      alertId,
+      declaredConsequence,
+      structuredEffect: 'MODIFIED_SERVICE',
+      selectors: declaredConsequence === 'local-running-express' ? segmentSelector : exactSelector,
+      official: { headerRaw: 'Service update', descriptionRaw },
+    });
+
+    const negated = [
+      ['express-progressive', 'local-running-express', 'F trains are not running express.'],
+      ['express-modal-will', 'local-running-express', 'F trains WILL\u00a0NOT\u2014RUN EXPRESS.'],
+      ['express-modal-do', 'local-running-express', 'F trains do not run express.'],
+      ['express-never', 'local-running-express', 'F trains never run express.'],
+      ['express-without', 'local-running-express', 'F trains continue without running express.'],
+      ['bypass-never', 'local-running-express', 'F trains never bypass 14 St.'],
+      ['bypass-without', 'local-running-express', 'F trains continue without bypassing 14 St.'],
+      ['reroute-progressive', 'reroute', 'F trains are not being rerouted.'],
+      ['reroute-modal-will', 'reroute', 'F trains will not reroute.'],
+      ['reroute-modal-do', 'reroute', 'F trains do not reroute.'],
+      ['reroute-never', 'reroute', 'F trains never reroute.'],
+      ['reroute-without', 'reroute', 'F trains continue without rerouting.'],
+      ['on-progressive', 'reroute', 'F trains are not running on the E line.'],
+      ['on-modal-will', 'reroute', 'F trains will not run on the E line.'],
+      ['on-modal-do', 'reroute', 'F trains do not run on the E line.'],
+      ['on-never', 'reroute', 'F trains never run on the E line.'],
+      ['on-without', 'reroute', 'F trains continue without running on the E line.'],
+      ['via-progressive', 'reroute', 'F trains are not running via E.'],
+      ['via-modal', 'reroute', 'F trains will not run via E.'],
+      ['via-never', 'reroute', 'F trains never run via E.'],
+      ['via-without', 'reroute', 'F trains continue without running via E.'],
+      ['travel-via-progressive', 'reroute', 'F trains are not traveling via E.'],
+      ['travel-via-modal', 'reroute', 'F trains will not travel via E.'],
+      ['travel-via-never', 'reroute', 'F trains never travel via E.'],
+      ['travel-via-without', 'reroute', 'F trains continue without traveling via E.'],
+    ] as const;
+    for (const [alertId, declaredConsequence, descriptionRaw] of negated) {
+      expect(evaluateServiceChanges({
+        snapshot: snapshot([proseAlert(alertId, declaredConsequence, descriptionRaw)]),
+        claim: claim(),
+      }), alertId).toMatchObject({ kind: 'quarantine-or-limitation', disposition: 'quarantined' });
+    }
+
+    const positives: ServiceAlertEvidence[] = [
+      proseAlert('express-progressive-positive', 'local-running-express', 'F trains are running express.'),
+      proseAlert('express-modal-positive', 'local-running-express', 'F trains will run express.'),
+      proseAlert('running-on-positive', 'reroute', 'F trains are running on the E line.'),
+      proseAlert('via-positive', 'reroute', 'F trains will run via E.'),
+      proseAlert('reroutes-positive', 'reroute', 'F trains reroutes over the E line.'),
+      alert({
+        alertId: 'bypass-positive', declaredConsequence: 'local-running-express', structuredEffect: 'MODIFIED_SERVICE',
+        selectors: segmentSelector,
+        official: { headerRaw: 'Service update', descriptionRaw: 'F trains bypass 14 St.' },
+      }),
+      alert({
+        alertId: 'not-stop-positive', declaredConsequence: 'station-closure', structuredEffect: 'NO_SERVICE',
+        selectors: exactSelector,
+        official: { headerRaw: 'Service update', descriptionRaw: 'F trains will not stop at 14 St.' },
+      }),
+      alert({
+        alertId: 'closure-positive', declaredConsequence: 'station-closure', structuredEffect: 'NO_SERVICE',
+        selectors: exactSelector,
+        official: { headerRaw: 'Service update', descriptionRaw: 'Station is closed.' },
+      }),
+      alert({
+        alertId: 'suspension-positive', declaredConsequence: 'full-suspension', structuredEffect: 'NO_SERVICE',
+        official: { headerRaw: 'Service update', descriptionRaw: 'F service is suspended.' },
+      }),
+      alert({
+        alertId: 'short-turn-positive', declaredConsequence: 'short-turn', structuredEffect: 'MODIFIED_SERVICE',
+        selectors: segmentSelector,
+        official: { headerRaw: 'Service update', descriptionRaw: 'F trains terminate at 14 St.' },
+      }),
     ];
     for (const item of positives) {
       expect(evaluateServiceChanges({ snapshot: snapshot([item]), claim: claim() }).kind).toBe('resolved-suppression');

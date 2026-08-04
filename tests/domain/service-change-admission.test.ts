@@ -65,7 +65,8 @@ const decision = (alerts: readonly ServiceAlertEvidence[]): ServiceChangeDecisio
 });
 
 type EpochBoundDecision = ServiceChangeDecision & {
-  readonly assessedAt: Date;
+  readonly assessedAtMs?: number;
+  readonly assessedAt?: Date;
   readonly alertContextIdentity: string;
 };
 
@@ -74,11 +75,13 @@ const scopeFor = (
   overrides: Partial<ArrivalBoardScope> = {},
 ): ArrivalBoardScope => {
   const epoch = gate as EpochBoundDecision;
-  const assessedAt = epoch.assessedAt instanceof Date ? epoch.assessedAt : BASE;
+  const assessedAtMs = typeof epoch.assessedAtMs === 'number'
+    ? epoch.assessedAtMs
+    : epoch.assessedAt instanceof Date ? Date.prototype.getTime.call(epoch.assessedAt) : BASE.getTime();
   return {
     ...scope,
-    comparisonAt: new Date(assessedAt),
-    serviceAssessmentAt: new Date(assessedAt),
+    comparisonAt: new Date(assessedAtMs),
+    serviceAssessmentAt: new Date(assessedAtMs),
     serviceAlertContextIdentity: epoch.alertContextIdentity ?? 'legacy-context-without-epoch',
     ...overrides,
   } as ArrivalBoardScope;
@@ -290,15 +293,13 @@ describe('service-change arrival admission seam', () => {
       status: 'accepted', feedTimestamp: at(20), alerts: [],
     }, at(20)));
     const currentEpoch = currentEligible as EpochBoundDecision;
-    expect(currentEpoch.assessedAt).toBeInstanceOf(Date);
+    expect(currentEpoch.assessedAtMs).toBe(at(10).getTime());
+    expect(currentEpoch).not.toHaveProperty('assessedAt');
     expect(currentEpoch.alertContextIdentity).toEqual(expect.any(String));
     expect(currentEpoch.alertContextIdentity.length).toBeGreaterThan(0);
     expect((sameEpochEligible as EpochBoundDecision).alertContextIdentity).toBe(currentEpoch.alertContextIdentity);
     expect((closure as EpochBoundDecision).alertContextIdentity).not.toBe(currentEpoch.alertContextIdentity);
     expect((missing as EpochBoundDecision).alertContextIdentity).not.toBe(currentEpoch.alertContextIdentity);
-    const exposedAssessment = currentEpoch.assessedAt;
-    exposedAssessment.setTime(BASE.getTime());
-    expect(currentEpoch.assessedAt.toISOString()).toBe(at(10).toISOString());
     const currentBoard = scopeFor(currentEligible);
     const closureBoard = scopeFor(closure);
 
@@ -328,6 +329,70 @@ describe('service-change arrival admission seam', () => {
       kind: 'rejected', failedGate: 'service', disposition: 'service-assessment-mismatch',
       boardTreatment: 'quarantine-or-limitation',
     });
+  });
+
+  test('captures board epochs intrinsically once and rejects temporal TOCTOU and non-Date wrappers', () => {
+    const evaluate = (seconds: number) => evaluateServiceChanges({
+      snapshot: classifyAlertSnapshot({ status: 'accepted', feedTimestamp: at(seconds), alerts: [] }, at(seconds)),
+      claim: {
+        claimId: 'claim-f-a24n', routeId: 'F', exactDirectionalStopId: 'A24N', constituentStopId: 'A24',
+        direction: 'northbound', tripId: 'trip-f-1', trainId: 'f-train-1',
+      },
+    });
+    const oldEligible = evaluate(0);
+    const currentEligible = evaluate(10);
+    const futureEligible = evaluate(20);
+    const currentBoard = scopeFor(currentEligible);
+
+    class StatefulDate extends Date {
+      #reads = 0;
+      override getTime(): number {
+        this.#reads += 1;
+        return this.#reads < 3 ? at(10).getTime() : BASE.getTime();
+      }
+    }
+    const statefulEpoch = new StatefulDate(at(10));
+    expect(admitArrivalCandidate(candidate({ serviceChangeGate: oldEligible }), {
+      ...currentBoard,
+      serviceAssessmentAt: statefulEpoch,
+    })).toMatchObject({
+      kind: 'rejected', failedGate: 'service', disposition: 'service-assessment-mismatch',
+      boardTreatment: 'quarantine-or-limitation',
+    });
+
+    const overriddenComparison = at(10);
+    Object.defineProperty(overriddenComparison, 'getTime', {
+      value: () => { throw new Error('caller getTime must not run'); },
+    });
+    const overriddenAssessment = at(10);
+    Object.defineProperty(overriddenAssessment, 'getTime', {
+      value: () => { throw new Error('caller getTime must not run'); },
+    });
+    expect(admitArrivalCandidate(candidate({ serviceChangeGate: currentEligible }), {
+      ...currentBoard,
+      comparisonAt: overriddenComparison,
+      serviceAssessmentAt: overriddenAssessment,
+    })).toMatchObject({ kind: 'admitted', confidence: 'live' });
+
+    for (const serviceAssessmentAt of [
+      new Proxy(at(10), {}),
+      new Date(Number.NaN),
+      { getTime: () => at(10).getTime() } as Date,
+    ]) {
+      expect(() => admitArrivalCandidate(candidate({ serviceChangeGate: currentEligible }), {
+        ...currentBoard,
+        serviceAssessmentAt,
+      })).toThrow(/invalid board service assessment instant/i);
+    }
+
+    expect(admitArrivalCandidate(candidate({ serviceChangeGate: currentEligible }), currentBoard))
+      .toMatchObject({ kind: 'admitted', confidence: 'live' });
+    expect(admitArrivalCandidate(candidate({ serviceChangeGate: futureEligible }), currentBoard))
+      .toMatchObject({ kind: 'rejected', failedGate: 'service', disposition: 'service-assessment-mismatch' });
+    expect(admitArrivalCandidate(candidate({ serviceChangeGate: currentEligible }), {
+      ...currentBoard,
+      serviceAlertContextIdentity: 'different-alert-context',
+    })).toMatchObject({ kind: 'rejected', failedGate: 'service', disposition: 'service-assessment-mismatch' });
   });
 
   test('binds a service decision to the exact candidate claim before freshness or identity', () => {

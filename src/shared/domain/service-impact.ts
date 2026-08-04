@@ -13,6 +13,7 @@ import {
   type ServiceAlertEvidence,
   type ServiceClaimScope,
 } from './alert-scope';
+import { captureDateEpochMilliseconds, validateEpochMilliseconds } from './temporal';
 
 export const SERVICE_CHANGE_UNAVAILABLE_COPY = 'Service change—arrival information is unavailable for this service.';
 export const SERVICE_CHANGE_LIMITATION_COPY = 'Service change details are being verified.';
@@ -63,7 +64,7 @@ export interface ServiceRiskCarryover {
   readonly kind: 'resolved-suppression' | 'arrival-claim-unavailable';
   readonly claimIdentity: string;
   readonly evaluatedClaim: ServiceClaimScope;
-  readonly adverseAt: Date;
+  readonly adverseAtMs: number;
   readonly riderCopy: string;
   readonly officialDetails: readonly ResolvedOfficialAlertDetails[];
   readonly rawOfficialAudit: readonly RawOfficialAlertAudit[];
@@ -86,7 +87,7 @@ export interface ServiceChangeDecision {
   readonly carriedForward: boolean;
   readonly recoveryCount: 0 | 1 | 2;
   readonly contextKind: AlertSnapshotDecision['kind'];
-  readonly assessedAt: Date;
+  readonly assessedAtMs: number;
   readonly alertContextIdentity: string;
 }
 
@@ -108,6 +109,11 @@ interface CanonicalAlert {
   readonly identityConflict: boolean;
 }
 
+interface CapturedAlertEpoch {
+  readonly assessedAtMs: number;
+  readonly feedTimestampMs: number | null;
+}
+
 const DESTRUCTIVE = new Set<ServiceAlertEvidence['declaredConsequence']>([
   'local-running-express',
   'reroute',
@@ -123,7 +129,8 @@ const ISSUED_SERVICE_CHANGE_DECISIONS = new WeakSet<object>();
 const ISSUED_SERVICE_RISK_CARRYOVERS = new WeakSet<object>();
 
 export function evaluateServiceChanges(input: ServiceChangeEvaluationInput): ServiceChangeDecision {
-  validateEvaluationInput(input);
+  const epochs = validateEvaluationInput(input);
+  const assessmentAt = new Date(epochs.assessedAtMs);
   const evaluatedClaim = freezeClaim(input.claim);
   const claimIdentity = serviceClaimIdentity(evaluatedClaim);
   const priorRiskBinding = bindPriorServiceRisk(input.priorRisk, claimIdentity);
@@ -132,16 +139,16 @@ export function evaluateServiceChanges(input: ServiceChangeEvaluationInput): Ser
   if (input.snapshot.kind !== 'current') {
     if (priorRiskBinding.kind === 'invalid') {
       return freezeDecision('quarantine-or-limitation', 'quarantined', evaluatedClaim, SERVICE_CHANGE_LIMITATION_COPY,
-        [], [], [], [], [], null, false, 0, input.snapshot);
+        [], [], [], [], [], null, false, 0, input.snapshot, epochs);
     }
-    if (priorRisk) return carryForward(priorRisk, evaluatedClaim, input.snapshot, 0);
+    if (priorRisk) return carryForward(priorRisk, evaluatedClaim, input.snapshot, epochs, 0);
     return freezeDecision('eligible-context', 'eligible', evaluatedClaim, null, [], [], [], [], [], null, false, 0,
-      input.snapshot);
+      input.snapshot, epochs);
   }
 
   const alerts = canonicalAlerts(input.snapshot.alerts);
   const evaluated = alerts.map(({ alert, identityConflict }) =>
-    evaluateAlert(alert, evaluatedClaim, input.snapshot.assessedAt, identityConflict));
+    evaluateAlert(alert, evaluatedClaim, assessmentAt, identityConflict));
   const related = evaluated.filter((item) => item.scope.kind !== 'unrelated');
   const contextual = evaluated.filter((item) => item.scope.kind === 'unrelated');
   const officialDetails = canonicalOfficial(related.map((item) => item.scope.official));
@@ -154,64 +161,65 @@ export function evaluateServiceChanges(input: ServiceChangeEvaluationInput): Ser
   const hard = evaluated.filter((item) => item.assessment === 'resolved-hard-risk');
   const unavailable = evaluated.filter((item) => item.assessment === 'high-impact-unresolved');
   const quarantined = evaluated.filter((item) => item.assessment === 'quarantined');
-  const adverseAt = input.snapshot.assessedAt;
+  const adverseAtMs = epochs.assessedAtMs;
 
-  const feedTimestamp = input.snapshot.feedTimestamp;
-  if (priorRisk && feedTimestamp && feedTimestamp.getTime() <= priorRisk.adverseAt.getTime()) {
-    const reset = resetRiskBoundary(priorRisk, evaluatedClaim, input.snapshot.assessedAt);
-    return carryForward(reset, evaluatedClaim, input.snapshot, 0, contextDetails);
+  if (priorRisk && epochs.feedTimestampMs !== null && epochs.feedTimestampMs <= priorRisk.adverseAtMs) {
+    const reset = resetRiskBoundary(priorRisk, evaluatedClaim, adverseAtMs);
+    return carryForward(reset, evaluatedClaim, input.snapshot, epochs, 0, contextDetails);
   }
 
   if (hard.length > 0) {
     const riderCopy = hard.map((item) => item.scope.official.header).filter(Boolean).sort(compareText)[0]
       ?? 'Service change—this train is not serving this stop.';
     return adverseDecision('resolved-suppression', 'resolved-ineligible', evaluatedClaim, riderCopy, officialDetails,
-      contextDetails, rawOfficialAudit, auditEvidence, adverseAt, input.snapshot);
+      contextDetails, rawOfficialAudit, auditEvidence, adverseAtMs, input.snapshot, epochs);
   }
 
   if (priorRiskBinding.kind === 'invalid') {
     if (unavailable.length > 0) {
       return adverseDecision('arrival-claim-unavailable', 'high-impact-unresolved', evaluatedClaim,
-        SERVICE_CHANGE_UNAVAILABLE_COPY, officialDetails, contextDetails, rawOfficialAudit, auditEvidence, adverseAt,
-        input.snapshot);
+        SERVICE_CHANGE_UNAVAILABLE_COPY, officialDetails, contextDetails, rawOfficialAudit, auditEvidence, adverseAtMs,
+        input.snapshot, epochs);
     }
     return freezeDecision('quarantine-or-limitation', 'quarantined', evaluatedClaim, SERVICE_CHANGE_LIMITATION_COPY,
-      officialDetails, contextDetails, rawOfficialAudit, auditEvidence, [], null, false, 0, input.snapshot);
+      officialDetails, contextDetails, rawOfficialAudit, auditEvidence, [], null, false, 0, input.snapshot, epochs);
   }
 
   // A current ambiguity cannot clear a prior hard veto. It starts a new recovery
   // boundary so updates captured before the contradiction cannot be donated later.
   if (priorRisk?.kind === 'resolved-suppression' && (unavailable.length > 0 || quarantined.length > 0)) {
-    const reset = resetRiskBoundary(priorRisk, evaluatedClaim, adverseAt);
-    return carryForward(reset, evaluatedClaim, input.snapshot, 0, contextDetails);
+    const reset = resetRiskBoundary(priorRisk, evaluatedClaim, adverseAtMs);
+    return carryForward(reset, evaluatedClaim, input.snapshot, epochs, 0, contextDetails);
   }
 
   if (priorRisk?.kind === 'resolved-suppression') {
-    return recoverOrCarry(priorRisk, evaluatedClaim, input, officialDetails, contextDetails, rawOfficialAudit, auditEvidence);
+    return recoverOrCarry(priorRisk, evaluatedClaim, input, epochs, officialDetails, contextDetails, rawOfficialAudit,
+      auditEvidence);
   }
 
   if (unavailable.length > 0) {
     return adverseDecision('arrival-claim-unavailable', 'high-impact-unresolved', evaluatedClaim,
-      SERVICE_CHANGE_UNAVAILABLE_COPY, officialDetails, contextDetails, rawOfficialAudit, auditEvidence, adverseAt,
-      input.snapshot);
+      SERVICE_CHANGE_UNAVAILABLE_COPY, officialDetails, contextDetails, rawOfficialAudit, auditEvidence, adverseAtMs,
+      input.snapshot, epochs);
   }
 
   if (priorRisk?.kind === 'arrival-claim-unavailable' && quarantined.length > 0) {
-    const reset = resetRiskBoundary(priorRisk, evaluatedClaim, adverseAt);
-    return carryForward(reset, evaluatedClaim, input.snapshot, 0, contextDetails);
+    const reset = resetRiskBoundary(priorRisk, evaluatedClaim, adverseAtMs);
+    return carryForward(reset, evaluatedClaim, input.snapshot, epochs, 0, contextDetails);
   }
 
   if (priorRisk?.kind === 'arrival-claim-unavailable') {
-    return recoverOrCarry(priorRisk, evaluatedClaim, input, officialDetails, contextDetails, rawOfficialAudit, auditEvidence);
+    return recoverOrCarry(priorRisk, evaluatedClaim, input, epochs, officialDetails, contextDetails, rawOfficialAudit,
+      auditEvidence);
   }
 
   if (quarantined.length > 0) {
     return freezeDecision('quarantine-or-limitation', 'quarantined', evaluatedClaim, SERVICE_CHANGE_LIMITATION_COPY,
-      officialDetails, contextDetails, rawOfficialAudit, auditEvidence, [], null, false, 0, input.snapshot);
+      officialDetails, contextDetails, rawOfficialAudit, auditEvidence, [], null, false, 0, input.snapshot, epochs);
   }
 
   return freezeDecision('eligible-context', 'eligible', evaluatedClaim, null, officialDetails, contextDetails,
-    rawOfficialAudit, auditEvidence, [], null, false, 0, input.snapshot);
+    rawOfficialAudit, auditEvidence, [], null, false, 0, input.snapshot, epochs);
 }
 
 export function serviceChangeClaimDisposition(decision: ServiceChangeDecision): ServiceChangeGateDisposition {
@@ -236,7 +244,7 @@ export function validateServiceChangeDecision(decision: ServiceChangeDecision): 
     || !Array.isArray(decision.suppressedProducts) || !Object.isFrozen(decision.suppressedProducts)
     || typeof decision.carriedForward !== 'boolean' || ![0, 1, 2].includes(decision.recoveryCount)
     || !['current', 'stale', 'missing', 'failed', 'quarantined'].includes(decision.contextKind)
-    || !(decision.assessedAt instanceof Date) || !Number.isFinite(decision.assessedAt.getTime())
+    || !Number.isSafeInteger(decision.assessedAtMs)
     || typeof decision.alertContextIdentity !== 'string' || !decision.alertContextIdentity) {
     throw new Error('Invalid issued service-change decision');
   }
@@ -285,31 +293,38 @@ function hasExactSuppressedProducts(products: readonly ClaimSuppressedProduct[])
 }
 
 /** Shared by service and track hard-risk recovery. */
-export function countQualifyingRecovery(updates: readonly ServiceRecoveryUpdate[], after?: Date, through?: Date): 0 | 1 | 2 {
+export function countQualifyingRecovery(
+  updates: readonly ServiceRecoveryUpdate[],
+  after?: Date | number,
+  through?: Date | number,
+): 0 | 1 | 2 {
   if (!Array.isArray(updates)) throw new Error('Service recovery updates must be an array');
-  const afterMs = after === undefined ? Number.NEGATIVE_INFINITY : validDate(after, 'adverse service-change instant');
-  const throughMs = through === undefined ? Number.POSITIVE_INFINITY : validDate(through, 'recovery assessment instant');
+  const afterMs = after === undefined ? Number.NEGATIVE_INFINITY : captureRecoveryBoundary(after, 'adverse service-change instant');
+  const throughMs = through === undefined ? Number.POSITIVE_INFINITY
+    : captureRecoveryBoundary(through, 'recovery assessment instant');
   if (throughMs < afterMs) throw new Error('Recovery assessment precedes adverse service-change evidence');
 
-  const groups = new Map<string, Map<string, ServiceRecoveryUpdate>>();
+  const groups = new Map<string, Map<string, { readonly update: ServiceRecoveryUpdate; readonly timestampMs: number }>>();
   for (const update of updates) {
-    validateRecoveryUpdate(update);
+    const timestampMs = validateRecoveryUpdate(update);
     const id = normalizeCanonicalIdentity(update.evidenceId);
-    const variants = groups.get(id) ?? new Map<string, ServiceRecoveryUpdate>();
-    variants.set(recoverySignature(update), update);
+    const variants = groups.get(id) ?? new Map<string, { readonly update: ServiceRecoveryUpdate; readonly timestampMs: number }>();
+    variants.set(recoverySignature(update, timestampMs), { update, timestampMs });
     groups.set(id, variants);
   }
   if ([...groups.values()].some((variants) => variants.size > 1)) return 0;
 
   const ordered = [...groups.entries()]
-    .map(([id, variants]) => ({ id, update: variants.values().next().value as ServiceRecoveryUpdate }))
-    .filter(({ update }) => update.sourceTimestamp.getTime() > afterMs && update.sourceTimestamp.getTime() <= throughMs)
-    .sort((left, right) => left.update.sourceTimestamp.getTime() - right.update.sourceTimestamp.getTime()
+    .map(([id, variants]) => ({ id, captured: variants.values().next().value as {
+      readonly update: ServiceRecoveryUpdate; readonly timestampMs: number;
+    } }))
+    .filter(({ captured }) => captured.timestampMs > afterMs && captured.timestampMs <= throughMs)
+    .sort((left, right) => left.captured.timestampMs - right.captured.timestampMs
       || compareText(left.id, right.id));
   let count: 0 | 1 | 2 = 0;
   let priorTimestamp = afterMs;
-  for (const { update } of ordered) {
-    const timestamp = update.sourceTimestamp.getTime();
+  for (const { captured: { update, timestampMs } } of ordered) {
+    const timestamp = timestampMs;
     const strictlyNew = timestamp > priorTimestamp;
     const qualifies = strictlyNew && update.currentFeed && update.coherentIdentity && update.exactDirectionalStop
       && update.coherentPath && update.noCurrentVeto;
@@ -362,7 +377,7 @@ function destructiveFieldsAgree(alert: ServiceAlertEvidence, official: ResolvedO
         && /\b(?:trains?\s+)?(?:run|runs|running)\s+express\b|\bnot\s+stopping\b|\bskip(?:s|ped|ping)?\b|\bbypass(?:es|ed|ing)?\b/.test(text);
     case 'reroute':
       return alert.structuredEffect === 'MODIFIED_SERVICE'
-        && /\brerout(?:e|ed|ing)\b|\brunn?ing\s+on\b|\brun(?:s|ning)?\s+via\b|\bvia\s+[a-z0-9]/.test(text);
+        && /\brerout(?:e|es|ed|ing)\b|\brun(?:s|ning)?\s+on\b|\brun(?:s|ning)?\s+via\b/.test(text);
     case 'short-turn':
       return alert.structuredEffect === 'MODIFIED_SERVICE'
         && /\bterminat(?:e|es|ed|ing)\b|\blast\s+stop\b|\bend(?:s|ed|ing)?\s+early\b/.test(text);
@@ -379,12 +394,12 @@ function destructiveFieldsAgree(alert: ServiceAlertEvidence, official: ResolvedO
 }
 
 function contradictsDestructiveEffect(text: string): boolean {
-  const destructivePredicate = '(?:skip(?:s|ped|ping)?|bypass(?:es|ed|ing)?|terminat(?:e|es|ed|ing)|end(?:s|ed|ing)? early|rerout(?:e|es|ed|ing)|run(?:s|ning)? via|clos(?:e|es|ed|ing)|suspend(?:s|ed|ing)?)';
+  const destructivePredicate = '(?:skip(?:s|ped|ping)?|bypass(?:es|ed|ing)?|terminat(?:e|es|ed|ing)|end(?:s|ed|ing)? early|rerout(?:e|es|ed|ing)|run(?:s|ning)? (?:express|on|via)|clos(?:e|es|ed|ing)|suspend(?:s|ed|ing)?)';
   const auxiliary = '(?:do|does|did|will|would|can|could|shall|should|may|might|is|are|was|were|has|have|had)';
   const auxiliaryNegation = new RegExp(`\\b${auxiliary}\\s+not\\s+(?:(?:be|being)\\s+)?${destructivePredicate}\\b`);
   const directNegation = new RegExp(`\\bnot\\s+(?:(?:be|being)\\s+)?${destructivePredicate}\\b`);
   const neverNegation = new RegExp(`\\bnever\\s+(?:(?:be|being)\\s+)?${destructivePredicate}\\b`);
-  const withoutNegation = /\bwithout\s+(?:(?:any|ever)\s+)?(?:skipping|bypassing|terminating|ending\s+early|running\s+via|rerouting|closing|suspending|a\s+(?:reroute|closure|suspension))\b/;
+  const withoutNegation = /\bwithout\s+(?:(?:any|ever)\s+)?(?:skipping|bypassing|terminating|ending\s+early|running\s+(?:express|on|via)|rerouting|closing|suspending|a\s+(?:reroute|closure|suspension))\b/;
   const noPredicate = /\bno\s+(?:(?:scheduled\s+)?stops?\s+(?:(?:are|were|will|would|can|could|shall|should|may|might)\s+(?:be\s+)?)?(?:skipped|bypassed)|bypasses|(?:early\s+)?terminations?|reroutes?|station\s+closures?|closures?|service\s+suspensions?|suspensions?)\b/;
   return auxiliaryNegation.test(text) || directNegation.test(text) || neverNegation.test(text)
     || withoutNegation.test(text) || noPredicate.test(text)
@@ -476,7 +491,11 @@ function alertSignature(alert: ServiceAlertEvidence): string {
 
 function dateSignature(value: Date | null | undefined): string {
   if (value == null) return '';
-  return Number.isFinite(value.getTime()) ? value.toISOString() : 'invalid-date';
+  try {
+    return new Date(captureDateEpochMilliseconds(value, 'alert period signature instant')).toISOString();
+  } catch {
+    return 'invalid-date';
+  }
 }
 
 function canonicalOfficial(details: readonly ResolvedOfficialAlertDetails[]): readonly ResolvedOfficialAlertDetails[] {
@@ -530,7 +549,7 @@ function stableAuditFields(fields: Readonly<Record<string, unknown>> | undefined
   return stableValue(fields);
 }
 
-function alertSnapshotIdentity(snapshot: AlertSnapshotDecision): string {
+function alertSnapshotIdentity(snapshot: AlertSnapshotDecision, feedTimestampMs: number | null): string {
   const evidence = snapshot.alerts.map((item) => encodeCanonicalStringTuple([
     normalizeBoundedIdentity(item.alertId, 'alert'),
     alertSignature(item),
@@ -538,7 +557,7 @@ function alertSnapshotIdentity(snapshot: AlertSnapshotDecision): string {
   ])).sort(compareText);
   return encodeCanonicalStringTuple([
     snapshot.kind,
-    snapshot.feedTimestamp?.toISOString() ?? null,
+    feedTimestampMs === null ? null : new Date(feedTimestampMs).toISOString(),
     ...evidence,
   ]);
 }
@@ -582,70 +601,74 @@ function adverseDecision(
   contextDetails: readonly ServiceContextDetail[],
   rawOfficialAudit: readonly RawOfficialAlertAudit[],
   auditEvidence: readonly ServiceAuditEvidence[],
-  adverseAt: Date,
+  adverseAtMs: number,
   snapshot: AlertSnapshotDecision,
+  epochs: CapturedAlertEpoch,
 ): ServiceChangeDecision {
-  const carryover = freezeRisk(kind, evaluatedClaim, adverseAt, riderCopy, officialDetails, rawOfficialAudit, auditEvidence);
+  const carryover = freezeRisk(kind, evaluatedClaim, adverseAtMs, riderCopy, officialDetails, rawOfficialAudit, auditEvidence);
   return freezeDecision(kind, disposition, evaluatedClaim, riderCopy, officialDetails, contextDetails, rawOfficialAudit,
-    auditEvidence, CLAIM_SUPPRESSED_PRODUCTS, carryover, false, 0, snapshot);
+    auditEvidence, CLAIM_SUPPRESSED_PRODUCTS, carryover, false, 0, snapshot, epochs);
 }
 
 function recoverOrCarry(
   risk: ServiceRiskCarryover,
   evaluatedClaim: ServiceClaimScope,
   input: ServiceChangeEvaluationInput,
+  epochs: CapturedAlertEpoch,
   officialDetails: readonly ResolvedOfficialAlertDetails[],
   contextDetails: readonly ServiceContextDetail[],
   rawOfficialAudit: readonly RawOfficialAlertAudit[],
   auditEvidence: readonly ServiceAuditEvidence[],
 ): ServiceChangeDecision {
-  if (input.snapshot.assessedAt.getTime() <= risk.adverseAt.getTime()) {
-    return carryForward(risk, evaluatedClaim, input.snapshot, 0, contextDetails);
+  if (epochs.assessedAtMs <= risk.adverseAtMs) {
+    return carryForward(risk, evaluatedClaim, input.snapshot, epochs, 0, contextDetails);
   }
-  const recoveryCount = countQualifyingRecovery(input.recoveryUpdates ?? [], risk.adverseAt, input.snapshot.assessedAt);
-  if (recoveryCount < 2) return carryForward(risk, evaluatedClaim, input.snapshot, recoveryCount, contextDetails);
+  const recoveryCount = countQualifyingRecovery(input.recoveryUpdates ?? [], risk.adverseAtMs, epochs.assessedAtMs);
+  if (recoveryCount < 2) return carryForward(risk, evaluatedClaim, input.snapshot, epochs, recoveryCount, contextDetails);
   return freezeDecision('eligible-context', 'eligible', evaluatedClaim, null, officialDetails, contextDetails,
-    rawOfficialAudit, auditEvidence, [], null, false, 2, input.snapshot);
+    rawOfficialAudit, auditEvidence, [], null, false, 2, input.snapshot, epochs);
 }
 
 function carryForward(
   risk: ServiceRiskCarryover,
   evaluatedClaim: ServiceClaimScope,
   snapshot: AlertSnapshotDecision,
+  epochs: CapturedAlertEpoch,
   recoveryCount: 0 | 1 | 2,
   contextDetails: readonly ServiceContextDetail[] = [],
 ): ServiceChangeDecision {
   const disposition = risk.kind === 'resolved-suppression' ? 'resolved-ineligible' : 'high-impact-unresolved';
   return freezeDecision(risk.kind, disposition, evaluatedClaim, risk.riderCopy, risk.officialDetails, contextDetails,
-    risk.rawOfficialAudit, risk.auditEvidence, risk.suppressedProducts, risk, true, recoveryCount, snapshot);
+    risk.rawOfficialAudit, risk.auditEvidence, risk.suppressedProducts, risk, true, recoveryCount, snapshot, epochs);
 }
 
 function resetRiskBoundary(
   risk: ServiceRiskCarryover,
   evaluatedClaim: ServiceClaimScope,
-  adverseAt: Date,
+  adverseAtMs: number,
 ): ServiceRiskCarryover {
-  const monotonicAdverseAt = new Date(Math.max(risk.adverseAt.getTime(), validDate(adverseAt, 'adverse service-change instant')));
-  return freezeRisk(risk.kind, evaluatedClaim, monotonicAdverseAt, risk.riderCopy, risk.officialDetails, risk.rawOfficialAudit,
+  const monotonicAdverseAtMs = Math.max(risk.adverseAtMs,
+    validateEpochMilliseconds(adverseAtMs, 'adverse service-change instant'));
+  return freezeRisk(risk.kind, evaluatedClaim, monotonicAdverseAtMs, risk.riderCopy, risk.officialDetails, risk.rawOfficialAudit,
     risk.auditEvidence);
 }
 
 function freezeRisk(
   kind: ServiceRiskCarryover['kind'],
   evaluatedClaim: ServiceClaimScope,
-  adverseAt: Date,
+  adverseAtMs: number,
   riderCopy: string,
   officialDetails: readonly ResolvedOfficialAlertDetails[],
   rawOfficialAudit: readonly RawOfficialAlertAudit[],
   auditEvidence: readonly ServiceAuditEvidence[],
 ): ServiceRiskCarryover {
   const claim = freezeClaim(evaluatedClaim);
-  const adverseAtMs = validDate(adverseAt, 'adverse service-change instant');
+  const boundaryMs = validateEpochMilliseconds(adverseAtMs, 'adverse service-change instant');
   const risk = Object.freeze({
     kind,
     claimIdentity: serviceClaimIdentity(claim),
     evaluatedClaim: claim,
-    get adverseAt(): Date { return new Date(adverseAtMs); },
+    adverseAtMs: boundaryMs,
     riderCopy,
     officialDetails: Object.freeze([...officialDetails]),
     rawOfficialAudit: Object.freeze([...rawOfficialAudit]),
@@ -684,7 +707,7 @@ function validateServiceRiskCarryover(
   if (!Object.isFrozen(risk) || !['resolved-suppression', 'arrival-claim-unavailable'].includes(risk.kind)
     || risk.claimIdentity !== expectedClaimIdentity || !isExactClaim(risk.evaluatedClaim)
     || !Object.isFrozen(risk.evaluatedClaim) || serviceClaimIdentity(risk.evaluatedClaim) !== expectedClaimIdentity
-    || !(risk.adverseAt instanceof Date) || !Number.isFinite(risk.adverseAt.getTime())
+    || !Number.isSafeInteger(risk.adverseAtMs)
     || typeof risk.riderCopy !== 'string' || !risk.riderCopy
     || !Array.isArray(risk.officialDetails) || !Object.isFrozen(risk.officialDetails)
     || !Array.isArray(risk.rawOfficialAudit) || !Object.isFrozen(risk.rawOfficialAudit)
@@ -709,10 +732,11 @@ function freezeDecision(
   carriedForward: boolean,
   recoveryCount: 0 | 1 | 2,
   snapshot: AlertSnapshotDecision,
+  epochs: CapturedAlertEpoch,
 ): ServiceChangeDecision {
   const claim = freezeClaim(evaluatedClaim);
-  const assessedAtMs = validDate(snapshot.assessedAt, 'service-change assessment instant');
-  const alertContextIdentity = alertSnapshotIdentity(snapshot);
+  const assessedAtMs = validateEpochMilliseconds(epochs.assessedAtMs, 'service-change assessment instant');
+  const alertContextIdentity = alertSnapshotIdentity(snapshot, epochs.feedTimestampMs);
   const decision = Object.freeze({
     kind,
     disposition,
@@ -728,7 +752,7 @@ function freezeDecision(
     carriedForward,
     recoveryCount,
     contextKind: snapshot.kind,
-    get assessedAt(): Date { return new Date(assessedAtMs); },
+    assessedAtMs,
     alertContextIdentity,
   });
   ISSUED_SERVICE_CHANGE_DECISIONS.add(decision);
@@ -759,17 +783,17 @@ function serviceClaimIdentity(claim: ServiceClaimScope): string {
   ], 'service claim');
 }
 
-function validateEvaluationInput(input: ServiceChangeEvaluationInput): void {
+function validateEvaluationInput(input: ServiceChangeEvaluationInput): CapturedAlertEpoch {
   if (!input || typeof input !== 'object' || !input.snapshot || !input.claim) throw new Error('Service-change evaluation input is required');
+  const assessedAt = input.snapshot.assessedAt;
+  const feedTimestamp = input.snapshot.feedTimestamp;
   if (!['current', 'stale', 'missing', 'failed', 'quarantined'].includes(input.snapshot.kind)
-    || !Array.isArray(input.snapshot.alerts) || !(input.snapshot.assessedAt instanceof Date)
-    || !Number.isFinite(input.snapshot.assessedAt.getTime())) throw new Error('Invalid alert snapshot decision');
-  if (input.snapshot.feedTimestamp !== null
-    && (!(input.snapshot.feedTimestamp instanceof Date) || !Number.isFinite(input.snapshot.feedTimestamp.getTime())
-      || input.snapshot.feedTimestamp.getTime() > input.snapshot.assessedAt.getTime())) {
-    throw new Error('Invalid alert snapshot chronology');
-  }
-  if (input.snapshot.kind === 'current' && input.snapshot.feedTimestamp === null) {
+    || !Array.isArray(input.snapshot.alerts)) throw new Error('Invalid alert snapshot decision');
+  const assessedAtMs = captureDateEpochMilliseconds(assessedAt, 'alert snapshot assessment instant');
+  const feedTimestampMs = feedTimestamp === null ? null
+    : captureDateEpochMilliseconds(feedTimestamp, 'alert snapshot feed instant');
+  if (feedTimestampMs !== null && feedTimestampMs > assessedAtMs) throw new Error('Invalid alert snapshot chronology');
+  if (input.snapshot.kind === 'current' && feedTimestampMs === null) {
     throw new Error('Current alert snapshot requires a feed timestamp');
   }
   if (!isExactClaim(input.claim)) throw new Error('Exact service claim is required');
@@ -778,6 +802,7 @@ function validateEvaluationInput(input: ServiceChangeEvaluationInput): void {
     if (identity !== undefined) normalizeBoundedIdentity(identity, 'service claim');
   });
   if (input.recoveryUpdates !== undefined && !Array.isArray(input.recoveryUpdates)) throw new Error('Invalid service recovery updates');
+  return Object.freeze({ assessedAtMs, feedTimestampMs });
 }
 
 function isExactClaim(claim: ServiceClaimScope): boolean {
@@ -788,17 +813,17 @@ function isExactClaim(claim: ServiceClaimScope): boolean {
     && (claim.trainId === undefined || Boolean(claim.trainId.trim())));
 }
 
-function validateRecoveryUpdate(update: ServiceRecoveryUpdate): void {
+function validateRecoveryUpdate(update: ServiceRecoveryUpdate): number {
   if (!update || typeof update !== 'object' || !update.evidenceId?.trim()
-    || !(update.sourceTimestamp instanceof Date) || !Number.isFinite(update.sourceTimestamp.getTime())
     || [update.currentFeed, update.coherentIdentity, update.exactDirectionalStop, update.coherentPath, update.noCurrentVeto]
       .some((value) => typeof value !== 'boolean')) throw new Error('Invalid service recovery evidence');
   normalizeBoundedIdentity(update.evidenceId, 'service recovery evidence');
+  return captureDateEpochMilliseconds(update.sourceTimestamp, 'service recovery evidence instant');
 }
 
-function recoverySignature(update: ServiceRecoveryUpdate): string {
+function recoverySignature(update: ServiceRecoveryUpdate, timestampMs: number): string {
   return JSON.stringify({
-    sourceTimestamp: update.sourceTimestamp.toISOString(),
+    sourceTimestamp: new Date(timestampMs).toISOString(),
     currentFeed: update.currentFeed,
     coherentIdentity: update.coherentIdentity,
     exactDirectionalStop: update.exactDirectionalStop,
@@ -808,8 +833,13 @@ function recoverySignature(update: ServiceRecoveryUpdate): string {
 }
 
 function validDate(value: Date, label: string): number {
-  if (!(value instanceof Date) || !Number.isFinite(value.getTime())) throw new Error(`Invalid ${label}`);
-  return value.getTime();
+  return captureDateEpochMilliseconds(value, label);
+}
+
+function captureRecoveryBoundary(value: Date | number, label: string): number {
+  return typeof value === 'number'
+    ? validateEpochMilliseconds(value, label)
+    : captureDateEpochMilliseconds(value, label);
 }
 
 function compareText(left: string, right: string): number {

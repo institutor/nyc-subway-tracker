@@ -7,6 +7,7 @@ import {
   validateServiceChangeDecision,
   type ServiceChangeDecision,
 } from './service-impact';
+import { captureDateEpochMilliseconds } from './temporal';
 
 export type TypedGateDisposition = 'eligible' | 'resolved-ineligible' | 'high-impact-unresolved' | 'quarantined';
 
@@ -82,14 +83,20 @@ export type ArrivalAdmissionDecision =
       readonly serviceChange?: ServiceChangeDecision;
     };
 
+interface CapturedBoardEpoch {
+  readonly comparisonAtMs: number;
+  readonly serviceAssessmentAtMs: number | null;
+  readonly serviceAlertContextIdentity: string | null;
+}
+
 export function admitArrivalCandidate(
   candidate: ArrivalAdmissionCandidate,
   scope: ArrivalBoardScope,
 ): ArrivalAdmissionDecision {
-  validateScope(scope);
+  const boardEpoch = validateScope(scope);
   validateCandidate(candidate);
   if (candidate.provenance.observedAt.getTime() > candidate.provenance.retrievedAt.getTime()
-    || candidate.provenance.retrievedAt.getTime() > scope.comparisonAt.getTime()) {
+    || candidate.provenance.retrievedAt.getTime() > boardEpoch.comparisonAtMs) {
     throw new Error('Invalid future or regressed primary arrival provenance');
   }
   if (candidate.feedGroupId !== scope.feedGroupId) return rejected('candidate', 'different-feed-group');
@@ -97,12 +104,12 @@ export function admitArrivalCandidate(
   const exactCalls = candidate.remainingStopCalls.filter((call) => call.stopId === scope.exactStopId
     && call.scheduleRelationship !== 'SKIPPED'
     && call.scheduleRelationship !== 'NO_DATA'
-    && eventAt(call, scope.comparisonAt.getTime()) > scope.comparisonAt.getTime());
+    && eventAt(call, boardEpoch.comparisonAtMs) > boardEpoch.comparisonAtMs);
   if (exactCalls.length === 0) return rejected('exact-stop', 'exact-future-stop-not-confirmed');
   const identified = exactCalls.map((call) => ({ call, identity: canonicalStopCallIdentity(call) }));
   const uniqueIdentities = new Set(identified.map((item) => item.identity));
   if (uniqueIdentities.size !== identified.length) return rejected('exact-stop', 'duplicate-exact-stop-occurrence');
-  identified.sort((left, right) => eventAt(left.call, scope.comparisonAt.getTime()) - eventAt(right.call, scope.comparisonAt.getTime())
+  identified.sort((left, right) => eventAt(left.call, boardEpoch.comparisonAtMs) - eventAt(right.call, boardEpoch.comparisonAtMs)
     || compareCanonicalIdentity(left.identity, right.identity));
   const target = identified[0];
 
@@ -111,7 +118,7 @@ export function admitArrivalCandidate(
     return rejected('destination-direction', 'resolved-board-context-mismatch');
   }
   const serviceGateBinding = candidate.serviceChangeGate
-    ? bindServiceChangeGate(candidate.serviceChangeGate, candidate, scope)
+    ? bindServiceChangeGate(candidate.serviceChangeGate, candidate, scope, boardEpoch)
     : 'absent';
   const structuredServiceDisposition = serviceGateBinding === 'mismatch' || serviceGateBinding === 'epoch-mismatch'
     || serviceGateBinding === 'unissued'
@@ -173,7 +180,7 @@ export function admitArrivalCandidate(
       && sameIdentity(update.sourceId, candidate.provenance.sourceId)
       && update.sourceTimestamp.getTime() <= update.observedAt.getTime()
       && update.observedAt.getTime() <= provenanceObservedAt
-      && update.observedAt.getTime() <= scope.comparisonAt.getTime());
+      && update.observedAt.getTime() <= boardEpoch.comparisonAtMs);
     if (!expected.eligible || !sameIdentity(expected.stableTrainIdentity, candidate.stableTrainIdentity) || !expectedMatchesClaim) {
       return rejected('movement-time', expected.eligible ? 'expected-claim-or-provenance-mismatch' : expected.reason);
     }
@@ -184,7 +191,7 @@ export function admitArrivalCandidate(
       row: freezeRow(candidate, arrival, expected.supportedRange),
     });
   }
-  const liveEventAt = eventAt(target.call, scope.comparisonAt.getTime());
+  const liveEventAt = eventAt(target.call, boardEpoch.comparisonAtMs);
   if (liveEventAt < candidate.confidence.supportedRange.startsAt.getTime()
     || liveEventAt > candidate.confidence.supportedRange.endsAt.getTime()) {
     return rejected('movement-time', 'live-event-outside-supported-range');
@@ -196,21 +203,26 @@ export function admitArrivalCandidate(
   });
 }
 
-function validateScope(scope: ArrivalBoardScope): void {
+function validateScope(scope: ArrivalBoardScope): CapturedBoardEpoch {
   if (!scope || typeof scope !== 'object' || !scope.feedGroupId || !scope.exactStopId || !scope.destination || !isResolvedDirection(scope.direction)) {
     throw new Error('Exact resolved arrival board scope is required');
   }
-  validDate(scope.comparisonAt, 'board comparison instant');
-  const hasServiceAssessmentAt = scope.serviceAssessmentAt !== undefined;
-  const hasServiceContextIdentity = scope.serviceAlertContextIdentity !== undefined;
+  const comparisonAt = scope.comparisonAt;
+  const serviceAssessmentAt = scope.serviceAssessmentAt;
+  const serviceAlertContextIdentity = scope.serviceAlertContextIdentity;
+  const comparisonAtMs = captureDateEpochMilliseconds(comparisonAt, 'board comparison instant');
+  const hasServiceAssessmentAt = serviceAssessmentAt !== undefined;
+  const hasServiceContextIdentity = serviceAlertContextIdentity !== undefined;
   if (hasServiceAssessmentAt !== hasServiceContextIdentity) throw new Error('Incomplete board service assessment epoch');
   if (hasServiceAssessmentAt) {
-    const serviceAssessmentAt = validDate(scope.serviceAssessmentAt!, 'board service assessment instant');
-    if (serviceAssessmentAt !== scope.comparisonAt.getTime()
-      || typeof scope.serviceAlertContextIdentity !== 'string' || !scope.serviceAlertContextIdentity) {
+    const serviceAssessmentAtMs = captureDateEpochMilliseconds(serviceAssessmentAt, 'board service assessment instant');
+    if (serviceAssessmentAtMs !== comparisonAtMs
+      || typeof serviceAlertContextIdentity !== 'string' || !serviceAlertContextIdentity) {
       throw new Error('Invalid board service assessment epoch');
     }
+    return Object.freeze({ comparisonAtMs, serviceAssessmentAtMs, serviceAlertContextIdentity });
   }
+  return Object.freeze({ comparisonAtMs, serviceAssessmentAtMs: null, serviceAlertContextIdentity: null });
 }
 
 function validateCandidate(candidate: ArrivalAdmissionCandidate): void {
@@ -265,6 +277,7 @@ function bindServiceChangeGate(
   gate: ServiceChangeDecision,
   candidate: ArrivalAdmissionCandidate,
   scope: ArrivalBoardScope,
+  boardEpoch: CapturedBoardEpoch,
 ): 'bound' | 'mismatch' | 'epoch-mismatch' | 'unissued' {
   try {
     validateServiceChangeDecision(gate);
@@ -274,9 +287,9 @@ function bindServiceChangeGate(
     return 'unissued';
   }
 
-  if (!(scope.serviceAssessmentAt instanceof Date)
-    || scope.serviceAssessmentAt.getTime() !== gate.assessedAt.getTime()
-    || scope.serviceAlertContextIdentity !== gate.alertContextIdentity) return 'epoch-mismatch';
+  if (boardEpoch.serviceAssessmentAtMs === null
+    || boardEpoch.serviceAssessmentAtMs !== gate.assessedAtMs
+    || boardEpoch.serviceAlertContextIdentity !== gate.alertContextIdentity) return 'epoch-mismatch';
 
   const claim = gate.evaluatedClaim;
   const matches = candidate.serviceClaimId !== undefined
@@ -376,6 +389,5 @@ function freezeProvenance(provenance: Provenance): Provenance {
 }
 
 function validDate(value: Date, label: string): number {
-  if (!(value instanceof Date) || !Number.isFinite(value.getTime())) throw new Error(`Invalid ${label}`);
-  return value.getTime();
+  return captureDateEpochMilliseconds(value, label);
 }

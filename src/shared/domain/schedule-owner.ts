@@ -1,5 +1,6 @@
 import type { StaticGtfsEditionCandidate, StaticScheduleSource } from '../../server/gtfs/static-normalizer';
 import type { Direction } from './types';
+import { captureDateEpochMilliseconds } from './temporal';
 
 const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
 const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
@@ -386,8 +387,7 @@ function exactIso(value: string, label: string): string {
 }
 
 function validDate(value: Date, label: string): Date {
-  if (!(value instanceof Date) || !Number.isFinite(value.getTime())) throw new Error(`Invalid ${label}`);
-  return value;
+  return new Date(captureDateEpochMilliseconds(value, label));
 }
 
 function quarantine(reason: string): EditionObservationResult {
