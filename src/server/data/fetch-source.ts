@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 
-import { writeAtomicCache } from './atomic-cache';
+import { reserveAtomicCacheGeneration, writeAtomicCache } from './atomic-cache';
 import type { ExpectedFormat, RemoteSource } from './source-registry';
 
 export interface FetchSourceOptions {
@@ -12,6 +12,8 @@ export interface FetchSourceOptions {
 
 export interface SourceProvenance {
   sourceId: string;
+  sourceAuthority: string;
+  sourceRole: string;
   sourceUrl: string;
   retrievedAt: string;
   finalUrl: string;
@@ -31,8 +33,19 @@ export async function fetchSource(
     throw new Error(`Source ${source.id} is disabled`);
   }
 
+  const sourceId = requireProvenanceText(source.id, 'source id');
+  const sourceAuthority = requireProvenanceText(source.authority, 'source authority');
+  const sourceRole = requireProvenanceText(source.role, 'source role');
+  const retrievalDate = (options.now ?? (() => new Date()))();
+  if (!(retrievalDate instanceof Date) || !Number.isFinite(retrievalDate.getTime())) {
+    throw new Error(`Source ${sourceId} received an invalid retrieval Date`);
+  }
+  const retrievedAt = retrievalDate.toISOString();
+  const cacheGeneration = reserveAtomicCacheGeneration(options.destinationPath);
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), source.retrieval.timeoutMs);
+  let finalResponse: Response | undefined;
+  let readerAcquired = false;
 
   try {
     const fetched = await fetchFollowingRedirects(
@@ -41,6 +54,7 @@ export async function fetchSource(
       options.headers,
       controller.signal,
     );
+    finalResponse = fetched.response;
     const declaredContentType = normalizeContentType(fetched.response.headers.get('content-type'));
     const acceptedTypes = source.acceptedContentTypes.map(normalizeContentTypeValue);
     if (!declaredContentType || !acceptedTypes.includes(declaredContentType)) {
@@ -63,8 +77,10 @@ export async function fetchSource(
 
     async function* boundedBody(): AsyncGenerator<Uint8Array> {
       const reader = fetched.response.body!.getReader();
+      readerAcquired = true;
       const pendingChunks: Uint8Array[] = [];
       let inspectionBytes: Uint8Array<ArrayBufferLike> = new Uint8Array();
+      let completed = false;
       try {
         while (true) {
           const { done, value } = await reader.read();
@@ -98,48 +114,61 @@ export async function fetchSource(
           hash.update(value);
           yield value;
         }
-      } finally {
-        reader.releaseLock();
-      }
-
-      if (!observedContentType) {
-        if (inspectionBytes.byteLength === 0) {
-          throw new Error(`Source ${source.id} returned an empty body`);
+        if (!observedContentType) {
+          if (inspectionBytes.byteLength === 0) {
+            throw new Error(`Source ${source.id} returned an empty body`);
+          }
+          observedContentType = observeContentType(inspectionBytes, source.expectedFormat);
+          if (!observedContentType) throw observedTypeError(source);
+          for (const pendingChunk of pendingChunks) {
+            hash.update(pendingChunk);
+            yield pendingChunk;
+          }
         }
-        observedContentType = observeContentType(inspectionBytes, source.expectedFormat);
-        if (!observedContentType) throw observedTypeError(source);
-        for (const pendingChunk of pendingChunks) {
-          hash.update(pendingChunk);
-          yield pendingChunk;
-        }
-      }
-      if (declaredBytes !== null && receivedBytes !== declaredBytes) {
-        if (receivedBytes < declaredBytes) {
+        if (declaredBytes !== null && receivedBytes !== declaredBytes) {
+          if (receivedBytes < declaredBytes) {
+            throw new Error(
+              `Source ${source.id} returned a truncated body: declared ${declaredBytes} bytes, received ${receivedBytes}`,
+            );
+          }
           throw new Error(
-            `Source ${source.id} returned a truncated body: declared ${declaredBytes} bytes, received ${receivedBytes}`,
+            `Source ${source.id} returned ${receivedBytes} bytes but declared ${declaredBytes}`,
           );
         }
-        throw new Error(
-          `Source ${source.id} returned ${receivedBytes} bytes but declared ${declaredBytes}`,
-        );
+        completed = true;
+      } finally {
+        if (!completed) {
+          await reader.cancel().catch(() => undefined);
+        }
+        reader.releaseLock();
       }
     }
 
-    await writeAtomicCache(options.destinationPath, boundedBody());
-
-    return {
-      sourceId: source.id,
-      sourceUrl: source.url,
-      retrievedAt: (options.now ?? (() => new Date()))().toISOString(),
-      finalUrl: fetched.finalUrl,
-      redirectCount: fetched.redirectCount,
-      declaredContentType,
-      observedContentType: observedContentType!,
-      declaredBytes,
-      receivedBytes,
-      sha256: hash.digest('hex'),
-    };
+    let provenance!: SourceProvenance;
+    await writeAtomicCache(options.destinationPath, boundedBody(), {
+      generation: cacheGeneration,
+      validate: async () => {
+        provenance = Object.freeze({
+          sourceId,
+          sourceAuthority,
+          sourceRole,
+          sourceUrl: source.url,
+          retrievedAt,
+          finalUrl: fetched.finalUrl,
+          redirectCount: fetched.redirectCount,
+          declaredContentType,
+          observedContentType: observedContentType!,
+          declaredBytes,
+          receivedBytes,
+          sha256: hash.digest('hex'),
+        });
+      },
+    });
+    return provenance;
   } catch (error) {
+    if (finalResponse && !readerAcquired) {
+      await cancelResponseBody(finalResponse);
+    }
     if (controller.signal.aborted) {
       throw new Error(`Source ${source.id} timed out after ${source.retrieval.timeoutMs}ms`, { cause: error });
     }
@@ -147,6 +176,12 @@ export async function fetchSource(
   } finally {
     clearTimeout(timeout);
   }
+}
+
+function requireProvenanceText(value: string, field: string): string {
+  const normalized = value.trim();
+  if (!normalized) throw new Error(`Source requires a non-empty ${field}`);
+  return normalized;
 }
 
 function appendInspectionBytes(
@@ -172,33 +207,81 @@ async function fetchFollowingRedirects(
   headers: Readonly<Record<string, string>> | undefined,
   signal: AbortSignal,
 ): Promise<{ response: Response; finalUrl: string; redirectCount: number }> {
-  let finalUrl = source.url;
+  let currentUrl = validateSourceUrl(source.url, source);
   let redirectCount = 0;
 
   while (true) {
-    const response = await fetchImpl(finalUrl, { headers, redirect: 'manual', signal });
+    const response = await fetchImpl(currentUrl.href, { headers, redirect: 'manual', signal });
     if (response.status >= 300 && response.status < 400) {
-      if (redirectCount >= source.retrieval.maxRedirects) {
-        throw new Error(`Source ${source.id} exceeded redirect limit of ${source.retrieval.maxRedirects}`);
+      try {
+        if (redirectCount >= source.retrieval.maxRedirects) {
+          throw new Error(`Source ${source.id} exceeded redirect limit of ${source.retrieval.maxRedirects}`);
+        }
+        const location = response.headers.get('location');
+        if (!location) {
+          throw new Error(`Source ${source.id} returned a redirect without a location`);
+        }
+        const redirectedUrl = validateSourceUrl(location, source, currentUrl);
+        if (redirectedUrl.origin !== currentUrl.origin && hasCredentialHeaders(headers)) {
+          throw new Error(`Source ${source.id} refused credential-bearing redirect across origins`);
+        }
+        currentUrl = redirectedUrl;
+        redirectCount += 1;
+      } catch (error) {
+        await cancelResponseBody(response);
+        throw error;
       }
-      const location = response.headers.get('location');
-      if (!location) {
-        throw new Error(`Source ${source.id} returned a redirect without a location`);
-      }
-      const redirectedUrl = new URL(location, finalUrl);
-      if (redirectedUrl.protocol !== 'https:') {
-        throw new Error(`Source ${source.id} refused redirect to ${redirectedUrl.protocol}`);
-      }
-      finalUrl = redirectedUrl.toString();
-      redirectCount += 1;
+      await cancelResponseBody(response);
       continue;
     }
 
     if (response.status !== 200) {
+      await cancelResponseBody(response);
       throw new Error(`Source ${source.id} returned HTTP ${response.status}`);
     }
-    return { response, finalUrl, redirectCount };
+    return { response, finalUrl: currentUrl.href, redirectCount };
   }
+}
+
+async function cancelResponseBody(response: Response): Promise<void> {
+  if (!response.body) return;
+  await response.body.cancel().catch(() => undefined);
+}
+
+function validateSourceUrl(rawUrl: string, source: RemoteSource, base?: URL): URL {
+  let parsed: URL;
+  try {
+    parsed = base ? new URL(rawUrl, base) : new URL(rawUrl);
+  } catch (error) {
+    throw new Error(`Source ${source.id} has an invalid URL`, { cause: error });
+  }
+  if (parsed.href.length > source.retrieval.maxUrlLength) {
+    throw new Error(
+      `Source ${source.id} exceeds its ${source.retrieval.maxUrlLength} character URL limit`,
+    );
+  }
+  if (parsed.protocol !== 'https:') {
+    throw new Error(`Source ${source.id} must use HTTPS`);
+  }
+  if (parsed.username || parsed.password) {
+    throw new Error(`Source ${source.id} URL must not contain userinfo`);
+  }
+  if (!source.allowedOrigins.includes(parsed.origin)) {
+    throw new Error(`Source ${source.id} origin ${parsed.origin} is not allowed`);
+  }
+  return parsed;
+}
+
+function hasCredentialHeaders(headers: Readonly<Record<string, string>> | undefined): boolean {
+  if (!headers) return false;
+  const credentialNames = new Set([
+    'authorization',
+    'cookie',
+    'proxy-authorization',
+    'x-api-key',
+    'api-key',
+  ]);
+  return [...new Headers(headers).keys()].some((name) => credentialNames.has(name.toLowerCase()));
 }
 
 function normalizeContentType(value: string | null): string {

@@ -4,7 +4,10 @@ import { join } from 'node:path';
 
 import { afterEach, describe, expect, test } from 'vitest';
 
-import { writeAtomicCache } from '../../src/server/data/atomic-cache';
+import {
+  reserveAtomicCacheGeneration,
+  writeAtomicCache,
+} from '../../src/server/data/atomic-cache';
 
 const temporaryDirectories: string[] = [];
 
@@ -83,5 +86,42 @@ describe('atomic transit cache promotion', () => {
 
     expect(await readFile(destinationPath, 'utf8')).toBe('last-good');
     expect(await readdir(directory)).toEqual(['subway-alerts.pb']);
+  });
+
+  test('prevents an older delayed request generation from replacing a newer promotion', async () => {
+    const directory = await temporaryDirectory();
+    const destinationPath = join(directory, 'subway-rt.pb');
+    await writeAtomicCache(destinationPath, Buffer.from('last-good'));
+    const olderGeneration = reserveAtomicCacheGeneration(destinationPath);
+    const newerGeneration = reserveAtomicCacheGeneration(destinationPath);
+
+    let releaseOlder = (): void => undefined;
+    const olderReleased = new Promise<void>((resolve) => {
+      releaseOlder = resolve;
+    });
+    let olderStarted = (): void => undefined;
+    const olderHasStarted = new Promise<void>((resolve) => {
+      olderStarted = resolve;
+    });
+    async function* delayedOlderBody(): AsyncGenerator<Buffer> {
+      yield Buffer.from('older-');
+      olderStarted();
+      await olderReleased;
+      yield Buffer.from('edition');
+    }
+
+    const olderPromotion = writeAtomicCache(destinationPath, delayedOlderBody(), {
+      generation: olderGeneration,
+    });
+    const staleRejection = expect(olderPromotion).rejects.toThrow('stale cache generation');
+    await olderHasStarted;
+    await writeAtomicCache(destinationPath, Buffer.from('newer-edition'), {
+      generation: newerGeneration,
+    });
+    releaseOlder();
+
+    await staleRejection;
+    expect(await readFile(destinationPath, 'utf8')).toBe('newer-edition');
+    expect(await readdir(directory)).toEqual(['subway-rt.pb']);
   });
 });

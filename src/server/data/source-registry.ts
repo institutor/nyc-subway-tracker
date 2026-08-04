@@ -1,8 +1,17 @@
-export type ExposureCapability =
-  | 'arrival-boards'
-  | 'nearby-offline'
-  | 'accessibility'
-  | 'guidance';
+export type SourceClaim =
+  | 'regular-schedule'
+  | 'supplemented-schedule'
+  | 'arrival-evidence'
+  | 'service-changes'
+  | 'nearby-entrances'
+  | 'nearby-practical-walk'
+  | 'accessibility-structure'
+  | 'accessibility-equipment-inventory'
+  | 'accessibility-equipment-status'
+  | 'offline-reference'
+  | 'guidance'
+  | 'commute-evaluation'
+  | 'commute-delivery';
 
 export type SourceRole =
   | 'regular-gtfs'
@@ -24,7 +33,7 @@ interface SourceBase {
   authority: string;
   role: SourceRole;
   required: boolean;
-  requiredForExposure: ExposureCapability[];
+  supports: readonly SourceClaim[];
 }
 
 export interface RemoteSource extends SourceBase {
@@ -33,12 +42,14 @@ export interface RemoteSource extends SourceBase {
   enabled?: boolean;
   credentialEnv?: string;
   auditRequired?: boolean;
+  allowedOrigins: readonly string[];
   expectedFormat: ExpectedFormat;
   acceptedContentTypes: string[];
   retrieval: {
     timeoutMs: number;
     maxRedirects: number;
     maxBytes: number;
+    maxUrlLength: number;
   };
 }
 
@@ -69,7 +80,7 @@ const realtimeGroups = [
 ] as const;
 
 export function createSourceRegistry(config: SourceRegistryConfig): TransitSource[] {
-  const remoteDefaults = { timeoutMs: 10_000, maxRedirects: 3 } as const;
+  const remoteDefaults = { timeoutMs: 10_000, maxRedirects: 3, maxUrlLength: 2_048 } as const;
   const sources: TransitSource[] = [
     {
       id: 'regular-subway-gtfs',
@@ -77,8 +88,9 @@ export function createSourceRegistry(config: SourceRegistryConfig): TransitSourc
       kind: 'remote',
       role: 'regular-gtfs',
       required: true,
-      requiredForExposure: ['arrival-boards', 'nearby-offline'],
+      supports: ['regular-schedule', 'offline-reference'],
       url: 'https://rrgtfsfeeds.s3.amazonaws.com/gtfs_subway.zip',
+      allowedOrigins: ['https://rrgtfsfeeds.s3.amazonaws.com'],
       expectedFormat: 'zip',
       acceptedContentTypes: ['application/zip', 'application/x-zip-compressed', 'application/octet-stream'],
       retrieval: { ...remoteDefaults, maxBytes: 256 * 1024 * 1024 },
@@ -89,8 +101,9 @@ export function createSourceRegistry(config: SourceRegistryConfig): TransitSourc
       kind: 'remote',
       role: 'supplemented-gtfs',
       required: true,
-      requiredForExposure: ['arrival-boards'],
+      supports: ['supplemented-schedule', 'offline-reference', 'commute-evaluation'],
       url: 'https://rrgtfsfeeds.s3.amazonaws.com/gtfs_supplemented.zip',
+      allowedOrigins: ['https://rrgtfsfeeds.s3.amazonaws.com'],
       expectedFormat: 'zip',
       acceptedContentTypes: ['application/zip', 'application/x-zip-compressed', 'application/octet-stream'],
       retrieval: { ...remoteDefaults, maxBytes: 256 * 1024 * 1024 },
@@ -101,11 +114,17 @@ export function createSourceRegistry(config: SourceRegistryConfig): TransitSourc
       kind: 'remote',
       role: 'subway-realtime',
       required: true,
-      requiredForExposure: ['arrival-boards'],
+      supports: ['arrival-evidence', 'commute-evaluation'],
       url: `${REALTIME_BASE}${feed}`,
+      allowedOrigins: ['https://api-endpoint.mta.info'],
       expectedFormat: 'protobuf',
       acceptedContentTypes: PROTOBUF_TYPES,
-      retrieval: { timeoutMs: 8_000, maxRedirects: 2, maxBytes: 16 * 1024 * 1024 },
+      retrieval: {
+        timeoutMs: 8_000,
+        maxRedirects: 2,
+        maxBytes: 16 * 1024 * 1024,
+        maxUrlLength: 2_048,
+      },
     })),
     {
       id: 'subway-alerts',
@@ -113,11 +132,17 @@ export function createSourceRegistry(config: SourceRegistryConfig): TransitSourc
       kind: 'remote',
       role: 'subway-alerts',
       required: true,
-      requiredForExposure: ['arrival-boards'],
+      supports: ['service-changes', 'commute-evaluation'],
       url: `${REALTIME_BASE}camsys/subway-alerts`,
+      allowedOrigins: ['https://api-endpoint.mta.info'],
       expectedFormat: 'protobuf',
       acceptedContentTypes: PROTOBUF_TYPES,
-      retrieval: { timeoutMs: 8_000, maxRedirects: 2, maxBytes: 32 * 1024 * 1024 },
+      retrieval: {
+        timeoutMs: 8_000,
+        maxRedirects: 2,
+        maxBytes: 32 * 1024 * 1024,
+        maxUrlLength: 2_048,
+      },
     },
     {
       id: 'subway-entrances-i9wp-a4ja',
@@ -125,8 +150,9 @@ export function createSourceRegistry(config: SourceRegistryConfig): TransitSourc
       kind: 'remote',
       role: 'entrances',
       required: true,
-      requiredForExposure: ['nearby-offline'],
+      supports: ['nearby-entrances', 'offline-reference'],
       url: 'https://data.ny.gov/resource/i9wp-a4ja.json?$limit=50000',
+      allowedOrigins: ['https://data.ny.gov'],
       expectedFormat: 'json',
       acceptedContentTypes: ['application/json', 'application/json; charset=utf-8'],
       retrieval: { ...remoteDefaults, maxBytes: 32 * 1024 * 1024 },
@@ -137,8 +163,9 @@ export function createSourceRegistry(config: SourceRegistryConfig): TransitSourc
       kind: 'remote',
       role: 'station-accessibility',
       required: true,
-      requiredForExposure: ['accessibility'],
+      supports: ['accessibility-structure', 'offline-reference'],
       url: 'https://data.ny.gov/resource/39hk-dx4f.json?$limit=50000',
+      allowedOrigins: ['https://data.ny.gov'],
       expectedFormat: 'json',
       acceptedContentTypes: ['application/json', 'application/json; charset=utf-8'],
       retrieval: { ...remoteDefaults, maxBytes: 32 * 1024 * 1024 },
@@ -148,14 +175,14 @@ export function createSourceRegistry(config: SourceRegistryConfig): TransitSourc
       'equipment-inventory',
       config.equipmentUrl,
       'MTA_API_KEY',
-      ['accessibility'],
+      ['accessibility-equipment-inventory'],
     ),
     optionalRemoteSource(
       'equipment-outages',
       'equipment-outages',
       config.outageUrl,
       'MTA_API_KEY',
-      ['accessibility'],
+      ['accessibility-equipment-status', 'commute-evaluation'],
     ),
     {
       id: 'practical-walk',
@@ -163,13 +190,19 @@ export function createSourceRegistry(config: SourceRegistryConfig): TransitSourc
       kind: 'remote',
       role: 'practical-walk',
       required: false,
-      requiredForExposure: ['nearby-offline'],
+      supports: ['nearby-practical-walk'],
       enabled: Boolean(config.practicalWalkUrl),
       auditRequired: true,
       url: config.practicalWalkUrl ?? 'https://disabled.invalid/practical-walk',
+      allowedOrigins: [configuredOrigin(config.practicalWalkUrl, 'https://disabled.invalid')],
       expectedFormat: 'json',
       acceptedContentTypes: ['application/json'],
-      retrieval: { timeoutMs: 4_000, maxRedirects: 1, maxBytes: 1024 * 1024 },
+      retrieval: {
+        timeoutMs: 4_000,
+        maxRedirects: 1,
+        maxBytes: 1024 * 1024,
+        maxUrlLength: 2_048,
+      },
     },
     {
       id: 'complete-path-packages',
@@ -177,7 +210,7 @@ export function createSourceRegistry(config: SourceRegistryConfig): TransitSourc
       kind: 'immutable-package',
       role: 'complete-path-packages',
       required: false,
-      requiredForExposure: ['accessibility'],
+      supports: ['accessibility-structure', 'offline-reference', 'commute-evaluation'],
       records: [],
     },
     {
@@ -186,7 +219,7 @@ export function createSourceRegistry(config: SourceRegistryConfig): TransitSourc
       kind: 'immutable-package',
       role: 'guidance-packages',
       required: false,
-      requiredForExposure: ['guidance'],
+      supports: ['guidance'],
       records: [],
     },
   ];
@@ -199,7 +232,7 @@ function optionalRemoteSource(
   role: 'equipment-inventory' | 'equipment-outages',
   url: string | undefined,
   credentialEnv: string,
-  requiredForExposure: ExposureCapability[],
+  supports: readonly SourceClaim[],
 ): RemoteSource {
   return {
     id,
@@ -207,12 +240,22 @@ function optionalRemoteSource(
     kind: 'remote',
     role,
     required: false,
-    requiredForExposure,
+    supports,
     enabled: Boolean(url),
     credentialEnv,
     url: url ?? `https://disabled.invalid/${id}`,
+    allowedOrigins: [configuredOrigin(url, 'https://disabled.invalid')],
     expectedFormat: 'json-or-xml',
     acceptedContentTypes: ['application/json', 'application/xml', 'text/xml'],
-    retrieval: { timeoutMs: 8_000, maxRedirects: 2, maxBytes: 16 * 1024 * 1024 },
+    retrieval: {
+      timeoutMs: 8_000,
+      maxRedirects: 2,
+      maxBytes: 16 * 1024 * 1024,
+      maxUrlLength: 2_048,
+    },
   };
+}
+
+function configuredOrigin(url: string | undefined, fallback: string): string {
+  return url ? new URL(url).origin : fallback;
 }

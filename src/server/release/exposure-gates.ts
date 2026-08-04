@@ -6,53 +6,75 @@ export type ExposureStage =
   | 'accessibility'
   | 'guidance'
   | 'maps-rights'
-  | 'commute-alerts';
+  | 'commute-evaluation'
+  | 'commute-silent'
+  | 'commute-limited-pilot'
+  | 'commute-delivery';
 
-export interface StageApproval {
-  immutablePackageId?: string;
-  evidencePassed: boolean;
-  signaturesComplete: boolean;
+export type ExposureReasonCode =
+  | 'GATE_0_NOT_PASSED'
+  | 'NEARBY_GATE_0_NOT_PASSED'
+  | 'ACCESSIBILITY_EVIDENCE_NOT_DEMONSTRATED'
+  | 'GUIDANCE_EVIDENCE_NOT_DEMONSTRATED'
+  | 'MAP_RIGHTS_NOT_DOCUMENTED'
+  | 'COMMUTE_PREREQUISITES_INCOMPLETE';
+
+export interface LockedExposureDecision {
+  readonly exposed: false;
+  readonly reasonCode: ExposureReasonCode;
+  readonly decision: string;
 }
 
 export interface ExposureEvaluation {
-  public: Record<ExposureStage, { exposed: boolean; decision: string }>;
-  diagnostics: {
-    validationFixtures: boolean;
-    liveShadow: boolean;
-    riderExposure: false;
+  readonly public: Readonly<Record<ExposureStage, LockedExposureDecision>>;
+  readonly diagnostics: {
+    readonly validationFixtures: boolean;
+    readonly liveShadow: boolean;
+    readonly riderExposure: false;
   };
 }
 
-const currentNoGo: Record<ExposureStage, string> = {
-  'arrival-boards': 'NO-GO — GATE 0 NOT PASSED',
-  'nearby-offline': 'NO-GO — RELEASE 1 EVIDENCE AND APPROVALS ARE NOT DEMONSTRATED',
-  accessibility: 'NO-GO — REQUIRED ACCESSIBILITY EVIDENCE AND COVERAGE ARE NOT DEMONSTRATED',
-  guidance: 'NO-GO — RELEASE 2 POSITIONING AND TRANSFER EVIDENCE IS NOT DEMONSTRATED',
-  'maps-rights': 'NO-GO — MAP RIGHTS OR REVIEWED NO-DEPENDENCY RESULT IS NOT DEMONSTRATED',
-  'commute-alerts': 'NO-GO — PREREQUISITES AND FIXED-VERSION EVIDENCE INCOMPLETE',
-};
+const locked = (
+  reasonCode: ExposureReasonCode,
+  decision: string,
+): LockedExposureDecision => Object.freeze({ exposed: false, reasonCode, decision });
 
-export function evaluateExposure(input: {
-  mode: RuntimeMode;
-  approvals?: Partial<Record<ExposureStage, StageApproval>>;
-}): ExposureEvaluation {
-  const publicState = {} as ExposureEvaluation['public'];
-  for (const stage of Object.keys(currentNoGo) as ExposureStage[]) {
-    const approval = input.approvals?.[stage];
-    const exposed = Boolean(
-      input.mode === 'live' &&
-        approval?.immutablePackageId &&
-        approval.evidencePassed &&
-        approval.signaturesComplete,
-    );
-    publicState[stage] = {
-      exposed,
-      decision: exposed ? 'GO — SAME-VERSION PACKAGE APPROVED' : currentNoGo[stage],
-    };
-  }
+const CURRENT_PUBLIC_LOCKS: ExposureEvaluation['public'] = Object.freeze({
+  'arrival-boards': locked('GATE_0_NOT_PASSED', 'NO-GO — GATE 0 NOT PASSED'),
+  'nearby-offline': locked('NEARBY_GATE_0_NOT_PASSED', 'NO-GO — GATE 0 NOT PASSED'),
+  accessibility: locked(
+    'ACCESSIBILITY_EVIDENCE_NOT_DEMONSTRATED',
+    'NO-GO — REQUIRED ACCESSIBILITY EVIDENCE AND COVERAGE ARE NOT DEMONSTRATED',
+  ),
+  guidance: locked(
+    'GUIDANCE_EVIDENCE_NOT_DEMONSTRATED',
+    'NO-GO — RELEASE 2 POSITIONING AND TRANSFER EVIDENCE IS NOT DEMONSTRATED',
+  ),
+  'maps-rights': locked(
+    'MAP_RIGHTS_NOT_DOCUMENTED',
+    'Blocked from public release — rights not documented.',
+  ),
+  'commute-evaluation': locked(
+    'COMMUTE_PREREQUISITES_INCOMPLETE',
+    'NO-GO — prerequisites and fixed-version evidence incomplete',
+  ),
+  'commute-silent': locked(
+    'COMMUTE_PREREQUISITES_INCOMPLETE',
+    'NO-GO — prerequisites and fixed-version evidence incomplete',
+  ),
+  'commute-limited-pilot': locked(
+    'COMMUTE_PREREQUISITES_INCOMPLETE',
+    'NO-GO — prerequisites and fixed-version evidence incomplete',
+  ),
+  'commute-delivery': locked(
+    'COMMUTE_PREREQUISITES_INCOMPLETE',
+    'NO-GO — prerequisites and fixed-version evidence incomplete',
+  ),
+});
 
+export function evaluateExposure(input: { mode: RuntimeMode }): ExposureEvaluation {
   return {
-    public: publicState,
+    public: CURRENT_PUBLIC_LOCKS,
     diagnostics: {
       validationFixtures: input.mode === 'validation',
       liveShadow: input.mode === 'shadow',
