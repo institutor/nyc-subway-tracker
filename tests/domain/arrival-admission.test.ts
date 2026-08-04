@@ -312,6 +312,226 @@ describe('canonical exact-stop and train identity admission', () => {
       .toThrow(/resolved direction/i);
     expect(admitArrivalCandidate(candidate(), scope)).toEqual(valid);
   });
+
+  test('uses intrinsic Date slots once for every Live candidate temporal decision', () => {
+    const pastSlot = at(-10);
+    let pastGetTimeCalls = 0;
+    Object.defineProperty(pastSlot, 'getTime', {
+      value: () => { pastGetTimeCalls += 1; return at(300).getTime(); },
+    });
+    expect(admitArrivalCandidate(candidate({
+      remainingStopCalls: [{ stopId: 'A24N', sourceStopSequence: 13, arrivalAt: pastSlot, departureAt: null }],
+    }), scope)).toMatchObject({ kind: 'rejected', failedGate: 'exact-stop' });
+    expect(pastGetTimeCalls).toBe(0);
+
+    const futureSlot = at(300);
+    let futureGetTimeCalls = 0;
+    Object.defineProperty(futureSlot, 'getTime', {
+      value: () => { futureGetTimeCalls += 1; return at(-10).getTime(); },
+    });
+    expect(admitArrivalCandidate(candidate({
+      remainingStopCalls: [{ stopId: 'A24N', sourceStopSequence: 13, arrivalAt: futureSlot, departureAt: null }],
+    }), scope)).toMatchObject({ kind: 'admitted', confidence: 'live', row: { arrival: { at: at(300) } } });
+    expect(futureGetTimeCalls).toBe(0);
+
+    class AlternatingDate extends Date {
+      calls = 0;
+      override getTime(): number {
+        this.calls += 1;
+        return this.calls % 2 === 1 ? at(300).getTime() : at(-10).getTime();
+      }
+    }
+    const alternating = new AlternatingDate(at(300));
+    expect(admitArrivalCandidate(candidate({
+      remainingStopCalls: [{ stopId: 'A24N', sourceStopSequence: 13, arrivalAt: alternating, departureAt: null }],
+    }), scope)).toMatchObject({ kind: 'admitted', row: { arrival: { at: at(300) } } });
+    expect(alternating.calls).toBe(0);
+
+    const liveRangeStart = at(285);
+    const liveRangeEnd = at(315);
+    let liveRangeGetTimeCalls = 0;
+    Object.defineProperty(liveRangeStart, 'getTime', {
+      value: () => { liveRangeGetTimeCalls += 1; return at(400).getTime(); },
+    });
+    Object.defineProperty(liveRangeEnd, 'getTime', {
+      value: () => { liveRangeGetTimeCalls += 1; return at(200).getTime(); },
+    });
+    expect(admitArrivalCandidate(candidate({ confidence: {
+      kind: 'live', supportedRange: { startsAt: liveRangeStart, endsAt: liveRangeEnd },
+    } }), scope)).toMatchObject({ kind: 'admitted', row: { arrival: { at: at(300) } } });
+    expect(liveRangeGetTimeCalls).toBe(0);
+
+    const methodCalls = { getTime: 0, valueOf: 0, toJSON: 0, primitive: 0 };
+    const hostileProvenanceDate = (): Date => {
+      const value = at(0);
+      Object.defineProperties(value, {
+        getTime: { value: () => { methodCalls.getTime += 1; return BASE.getTime(); } },
+        valueOf: { value: () => { methodCalls.valueOf += 1; throw new Error('caller valueOf must not run'); } },
+        toJSON: { value: () => { methodCalls.toJSON += 1; throw new Error('caller toJSON must not run'); } },
+        [Symbol.toPrimitive]: { value: () => { methodCalls.primitive += 1; throw new Error('caller primitive conversion must not run'); } },
+      });
+      return value;
+    };
+    expect(admitArrivalCandidate(candidate({ provenance: {
+      ...candidate().provenance,
+      observedAt: hostileProvenanceDate(),
+      retrievedAt: hostileProvenanceDate(),
+    } }), scope)).toMatchObject({ kind: 'admitted', confidence: 'live' });
+    expect(methodCalls).toEqual({ getTime: 0, valueOf: 0, toJSON: 0, primitive: 0 });
+    expect(admitArrivalCandidate(candidate(), scope)).toMatchObject({ kind: 'admitted', confidence: 'live' });
+  });
+
+  test('uses captured stop chronology instead of caller getTime or primitive coercion', () => {
+    const arrivalAt = at(300);
+    const departureAt = at(200);
+    const calls = { getTime: 0, valueOf: 0, primitive: 0 };
+    Object.defineProperties(arrivalAt, {
+      getTime: { value: () => { calls.getTime += 1; return at(100).getTime(); } },
+      valueOf: { value: () => { calls.valueOf += 1; return at(100).getTime(); } },
+      [Symbol.toPrimitive]: { value: () => { calls.primitive += 1; return at(100).getTime(); } },
+    });
+    Object.defineProperties(departureAt, {
+      getTime: { value: () => { calls.getTime += 1; return at(400).getTime(); } },
+      valueOf: { value: () => { calls.valueOf += 1; return at(400).getTime(); } },
+      [Symbol.toPrimitive]: { value: () => { calls.primitive += 1; return at(400).getTime(); } },
+    });
+    expect(() => admitArrivalCandidate(candidate({
+      remainingStopCalls: [{ stopId: 'A24N', sourceStopSequence: 13, arrivalAt, departureAt }],
+      confidence: { kind: 'live', supportedRange: { startsAt: at(390), endsAt: at(410) } },
+    }), scope)).toThrow(/departure precedes arrival/i);
+    expect(calls).toEqual({ getTime: 0, valueOf: 0, primitive: 0 });
+  });
+
+  test('rejects proxy and invalid Dates in every candidate temporal domain', () => {
+    const expectedUpdate = (seconds: number) => ({
+      evidenceId: `invalid-${seconds}`, sourceTimestamp: at(seconds), observedAt: at(seconds),
+      stableTrainIdentity: 'train-a', patternIdentity: 'A23N:12>A24N:13>A25N:14',
+      direction: 'northbound' as const, destination: 'Inwood-207 St', exactTargetStopCallIdentity: 'A24N\u0000sequence:13',
+      feedGroupId: 'ace', sourceId: 'ace-feed', assignedPhysicalTrain: true, atOrigin: true,
+      movementObserved: false, overdueVerdict: 'not-overdue' as const,
+      supportedRange: { startsAt: at(360), endsAt: at(480) }, accepted: true,
+    });
+    const expectedCandidate = () => candidate({ confidence: {
+      kind: 'expected', updates: [expectedUpdate(-10), expectedUpdate(0)],
+    } });
+    const replaceExpected = (
+      index: 0 | 1,
+      mutate: (update: ReturnType<typeof expectedUpdate>) => ReturnType<typeof expectedUpdate>,
+    ): ArrivalAdmissionCandidate => {
+      const base = expectedCandidate();
+      if (base.confidence.kind !== 'expected') throw new Error('fixture must be Expected');
+      const updates = [...base.confidence.updates] as [ReturnType<typeof expectedUpdate>, ReturnType<typeof expectedUpdate>];
+      updates[index] = mutate(updates[index]);
+      return { ...base, confidence: { kind: 'expected', updates } };
+    };
+    const variants = [
+      ['provenance observed', (bad: Date) => candidate({ provenance: { ...candidate().provenance, observedAt: bad } })],
+      ['provenance retrieved', (bad: Date) => candidate({ provenance: { ...candidate().provenance, retrievedAt: bad } })],
+      ['stop arrival', (bad: Date) => candidate({ remainingStopCalls: [
+        { stopId: 'A24N', sourceStopSequence: 13, arrivalAt: bad, departureAt: at(310) },
+      ] })],
+      ['stop departure', (bad: Date) => candidate({ remainingStopCalls: [
+        { stopId: 'A24N', sourceStopSequence: 13, arrivalAt: at(300), departureAt: bad },
+      ] })],
+      ['Live range start', (bad: Date) => candidate({ confidence: {
+        kind: 'live', supportedRange: { startsAt: bad, endsAt: at(315) },
+      } })],
+      ['Live range end', (bad: Date) => candidate({ confidence: {
+        kind: 'live', supportedRange: { startsAt: at(285), endsAt: bad },
+      } })],
+      ['Expected source', (bad: Date) => replaceExpected(0, (update) => ({ ...update, sourceTimestamp: bad }))],
+      ['Expected observed', (bad: Date) => replaceExpected(0, (update) => ({ ...update, observedAt: bad }))],
+      ['Expected range start', (bad: Date) => replaceExpected(0, (update) => ({
+        ...update, supportedRange: { ...update.supportedRange, startsAt: bad },
+      }))],
+      ['Expected range end', (bad: Date) => replaceExpected(0, (update) => ({
+        ...update, supportedRange: { ...update.supportedRange, endsAt: bad },
+      }))],
+    ] as const;
+    for (const [label, make] of variants) {
+      for (const bad of [new Proxy(at(0), {}), new Date(Number.NaN)]) {
+        expect(() => admitArrivalCandidate(make(bad), scope), `${label}: malformed temporal value`)
+          .toThrow(/invalid|date|timestamp|range|chronology/i);
+      }
+    }
+  });
+
+  test('sanitizes Expected policy inputs and isolates admission and ordering from callback mutation', () => {
+    const getTimeReads: Array<() => number> = [];
+    const tracked = (seconds: number): Date => {
+      const value = at(seconds);
+      const captured = Date.prototype.getTime.call(value);
+      let reads = 0;
+      Object.defineProperty(value, 'getTime', {
+        value: () => { reads += 1; return captured; },
+      });
+      getTimeReads.push(() => reads);
+      return value;
+    };
+    const prior = {
+      evidenceId: 'captured-prior', sourceTimestamp: tracked(-10), observedAt: tracked(-10),
+      stableTrainIdentity: 'train-a', patternIdentity: 'A23N:12>A24N:13>A25N:14',
+      direction: 'northbound' as const, destination: 'Inwood-207 St', exactTargetStopCallIdentity: 'A24N\u0000sequence:13',
+      feedGroupId: 'ace', sourceId: 'ace-feed', assignedPhysicalTrain: true, atOrigin: true,
+      movementObserved: false, overdueVerdict: 'not-overdue' as const,
+      supportedRange: { startsAt: tracked(360), endsAt: tracked(480) }, accepted: true,
+    };
+    const current = { ...prior, evidenceId: 'captured-current', sourceTimestamp: tracked(0), observedAt: tracked(0),
+      supportedRange: { startsAt: tracked(360), endsAt: tracked(480) } };
+    const observedAt = tracked(0);
+    const retrievedAt = tracked(0);
+    const arrivalAt = tracked(300);
+    const departureAt = tracked(310);
+    const rawDates = [observedAt, retrievedAt, arrivalAt, departureAt,
+      prior.sourceTimestamp, prior.observedAt, prior.supportedRange.startsAt, prior.supportedRange.endsAt,
+      current.sourceTimestamp, current.observedAt, current.supportedRange.startsAt, current.supportedRange.endsAt];
+    const originalEpochs = rawDates.map((value) => Date.prototype.getTime.call(value));
+    let policyCalls = 0;
+    let policyReceivedDetachedRanges = false;
+    const expected = candidate({
+      remainingStopCalls: [{ stopId: 'A24N', sourceStopSequence: 13, arrivalAt, departureAt }],
+      provenance: { ...candidate().provenance, observedAt, retrievedAt },
+      confidence: { kind: 'expected', updates: [prior, current], policy: { rangeStable: (priorRange, currentRange) => {
+        policyCalls += 1;
+        policyReceivedDetachedRanges = priorRange !== prior.supportedRange && currentRange !== current.supportedRange
+          && priorRange.startsAt !== prior.supportedRange.startsAt && currentRange.endsAt !== current.supportedRange.endsAt;
+        observedAt.setTime(at(1_000).getTime());
+        retrievedAt.setTime(at(1_000).getTime());
+        arrivalAt.setTime(at(700).getTime());
+        departureAt.setTime(at(710).getTime());
+        prior.sourceTimestamp.setTime(at(-30).getTime());
+        prior.observedAt.setTime(at(-30).getTime());
+        current.sourceTimestamp.setTime(at(-20).getTime());
+        current.observedAt.setTime(at(-20).getTime());
+        for (const update of [prior, current]) {
+          update.supportedRange.startsAt.setTime(at(900).getTime());
+          update.supportedRange.endsAt.setTime(at(920).getTime());
+        }
+        return true;
+      } } },
+    });
+    const admitted = admitArrivalCandidate(expected, scope);
+    expect(admitted).toMatchObject({
+      kind: 'admitted', confidence: 'expected', row: {
+        arrival: { kind: 'expected', estimateAt: at(420), provenance: { observedAt: at(0), retrievedAt: at(0) } },
+        supportedRange: { startsAt: at(360), endsAt: at(480) },
+      },
+    });
+    expect(policyCalls).toBe(1);
+    expect(policyReceivedDetachedRanges).toBe(true);
+    expect(getTimeReads.map((read) => read())).toEqual(getTimeReads.map(() => 0));
+    expect(rawDates.map((value) => Date.prototype.getTime.call(value))).not.toEqual(originalEpochs);
+    if (admitted.kind !== 'admitted') throw new Error('captured Expected fixture must admit');
+
+    const later = admitArrivalCandidate(candidate({
+      stableTrainIdentity: 'train-b', publishedTripId: 'trip-b',
+      remainingStopCalls: [{ stopId: 'A24N', sourceStopSequence: 13, arrivalAt: at(500), departureAt: at(510) }],
+      confidence: { kind: 'live', supportedRange: { startsAt: at(490), endsAt: at(510) } },
+    }), scope);
+    if (later.kind !== 'admitted') throw new Error('later Live fixture must admit');
+    expect(orderPrimaryArrivals([later.row, admitted.row], 3).map((row) => row.stableTrainIdentity))
+      .toEqual(['train-a', 'train-b']);
+  });
 });
 
 function row(

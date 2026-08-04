@@ -863,6 +863,81 @@ describe('service consequence and deterministic disposition', () => {
     }
   });
 
+  test('normalizes contractions and lets complete negation or recovery predicates outrank historical adverse tokens', () => {
+    const exactSelector = [{ selectorId: 'exact-round-five', routeId: 'F', exactDirectionalStopId: 'A24N' }];
+    const segmentSelector = [{ selectorId: 'segment-round-five', routeId: 'F', exactDirectionalSegmentStopIds: ['A24N'] }];
+    const proseAlert = (
+      alertId: string,
+      declaredConsequence: 'local-running-express' | 'reroute' | 'short-turn' | 'full-suspension' | 'station-closure',
+      descriptionRaw: string,
+    ): ServiceAlertEvidence => alert({
+      alertId,
+      declaredConsequence,
+      structuredEffect: declaredConsequence === 'full-suspension' || declaredConsequence === 'station-closure'
+        ? 'NO_SERVICE' : 'MODIFIED_SERVICE',
+      selectors: declaredConsequence === 'local-running-express' || declaredConsequence === 'short-turn'
+        ? segmentSelector : exactSelector,
+      official: { headerRaw: 'Service update', descriptionRaw },
+    });
+
+    const resolvedOrNegated = [
+      ['last-stop-is-not', 'short-turn', '14 St is not the last stop.'],
+      ['last-stop-will-not', 'short-turn', '14 St will not be the last stop.'],
+      ['last-stop-isnt', 'short-turn', "14 St isn't the last stop."],
+      ['last-stop-wasnt-unicode', 'short-turn', '14 St WASN\u2019T\u00a0the last stop!!!'],
+      ['last-stop-wont', 'short-turn', "14 St won't be the last stop."],
+      ['last-stop-never', 'short-turn', '14 St is never the last stop.'],
+      ['via-arent', 'reroute', "F trains aren't running via E."],
+      ['on-isnt', 'reroute', "F service isn't running on the E line."],
+      ['via-wasnt', 'reroute', "F service wasn't running via E."],
+      ['on-werent', 'reroute', "F trains weren't running on the E line."],
+      ['via-wont', 'reroute', "F trains won't run via E."],
+      ['on-doesnt', 'reroute', "F service doesn't run on the E line."],
+      ['express-cant', 'local-running-express', "F trains can't run express."],
+      ['skip-wont', 'local-running-express', "F trains won't skip 14 St."],
+      ['bypass-doesnt', 'local-running-express', "F service doesn't bypass 14 St."],
+      ['terminate-wont', 'short-turn', "F trains won't terminate at 14 St."],
+      ['perfect-has-not-rerouted', 'reroute', 'F service has not been rerouted.'],
+      ['perfect-have-not-rerouted', 'reroute', 'F trains have not been rerouted.'],
+      ['perfect-had-not-rerouted', 'reroute', 'F trains had not been rerouted.'],
+      ['perfect-hasnt-rerouted', 'reroute', "F service hasn't been rerouted."],
+      ['perfect-havent-suspended', 'full-suspension', "F trains haven't been suspended."],
+      ['perfect-hasnt-closed', 'station-closure', "Station is closed? It hasn't been closed."],
+      ['perfect-unicode-closed', 'station-closure', 'STATION IS CLOSED? IT HASN\u2019T\u00a0BEEN CLOSED!!!'],
+      ['closure-contraction', 'station-closure', "Station closed earlier, but it isn't closed now."],
+      ['suspension-contraction', 'full-suspension', "F service was suspended earlier but isn't suspended now."],
+      ['recovered-suspension', 'full-suspension', 'F service was suspended earlier; normal service has resumed.'],
+      ['recovered-closure', 'station-closure', 'Station closed earlier; service is back to normal.'],
+      ['recovered-reroute', 'reroute', 'F trains were rerouted earlier; normal service resumed.'],
+      ['recovered-express', 'local-running-express', 'F trains were running express earlier; normal service continues.'],
+      ['recovered-unicode', 'full-suspension', 'F SERVICE\u00a0WAS SUSPENDED EARLIER\u2014NORMAL SERVICE HAS RESUMED!!!'],
+    ] as const;
+    for (const [alertId, consequence, descriptionRaw] of resolvedOrNegated) {
+      const result = evaluateServiceChanges({
+        snapshot: snapshot([proseAlert(alertId, consequence, descriptionRaw)]),
+        claim: claim(),
+      });
+      expect(result, alertId).toMatchObject({
+        kind: 'quarantine-or-limitation', disposition: 'quarantined', carryover: null,
+      });
+    }
+
+    const currentPositives = [
+      proseAlert('current-bypass', 'local-running-express', 'F trains bypass 14 St.'),
+      proseAlert('current-closure', 'station-closure', 'Station is closed.'),
+      proseAlert('current-suspension', 'full-suspension', 'F service is suspended.'),
+      proseAlert('current-last-stop', 'short-turn', '14 St is the last stop.'),
+      proseAlert('current-reroute', 'reroute', 'F trains are rerouted via the E line.'),
+      proseAlert('current-express', 'local-running-express', 'F trains are running express.'),
+      proseAlert('current-does-not-stop', 'station-closure', 'F trains do not stop at 14 St.'),
+      proseAlert('current-will-not-stop', 'station-closure', 'F trains will not stop at 14 St.'),
+    ];
+    for (const item of currentPositives) {
+      expect(evaluateServiceChanges({ snapshot: snapshot([item]), claim: claim() }).kind, item.alertId)
+        .toBe('resolved-suppression');
+    }
+  });
+
   test('requires exact downstream stop scope for short turns and independent basis for unresolved downstream risk', () => {
     const tripOnly = alert({
       declaredConsequence: 'short-turn', structuredEffect: 'MODIFIED_SERVICE',

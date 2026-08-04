@@ -394,20 +394,26 @@ function destructiveFieldsAgree(alert: ServiceAlertEvidence, official: ResolvedO
 }
 
 function contradictsDestructiveEffect(text: string): boolean {
-  const destructivePredicate = '(?:skip(?:s|ped|ping)?|bypass(?:es|ed|ing)?|terminat(?:e|es|ed|ing)|end(?:s|ed|ing)? early|rerout(?:e|es|ed|ing)|run(?:s|ning)? (?:express|on|via)|clos(?:e|es|ed|ing)|suspend(?:s|ed|ing)?)';
+  const destructivePredicate = '(?:skip(?:s|ped|ping)?|bypass(?:es|ed|ing)?|terminat(?:e|es|ed|ing)|end(?:s|ed|ing)? early|(?:be )?(?:the )?last stop|rerout(?:e|es|ed|ing)|run(?:s|ning)? (?:express|on|via)|clos(?:e|es|ed|ing)|suspend(?:s|ed|ing)?)';
   const auxiliary = '(?:do|does|did|will|would|can|could|shall|should|may|might|is|are|was|were|has|have|had)';
-  const auxiliaryNegation = new RegExp(`\\b${auxiliary}\\s+not\\s+(?:(?:be|being)\\s+)?${destructivePredicate}\\b`);
-  const directNegation = new RegExp(`\\bnot\\s+(?:(?:be|being)\\s+)?${destructivePredicate}\\b`);
-  const neverNegation = new RegExp(`\\bnever\\s+(?:(?:be|being)\\s+)?${destructivePredicate}\\b`);
-  const withoutNegation = /\bwithout\s+(?:(?:any|ever)\s+)?(?:skipping|bypassing|terminating|ending\s+early|running\s+(?:express|on|via)|rerouting|closing|suspending|a\s+(?:reroute|closure|suspension))\b/;
+  const auxiliaryNegation = new RegExp(`\\b${auxiliary}\\s+not\\s+(?:(?:be|being|been)\\s+)?${destructivePredicate}\\b`);
+  const directNegation = new RegExp(`\\bnot\\s+(?:(?:be|being|been)\\s+)?${destructivePredicate}\\b`);
+  const neverNegation = new RegExp(`\\bnever\\s+(?:(?:be|being|been)\\s+)?${destructivePredicate}\\b`);
+  const withoutNegation = /\bwithout\s+(?:(?:any|ever)\s+)?(?:skipping|bypassing|terminating|ending\s+early|being\s+(?:the\s+)?last\s+stop|running\s+(?:express|on|via)|rerouting|closing|suspending|a\s+(?:reroute|closure|suspension))\b/;
   const noPredicate = /\bno\s+(?:(?:scheduled\s+)?stops?\s+(?:(?:are|were|will|would|can|could|shall|should|may|might)\s+(?:be\s+)?)?(?:skipped|bypassed)|bypasses|(?:early\s+)?terminations?|reroutes?|station\s+closures?|closures?|service\s+suspensions?|suspensions?)\b/;
-  return auxiliaryNegation.test(text) || directNegation.test(text) || neverNegation.test(text)
+  const recoveredService = /\bnormal service (?:(?:has|have|had) )?(?:resum(?:e|es|ed|ing)|continue(?:s|d|ing)?|return(?:s|ed|ing)?|been restored)\b|\bservice (?:is|was|has been|had been) back to normal\b/;
+  return recoveredService.test(text) || auxiliaryNegation.test(text) || directNegation.test(text) || neverNegation.test(text)
     || withoutNegation.test(text) || noPredicate.test(text)
     || /\bnot\s+closed\b|\bremain(?:s|ed|ing)?\s+open\b|\bcontinue(?:s|d|ing)?\s+(?:to\s+)?(?:stop|stopping|serve|serving|make)\b|\ball\s+[a-z0-9 ]*stops?\s+continue\b|\ball\s+(?:scheduled\s+)?stops?\b|\bskip(?:s|ping)?\s+no\s+stops?\b|\bnormal\s+service\s+continue(?:s|d|ing)?\b/.test(text);
 }
 
 function normalizeDestructiveText(text: string): string {
   return text.normalize('NFKC').toLocaleLowerCase('en-US')
+    .replace(/[\u2018\u2019\u02bc\uff07]/gu, "'")
+    .replace(/\bwon't\b/gu, 'will not')
+    .replace(/\bshan't\b/gu, 'shall not')
+    .replace(/\bcan't\b/gu, 'can not')
+    .replace(/\b([a-z]+)n't\b/gu, '$1 not')
     .replace(/[^\p{L}\p{N}]+/gu, ' ')
     .replace(/\s+/gu, ' ')
     .trim();
