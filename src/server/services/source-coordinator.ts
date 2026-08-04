@@ -1,15 +1,19 @@
 import { decodeAlertSnapshot, decodeAlertSnapshotJson, type AlertSnapshot } from '../gtfs/alert-loader';
-import { decodeRealtimeSnapshot, decodeRealtimeSnapshotJson, type RealtimeSnapshot } from '../gtfs/realtime-loader';
+import { decodeRealtimeSnapshot, type RealtimeSnapshot } from '../gtfs/realtime-loader';
+import type { SourceProvenance } from '../data/fetch-source';
 import type { RemoteSource } from '../data/source-registry';
 
-type RetrievedPayload = Uint8Array | string | Readonly<Record<string, unknown>>;
 type TimerHandle = ReturnType<typeof setTimeout>;
+
+export interface RetrievedSource {
+  readonly bytes: Uint8Array;
+  readonly provenance: SourceProvenance;
+}
 
 export interface SourceCoordinatorOptions {
   readonly realtimeGroups: readonly RemoteSource[];
   readonly alertSource?: RemoteSource;
-  readonly retrieve: (source: RemoteSource, signal: AbortSignal) => Promise<RetrievedPayload>;
-  readonly now?: () => Date;
+  readonly retrieve: (source: RemoteSource, signal: AbortSignal) => Promise<RetrievedSource>;
   readonly intervalMs?: number;
   readonly setTimer?: (callback: () => void, delayMs: number) => TimerHandle;
   readonly clearTimer?: (timer: TimerHandle) => void;
@@ -24,71 +28,99 @@ export interface SourceCoordinator {
   getLastError(sourceId: string): Error | null;
 }
 
+interface InFlightRefresh {
+  readonly generation: number;
+  readonly operation: Promise<void>;
+}
+
 export function createSourceCoordinator(options: SourceCoordinatorOptions): SourceCoordinator {
   validateSources(options);
   const intervalMs = options.intervalMs ?? 30_000;
   if (!Number.isFinite(intervalMs) || intervalMs <= 0) throw new Error('Source refresh interval must be positive');
   const timers = new Map<string, TimerHandle>();
-  const inFlight = new Map<string, Promise<void>>();
+  const inFlight = new Map<string, InFlightRefresh>();
   const realtimeSnapshots = new Map<string, RealtimeSnapshot>();
   const lastErrors = new Map<string, Error>();
   let alertSnapshot: AlertSnapshot | null = null;
-  let controller: AbortController | null = null;
+  let generation = 0;
+  let running = false;
+  let controller = new AbortController();
 
   const allSources = options.alertSource
     ? [...options.realtimeGroups, options.alertSource]
     : [...options.realtimeGroups];
 
-  async function refresh(source: RemoteSource): Promise<void> {
+  function isCurrent(expectedGeneration: number, signal: AbortSignal): boolean {
+    return expectedGeneration === generation && !signal.aborted;
+  }
+
+  async function refresh(
+    source: RemoteSource,
+    expectedGeneration = generation,
+    signal = controller.signal,
+  ): Promise<void> {
     const existing = inFlight.get(source.id);
-    if (existing) return existing;
-    const signal = controller?.signal ?? new AbortController().signal;
-    const operation = (async () => {
+    if (existing?.generation === expectedGeneration) return existing.operation;
+
+    let operation!: Promise<void>;
+    operation = (async () => {
       try {
-        const payload = await options.retrieve(source, signal);
-        const retrievedAt = (options.now ?? (() => new Date()))();
-        if (source.role === 'subway-alerts') {
-          alertSnapshot = parseAlertPayload(payload, source, retrievedAt, alertSnapshot ?? undefined);
-        } else {
-          const previous = realtimeSnapshots.get(source.id);
-          const snapshot = parseRealtimePayload(payload, source, retrievedAt, previous);
-          realtimeSnapshots.set(source.id, snapshot);
-        }
+        const retrieved = await options.retrieve(source, signal);
+        if (!isCurrent(expectedGeneration, signal)) return;
+        const bytes = exactBytes(retrieved);
+        const snapshot = source.role === 'subway-alerts'
+          ? parseAlertPayload(bytes, retrieved.provenance, alertSnapshot ?? undefined)
+          : parseRealtimePayload(bytes, source, retrieved.provenance, realtimeSnapshots.get(source.id));
+        if (!isCurrent(expectedGeneration, signal)) return;
+        if (source.role === 'subway-alerts') alertSnapshot = snapshot as AlertSnapshot;
+        else realtimeSnapshots.set(source.id, snapshot as RealtimeSnapshot);
         lastErrors.delete(source.id);
       } catch (error) {
-        lastErrors.set(source.id, normalizeError(error));
+        if (isCurrent(expectedGeneration, signal)) lastErrors.set(source.id, normalizeError(error));
       } finally {
-        inFlight.delete(source.id);
+        const current = inFlight.get(source.id);
+        if (current?.generation === expectedGeneration && current.operation === operation) {
+          inFlight.delete(source.id);
+        }
       }
     })();
-    inFlight.set(source.id, operation);
+    inFlight.set(source.id, { generation: expectedGeneration, operation });
     return operation;
   }
 
-  function schedule(source: RemoteSource): void {
+  function schedule(source: RemoteSource, expectedGeneration: number, signal: AbortSignal): void {
+    if (!running || !isCurrent(expectedGeneration, signal)) return;
     const setTimer = options.setTimer ?? setTimeout;
     const timer = setTimer(() => {
       timers.delete(source.id);
-      void refresh(source).finally(() => {
-        if (controller && !controller.signal.aborted) schedule(source);
+      if (!running || !isCurrent(expectedGeneration, signal)) return;
+      void refresh(source, expectedGeneration, signal).finally(() => {
+        schedule(source, expectedGeneration, signal);
       });
     }, intervalMs);
     timers.set(source.id, timer);
   }
 
   function start(): void {
-    if (controller && !controller.signal.aborted) return;
+    if (running) return;
+    generation += 1;
+    controller.abort();
     controller = new AbortController();
+    running = true;
+    const expectedGeneration = generation;
+    const signal = controller.signal;
     for (const source of allSources) {
-      void refresh(source).finally(() => {
-        if (controller && !controller.signal.aborted) schedule(source);
+      void refresh(source, expectedGeneration, signal).finally(() => {
+        schedule(source, expectedGeneration, signal);
       });
     }
   }
 
   function stop(): void {
-    controller?.abort();
-    controller = null;
+    generation += 1;
+    running = false;
+    controller.abort();
+    controller = new AbortController();
     const clearTimer = options.clearTimer ?? clearTimeout;
     for (const timer of timers.values()) clearTimer(timer);
     timers.clear();
@@ -98,7 +130,9 @@ export function createSourceCoordinator(options: SourceCoordinatorOptions): Sour
     start,
     stop,
     async refreshAll(): Promise<void> {
-      await Promise.all(allSources.map(refresh));
+      const expectedGeneration = generation;
+      const signal = controller.signal;
+      await Promise.all(allSources.map((source) => refresh(source, expectedGeneration, signal)));
     },
     getRealtimeSnapshot(sourceId: string): RealtimeSnapshot | null {
       return realtimeSnapshots.get(sourceId) ?? null;
@@ -113,32 +147,29 @@ export function createSourceCoordinator(options: SourceCoordinatorOptions): Sour
 }
 
 function parseRealtimePayload(
-  payload: RetrievedPayload,
+  bytes: Uint8Array,
   source: RemoteSource,
-  retrievedAt: Date,
+  provenance: SourceProvenance,
   previous?: RealtimeSnapshot,
 ): RealtimeSnapshot {
-  const context = {
-    sourceId: source.id,
-    feedGroupId: source.id,
-    sourceUrl: source.url,
-    retrievedAt,
-  };
-  if (typeof payload === 'string') return decodeRealtimeSnapshotJson(JSON.parse(payload), context, previous);
-  if (isBinaryPayload(payload)) return decodeRealtimeSnapshot(toUint8Array(payload), context, previous);
-  return decodeRealtimeSnapshotJson(payload, context, previous);
+  return decodeRealtimeSnapshot(bytes, { feedGroupId: source.id, provenance }, previous);
 }
 
 function parseAlertPayload(
-  payload: RetrievedPayload,
-  source: RemoteSource,
-  retrievedAt: Date,
+  bytes: Uint8Array,
+  provenance: SourceProvenance,
   previous?: AlertSnapshot,
 ): AlertSnapshot {
-  const context = { sourceId: source.id, sourceUrl: source.url, retrievedAt };
-  if (typeof payload === 'string') return decodeAlertSnapshotJson(JSON.parse(payload), context, previous);
-  if (isBinaryPayload(payload)) return decodeAlertSnapshot(toUint8Array(payload), context, previous);
-  return decodeAlertSnapshotJson(payload, context, previous);
+  const observedContentType = provenance.observedContentType.toLowerCase();
+  return observedContentType.includes('json')
+    ? decodeAlertSnapshotJson(bytes, { provenance }, previous)
+    : decodeAlertSnapshot(bytes, { provenance }, previous);
+}
+
+function exactBytes(retrieved: RetrievedSource): Uint8Array {
+  if (!retrieved || typeof retrieved !== 'object') throw new Error('Retrieved source result is required');
+  if (!ArrayBuffer.isView(retrieved.bytes)) throw new Error('Retrieved source bytes must be a Uint8Array');
+  return new Uint8Array(retrieved.bytes.buffer, retrieved.bytes.byteOffset, retrieved.bytes.byteLength);
 }
 
 function validateSources(options: SourceCoordinatorOptions): void {
@@ -156,12 +187,4 @@ function validateSources(options: SourceCoordinatorOptions): void {
 
 function normalizeError(error: unknown): Error {
   return error instanceof Error ? error : new Error(String(error));
-}
-
-function isBinaryPayload(payload: RetrievedPayload): payload is Uint8Array {
-  return ArrayBuffer.isView(payload);
-}
-
-function toUint8Array(payload: Uint8Array): Uint8Array {
-  return new Uint8Array(payload.buffer, payload.byteOffset, payload.byteLength);
 }

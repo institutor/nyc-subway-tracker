@@ -29,7 +29,11 @@
         "headerText": {
           "translation": [
             {
-              "text": "<b>A trains</b> are delayed &amp; moving slowly.",
+              "text": "Retards sur les trains A.",
+              "language": "fr"
+            },
+            {
+              "text": "  <b>A trains</b> are delayed &amp; moving slowly.\n",
               "language": "en"
             }
           ]

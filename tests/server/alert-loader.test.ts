@@ -1,26 +1,24 @@
+import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
+
 import { describe, expect, test } from 'vitest';
 
 import { decodeAlertSnapshotJson } from '../../src/server/gtfs/alert-loader';
 
 const fixture = resolve('tests', 'fixtures', 'alerts', 'subway-alerts.json');
-const context = {
-  sourceId: 'subway-alerts',
-  sourceUrl: 'https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/camsys/subway-alerts',
-  retrievedAt: new Date('2026-08-04T06:01:00.000Z'),
-};
 
-describe('subway alert normalization', () => {
-  test('extracts safe plain text while preserving the exact official source text', async () => {
-    const feed = JSON.parse(await readFile(fixture, 'utf8'));
-    const snapshot = decodeAlertSnapshotJson(feed, context);
+describe('separately owned subway system-alert normalization', () => {
+  test('selects English, preserves exact untrimmed source text, and derives separate safe plain text', async () => {
+    const bytes = await readFile(fixture);
+    const snapshot = decodeAlertSnapshotJson(bytes, context(bytes));
 
     expect(snapshot.alerts[0]).toMatchObject({
       id: 'delay-trip-a',
       kind: 'train-delay',
       officialText: 'A trains are delayed & moving slowly.',
-      rawOfficialText: '<b>A trains</b> are delayed &amp; moving slowly.',
+      rawOfficialText: '  <b>A trains</b> are delayed &amp; moving slowly.\n',
+      language: 'en',
       description: 'Allow additional travel time.',
       cause: 'TECHNICAL_PROBLEM',
       effect: 'SIGNIFICANT_DELAYS',
@@ -28,8 +26,8 @@ describe('subway alert normalization', () => {
   });
 
   test('retains bounded and open-ended active intervals exactly', async () => {
-    const feed = JSON.parse(await readFile(fixture, 'utf8'));
-    const snapshot = decodeAlertSnapshotJson(feed, context);
+    const bytes = await readFile(fixture);
+    const snapshot = decodeAlertSnapshotJson(bytes, context(bytes));
 
     expect(snapshot.alerts[0].activePeriods).toEqual([{
       startsAt: new Date('2026-08-04T05:55:00.000Z'),
@@ -41,9 +39,9 @@ describe('subway alert normalization', () => {
     }]);
   });
 
-  test('preserves each informed entity as an exact route, trip, stop, and raw direction scope', async () => {
-    const feed = JSON.parse(await readFile(fixture, 'utf8'));
-    const snapshot = decodeAlertSnapshotJson(feed, context);
+  test('preserves separate exact scopes and does not widen missing trip, stop, or direction fields', async () => {
+    const bytes = await readFile(fixture);
+    const snapshot = decodeAlertSnapshotJson(bytes, context(bytes));
 
     expect(snapshot.alerts[0].informedEntities).toEqual([{
       agencyId: null,
@@ -57,6 +55,7 @@ describe('subway alert normalization', () => {
         directionId: 0,
         startDate: '20260804',
         startTime: '02:00:00',
+        nyct: { trainId: null, isAssigned: null, direction: null },
       },
     }]);
     expect(snapshot.alerts[1]).toMatchObject({
@@ -68,32 +67,78 @@ describe('subway alert normalization', () => {
     });
   });
 
-  test('retains source/feed provenance and does not infer omitted alert fields', async () => {
-    const feed = JSON.parse(await readFile(fixture, 'utf8'));
-    const snapshot = decodeAlertSnapshotJson(feed, context);
+  test('rejects duplicate canonical informed-entity scopes instead of double-counting impact', async () => {
+    const bytes = await readFile(fixture);
+    const feed = JSON.parse(new TextDecoder().decode(bytes));
+    feed.entity[0].alert.informedEntity.push(structuredClone(feed.entity[0].alert.informedEntity[0]));
+    const duplicateBytes = new TextEncoder().encode(JSON.stringify(feed));
 
-    expect(snapshot).toMatchObject({
-      sourceId: 'subway-alerts',
-      sourceUrl: context.sourceUrl,
-      feedTimestamp: new Date('2026-08-04T06:00:00.000Z'),
-      retrievedAt: context.retrievedAt,
-      entityCount: 2,
-    });
-    expect(snapshot.alerts[1].activePeriods[0]).toMatchObject({ endsAt: null });
-    expect(snapshot.alerts[1].informedEntities[0]).toMatchObject({ routeId: 'C', trip: null });
+    expect(() => decodeAlertSnapshotJson(duplicateBytes, context(duplicateBytes))).toThrow(/duplicate informed-entity scope/i);
   });
 
-  test('rejects malformed or contradictory alert records as a whole snapshot', async () => {
-    const feed = JSON.parse(await readFile(fixture, 'utf8'));
-    const duplicate = { ...feed, entity: [feed.entity[0], { ...feed.entity[0] }] };
-    expect(() => decodeAlertSnapshotJson(duplicate, context)).toThrow(/duplicate entity/i);
+  test('retains exact retrieval provenance and exact JSON bytes rather than hashing re-encoded protobuf', async () => {
+    const bytes = await readFile(fixture);
+    const loaderContext = context(bytes);
+    const snapshot = decodeAlertSnapshotJson(bytes, loaderContext);
+
+    expect(snapshot.provenance).toEqual(loaderContext.provenance);
+    expect(snapshot.rawEvidence).toEqual({
+      evidenceId: `sha256:${sha256(bytes)}`,
+      mediaType: 'application/json',
+      receivedBytes: bytes.byteLength,
+      payloadBase64: Buffer.from(bytes).toString('base64'),
+    });
+    expect(snapshot.alerts[0].evidenceId).toBe(snapshot.rawEvidence.evidenceId);
+  });
+
+  test('rejects malformed, duplicate-entity, reversed-period, and contradictory alert records', async () => {
+    const bytes = await readFile(fixture);
+    const feed = JSON.parse(new TextDecoder().decode(bytes));
+
+    expect(() => decodeAlertSnapshotJson(Uint8Array.of(0xff), context(Uint8Array.of(0xff))))
+      .toThrow(/parse.*JSON/i);
+
+    const duplicate = structuredClone(feed);
+    duplicate.entity.push(structuredClone(duplicate.entity[0]));
+    const duplicateBytes = jsonBytes(duplicate);
+    expect(() => decodeAlertSnapshotJson(duplicateBytes, context(duplicateBytes))).toThrow(/duplicate entity/i);
 
     const reversed = structuredClone(feed);
     reversed.entity[0].alert.activePeriod[0] = { start: 1785826800, end: 1785822900 };
-    expect(() => decodeAlertSnapshotJson(reversed, context)).toThrow(/active period/i);
+    const reversedBytes = jsonBytes(reversed);
+    expect(() => decodeAlertSnapshotJson(reversedBytes, context(reversedBytes))).toThrow(/active period/i);
 
     const contradictory = structuredClone(feed);
     contradictory.entity[0].alert.informedEntity[0].trip.routeId = 'C';
-    expect(() => decodeAlertSnapshotJson(contradictory, context)).toThrow(/contradictory.*route/i);
+    const contradictoryBytes = jsonBytes(contradictory);
+    expect(() => decodeAlertSnapshotJson(contradictoryBytes, context(contradictoryBytes))).toThrow(/contradictory.*route/i);
   });
 });
+
+function context(bytes: Uint8Array) {
+  const sourceUrl = 'https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/camsys/subway-alerts';
+  return {
+    provenance: {
+      sourceId: 'subway-alerts',
+      sourceAuthority: 'MTA',
+      sourceRole: 'subway-alerts',
+      sourceUrl,
+      retrievedAt: '2026-08-04T06:01:00.000Z',
+      finalUrl: sourceUrl,
+      redirectCount: 0,
+      declaredContentType: 'application/json',
+      observedContentType: 'application/json',
+      declaredBytes: bytes.byteLength,
+      receivedBytes: bytes.byteLength,
+      sha256: sha256(bytes),
+    },
+  };
+}
+
+function sha256(bytes: Uint8Array): string {
+  return createHash('sha256').update(bytes).digest('hex');
+}
+
+function jsonBytes(value: unknown): Uint8Array {
+  return new TextEncoder().encode(JSON.stringify(value));
+}

@@ -1,10 +1,19 @@
+import { createHash } from 'node:crypto';
+
 import type { transit_realtime } from 'gtfs-realtime-bindings';
 
-export interface RealtimeProvenance {
-  readonly sourceId: string;
+import {
+  decodeNyctStopTimeUpdate,
+  decodeNyctTripDescriptor,
+  type NyctFeedHeaderEvidence,
+  type NyctTripDescriptorEvidence,
+} from './nyct-realtime-extensions';
+import type { AcceptedSourceEvidence, RawSourceEvidence } from './source-evidence';
+import type { SourceProvenance } from '../data/fetch-source';
+
+export interface RealtimeLoaderContext {
   readonly feedGroupId: string;
-  readonly sourceUrl: string;
-  readonly retrievedAt: Date;
+  readonly provenance: SourceProvenance;
 }
 
 export interface NormalizedTripDescriptor {
@@ -13,14 +22,18 @@ export interface NormalizedTripDescriptor {
   readonly directionId: number | null;
   readonly startDate: string | null;
   readonly startTime: string | null;
+  readonly nyct: NyctTripDescriptorEvidence;
 }
 
 export interface NormalizedStopCall {
+  readonly remainingOrder: number;
+  readonly sourceStopSequence: number | null;
   readonly stopId: string;
-  readonly stopSequence: number;
   readonly arrivalTime: Date | null;
   readonly departureTime: Date | null;
   readonly scheduleRelationship: string | null;
+  readonly scheduledTrack: string | null;
+  readonly actualTrack: string | null;
 }
 
 export interface NormalizedVehicleProgress {
@@ -34,30 +47,60 @@ export interface NormalizedVehicleProgress {
 
 export interface NormalizedTripUpdate {
   readonly entityId: string;
+  readonly evidenceId: string;
+  readonly trainInstanceId: string;
   readonly trip: NormalizedTripDescriptor;
   readonly updateTimestamp: Date | null;
-  readonly futureStopCalls: readonly NormalizedStopCall[];
+  readonly remainingStopCalls: readonly NormalizedStopCall[];
   readonly vehicleProgress: NormalizedVehicleProgress | null;
 }
 
 export interface NormalizedVehiclePosition extends NormalizedVehicleProgress {
+  readonly evidenceId: string;
+  readonly trainInstanceId: string;
   readonly trip: NormalizedTripDescriptor;
 }
 
-export interface RealtimeSnapshot extends RealtimeProvenance {
-  readonly gtfsRealtimeVersion: '2.0';
+export interface EmbeddedTrainAlert {
+  readonly id: string;
+  readonly evidenceId: string;
+  readonly kind: 'train-delay';
+  readonly officialText: string;
+  readonly rawOfficialText: string;
+  readonly language: string | null;
+  readonly effect: string | null;
+  readonly activePeriods: readonly { startsAt: Date | null; endsAt: Date | null }[];
+  readonly informedTrips: readonly NormalizedTripDescriptor[];
+}
+
+export interface RealtimeSnapshot {
+  readonly sourceId: string;
+  readonly feedGroupId: string;
+  readonly sourceUrl: string;
+  readonly retrievedAt: Date;
+  readonly provenance: Readonly<SourceProvenance>;
+  readonly rawEvidence: RawSourceEvidence;
+  readonly gtfsRealtimeVersion: '1.0';
+  readonly nyctSubwayVersion: '1.0';
   readonly incrementality: 'FULL_DATASET';
   readonly feedTimestamp: Date;
   readonly contentHash: string;
   readonly entityCount: number;
   readonly coveredRouteIds: readonly string[];
+  readonly tripReplacementPeriods: NyctFeedHeaderEvidence['tripReplacementPeriods'];
   readonly tripUpdates: readonly NormalizedTripUpdate[];
   readonly vehiclePositions: readonly NormalizedVehiclePosition[];
+  readonly embeddedTrainAlerts: readonly EmbeddedTrainAlert[];
 }
 
-interface NormalizeRealtimeInput extends RealtimeProvenance {
+interface NormalizeRealtimeInput extends AcceptedSourceEvidence {
+  readonly feedGroupId: string;
   readonly feedTimestamp: Date;
-  readonly contentHash: string;
+  readonly nyctHeader: NyctFeedHeaderEvidence;
+}
+
+interface PreliminaryTripUpdate extends Omit<NormalizedTripUpdate, 'vehicleProgress'> {
+  vehicleProgress: NormalizedVehicleProgress | null;
 }
 
 export function normalizeRealtimeFeed(
@@ -67,98 +110,123 @@ export function normalizeRealtimeFeed(
   const entityIds = new Set<string>();
   const tripEntities: Array<{ entityId: string; update: transit_realtime.ITripUpdate }> = [];
   const vehicleEntities: Array<{ entityId: string; vehicle: transit_realtime.IVehiclePosition }> = [];
+  const alertEntities: Array<{ entityId: string; alert: transit_realtime.IAlert }> = [];
 
   for (const entity of feed.entity) {
     const entityId = requiredText(entity.id, 'GTFS-Realtime entity id');
     if (entityIds.has(entityId)) throw new Error(`Duplicate entity id ${entityId}`);
     entityIds.add(entityId);
     if (entity.isDeleted) throw new Error(`Full-dataset entity ${entityId} cannot be deleted`);
-
     const payloads = [entity.tripUpdate, entity.vehicle, entity.alert, entity.shape, entity.stop, entity.tripModifications]
       .filter((value) => value != null);
     if (payloads.length !== 1) throw new Error(`Entity ${entityId} must contain exactly one payload`);
     if (entity.tripUpdate) tripEntities.push({ entityId, update: entity.tripUpdate });
     else if (entity.vehicle) vehicleEntities.push({ entityId, vehicle: entity.vehicle });
-    else throw new Error(`Realtime feed entity ${entityId} is not a trip update or vehicle position`);
+    else if (entity.alert) alertEntities.push({ entityId, alert: entity.alert });
+    else throw new Error(`NYCT route-feed entity ${entityId} has an unsupported payload`);
   }
 
-  const vehiclePositions = vehicleEntities.map(({ entityId, vehicle }) => normalizeVehicle(entityId, vehicle));
-  const tripUpdates = tripEntities.map(({ entityId, update }) => {
-    if (!update.trip) throw new Error(`Trip update ${entityId} requires a trip descriptor`);
-    const trip = normalizeTripDescriptor(update.trip, `Trip update ${entityId}`);
-    const stopTimeUpdates = update.stopTimeUpdate ?? [];
-    if (stopTimeUpdates.length === 0) throw new Error(`Trip update ${entityId} requires stop-time updates`);
-    let lastSequence = 0;
-    const allCalls = stopTimeUpdates.map((call, index) => {
-      const stopId = requiredText(call.stopId, `Trip update ${entityId} stop ${index + 1} id`);
-      const stopSequence = own(call, 'stopSequence')
-        ? positiveInteger(call.stopSequence, `Trip update ${entityId} stop ${stopId} sequence`)
-        : fail(`Trip update ${entityId} stop ${stopId} requires stop sequence`);
-      if (stopSequence <= lastSequence) {
-        throw new Error(`Trip update ${entityId} stop sequence must be strictly increasing`);
-      }
-      lastSequence = stopSequence;
-      const arrivalTime = normalizeEventTime(call.arrival, `Trip update ${entityId} stop ${stopId} arrival`);
-      const departureTime = normalizeEventTime(call.departure, `Trip update ${entityId} stop ${stopId} departure`);
-      if (!arrivalTime && !departureTime) throw new Error(`Trip update ${entityId} stop ${stopId} requires an absolute event time`);
-      if (arrivalTime && departureTime && departureTime < arrivalTime) {
-        throw new Error(`Trip update ${entityId} stop ${stopId} departure precedes arrival`);
-      }
-      return Object.freeze({
-        stopId,
-        stopSequence,
-        arrivalTime,
-        departureTime,
-        scheduleRelationship: own(call, 'scheduleRelationship')
-          ? enumName(transitScheduleRelationship, call.scheduleRelationship!)
-          : null,
-      });
-    });
-    const futureStopCalls = allCalls.filter((call) => {
-      const latest = call.departureTime ?? call.arrivalTime;
-      return latest !== null && latest >= input.feedTimestamp;
-    });
-    const matching = vehiclePositions.filter((position) => position.trip.tripId === trip.tripId);
-    for (const candidate of matching) assertCompatibleTrip(trip, candidate.trip, entityId);
-    if (matching.length > 1) throw new Error(`Trip update ${entityId} has ambiguous vehicle progress`);
+  const tripUpdates: PreliminaryTripUpdate[] = tripEntities.map(({ entityId, update }) =>
+    normalizeTripUpdate(entityId, update, input));
+  const identities = new Set<string>();
+  for (const update of tripUpdates) {
+    if (identities.has(update.trainInstanceId)) throw new Error(`Duplicate normalized train instance ${update.trainInstanceId}`);
+    identities.add(update.trainInstanceId);
+  }
 
-    return Object.freeze({
-      entityId,
-      trip,
-      updateTimestamp: own(update, 'timestamp')
-        ? timestampToDate(update.timestamp!, `Trip update ${entityId} timestamp`)
-        : null,
-      futureStopCalls: Object.freeze(futureStopCalls),
-      vehicleProgress: matching[0] ? withoutTrip(matching[0]) : null,
-    });
-  });
+  const vehiclePositions = vehicleEntities.map(({ entityId, vehicle }) => normalizeVehicle(entityId, vehicle, input));
+  for (const vehicle of vehiclePositions) {
+    const sameTripId = tripUpdates.filter((update) => update.trip.tripId === vehicle.trip.tripId);
+    const compatible = sameTripId.filter((update) => descriptorsCompatible(update.trip, vehicle.trip));
+    if (compatible.length > 1) throw new Error(`Vehicle entity ${vehicle.entityId} has ambiguous vehicle trip descriptor`);
+    if (compatible.length === 0) {
+      if (sameTripId.length > 0) throw new Error(`Vehicle entity ${vehicle.entityId} has contradictory vehicle trip descriptor`);
+      throw new Error(`Vehicle entity ${vehicle.entityId} has no matching trip update`);
+    }
+    if (compatible[0].vehicleProgress !== null) {
+      throw new Error(`Train instance ${compatible[0].trainInstanceId} has duplicate vehicle progress`);
+    }
+    compatible[0].vehicleProgress = withoutTrip(vehicle);
+  }
 
+  const embeddedTrainAlerts = alertEntities.map(({ entityId, alert }) => normalizeEmbeddedAlert(entityId, alert, input));
   const coveredRouteIds = [...new Set([
     ...tripUpdates.map((item) => item.trip.routeId),
     ...vehiclePositions.map((item) => item.trip.routeId),
+    ...embeddedTrainAlerts.flatMap((item) => item.informedTrips.map((trip) => trip.routeId)),
   ].filter((value): value is string => value !== null))].sort(compareText);
 
   return deepFreeze({
-    sourceId: input.sourceId,
+    sourceId: input.provenance.sourceId,
     feedGroupId: input.feedGroupId,
-    sourceUrl: input.sourceUrl,
+    sourceUrl: input.provenance.sourceUrl,
     retrievedAt: new Date(input.retrievedAt),
-    gtfsRealtimeVersion: '2.0' as const,
+    provenance: input.provenance,
+    rawEvidence: input.rawEvidence,
+    gtfsRealtimeVersion: '1.0' as const,
+    nyctSubwayVersion: '1.0' as const,
     incrementality: 'FULL_DATASET' as const,
     feedTimestamp: new Date(input.feedTimestamp),
-    contentHash: input.contentHash,
+    contentHash: input.rawEvidence.evidenceId,
     entityCount: feed.entity.length,
     coveredRouteIds,
-    tripUpdates,
+    tripReplacementPeriods: input.nyctHeader.tripReplacementPeriods,
+    tripUpdates: tripUpdates.map((update) => Object.freeze({ ...update })),
     vehiclePositions,
+    embeddedTrainAlerts,
   });
 }
 
-const transitScheduleRelationship = {
-  0: 'SCHEDULED', 1: 'SKIPPED', 2: 'NO_DATA', 3: 'UNSCHEDULED',
-} as const;
+function normalizeTripUpdate(
+  entityId: string,
+  update: transit_realtime.ITripUpdate,
+  input: NormalizeRealtimeInput,
+): PreliminaryTripUpdate {
+  if (!update.trip) throw new Error(`Trip update ${entityId} requires a trip descriptor`);
+  const trip = normalizeTripDescriptor(update.trip, `Trip update ${entityId}`);
+  const updates = update.stopTimeUpdate ?? [];
+  if (updates.length === 0) throw new Error(`Trip update ${entityId} requires remaining stop-time updates`);
+  const remainingStopCalls = updates.map((call, index) => {
+    const label = `Trip update ${entityId} stop ${index + 1}`;
+    const stopId = requiredText(call.stopId, `${label} id`);
+    const arrivalTime = normalizeEventTime(call.arrival, `${label} arrival`);
+    const departureTime = normalizeEventTime(call.departure, `${label} departure`);
+    if (!arrivalTime && !departureTime) throw new Error(`${label} requires an absolute event time`);
+    if (arrivalTime && departureTime && departureTime < arrivalTime) throw new Error(`${label} departure precedes arrival`);
+    const nyct = decodeNyctStopTimeUpdate(call, label);
+    if (index > 0 && nyct.actualTrack !== null) throw new Error(`${label} has actual track outside the first remaining stop`);
+    return Object.freeze({
+      remainingOrder: index,
+      sourceStopSequence: own(call, 'stopSequence') ? positiveInteger(call.stopSequence, `${label} source sequence`) : null,
+      stopId,
+      arrivalTime,
+      departureTime,
+      scheduleRelationship: own(call, 'scheduleRelationship')
+        ? enumName({ 0: 'SCHEDULED', 1: 'SKIPPED', 2: 'NO_DATA', 3: 'UNSCHEDULED' } as const, call.scheduleRelationship!)
+        : null,
+      scheduledTrack: nyct.scheduledTrack,
+      actualTrack: nyct.actualTrack,
+    });
+  });
+  const updateTimestamp = own(update, 'timestamp')
+    ? sourceTimestamp(update.timestamp!, `Trip update timestamp for entity ${entityId}`, input)
+    : null;
+  return {
+    entityId,
+    evidenceId: input.rawEvidence.evidenceId,
+    trainInstanceId: canonicalTrainInstanceId(trip),
+    trip,
+    updateTimestamp,
+    remainingStopCalls: Object.freeze(remainingStopCalls),
+    vehicleProgress: null,
+  };
+}
 
-function normalizeVehicle(entityId: string, vehicle: transit_realtime.IVehiclePosition): NormalizedVehiclePosition {
+function normalizeVehicle(
+  entityId: string,
+  vehicle: transit_realtime.IVehiclePosition,
+  input: NormalizeRealtimeInput,
+): NormalizedVehiclePosition {
   if (!vehicle.trip) throw new Error(`Vehicle entity ${entityId} requires a trip descriptor`);
   const trip = normalizeTripDescriptor(vehicle.trip, `Vehicle entity ${entityId}`);
   const status = own(vehicle, 'currentStatus')
@@ -167,6 +235,8 @@ function normalizeVehicle(entityId: string, vehicle: transit_realtime.IVehiclePo
   if (status === null) throw new Error(`Vehicle entity ${entityId} has invalid current status`);
   return Object.freeze({
     entityId,
+    evidenceId: input.rawEvidence.evidenceId,
+    trainInstanceId: canonicalTrainInstanceId(trip),
     trip,
     vehicleId: optionalText(vehicle.vehicle?.id),
     currentStopSequence: own(vehicle, 'currentStopSequence')
@@ -175,44 +245,112 @@ function normalizeVehicle(entityId: string, vehicle: transit_realtime.IVehiclePo
     stopId: optionalText(vehicle.stopId),
     currentStatus: status,
     movementTimestamp: own(vehicle, 'timestamp')
-      ? timestampToDate(vehicle.timestamp!, `Vehicle entity ${entityId} movement timestamp`)
+      ? sourceTimestamp(vehicle.timestamp!, `Vehicle movement timestamp for entity ${entityId}`, input)
       : null,
   });
 }
 
-function normalizeTripDescriptor(
+function normalizeEmbeddedAlert(
+  id: string,
+  alert: transit_realtime.IAlert,
+  input: NormalizeRealtimeInput,
+): EmbeddedTrainAlert {
+  const selected = selectTranslation(alert.headerText);
+  if (!selected) throw new Error(`Embedded alert ${id} requires official header text`);
+  const officialText = plainText(selected.text);
+  if (officialText.toLocaleLowerCase('en-US') !== 'train delayed') {
+    throw new Error(`Embedded alert ${id} is not the official Train delayed alert`);
+  }
+  const informedTrips = (alert.informedEntity ?? []).map((scope, index) => {
+    if (!scope.trip || scope.agencyId || scope.routeId || scope.stopId || own(scope, 'directionId')) {
+      throw new Error(`Embedded alert ${id} scope ${index + 1} must contain only a trip descriptor`);
+    }
+    return normalizeTripDescriptor(scope.trip, `Embedded alert ${id} trip ${index + 1}`);
+  });
+  if (informedTrips.length === 0) throw new Error(`Embedded alert ${id} requires an informed trip`);
+  const scopeIds = new Set<string>();
+  for (const trip of informedTrips) {
+    const identity = canonicalTrainInstanceId(trip);
+    if (scopeIds.has(identity)) throw new Error(`Embedded alert ${id} has duplicate informed trip scope`);
+    scopeIds.add(identity);
+  }
+  const activePeriods = (alert.activePeriod ?? []).map((period, index) => {
+    const startsAt = own(period, 'start') ? timestampToDate(period.start!, `Embedded alert ${id} period ${index + 1} start`) : null;
+    const endsAt = own(period, 'end') ? timestampToDate(period.end!, `Embedded alert ${id} period ${index + 1} end`) : null;
+    if (startsAt && endsAt && endsAt < startsAt) throw new Error(`Embedded alert ${id} active period ends before start`);
+    return Object.freeze({ startsAt, endsAt });
+  });
+  const effect = own(alert, 'effect')
+    ? alertEnumName(alert.effect!, (value) => GtfsRealtimeBindingsProxy.effect(value))
+    : null;
+  return Object.freeze({
+    id,
+    evidenceId: input.rawEvidence.evidenceId,
+    kind: 'train-delay' as const,
+    officialText,
+    rawOfficialText: selected.text,
+    language: selected.language,
+    effect,
+    activePeriods: Object.freeze(activePeriods),
+    informedTrips: Object.freeze(informedTrips),
+  });
+}
+
+export function normalizeTripDescriptor(
   trip: transit_realtime.ITripDescriptor,
   label: string,
 ): NormalizedTripDescriptor {
-  const directionId = own(trip, 'directionId')
-    ? integer(trip.directionId!, `${label} direction id`)
-    : null;
-  if (directionId !== null && directionId !== 0 && directionId !== 1) {
-    throw new Error(`${label} direction id must be 0 or 1`);
-  }
+  const directionId = own(trip, 'directionId') ? integer(trip.directionId!, `${label} direction id`) : null;
+  if (directionId !== null && directionId !== 0 && directionId !== 1) throw new Error(`${label} direction id must be 0 or 1`);
   const startDate = optionalText(trip.startDate);
-  if (startDate !== null && !/^\d{8}$/.test(startDate)) throw new Error(`${label} has invalid start date`);
+  if (startDate !== null) validateServiceDate(startDate, label);
   const startTime = optionalText(trip.startTime);
-  if (startTime !== null && !/^\d{2}:\d{2}:\d{2}$/.test(startTime)) throw new Error(`${label} has invalid start time`);
+  if (startTime !== null && !/^\d{2,3}:[0-5]\d:[0-5]\d$/.test(startTime)) {
+    throw new Error(`${label} has invalid GTFS start time`);
+  }
   return Object.freeze({
     tripId: requiredText(trip.tripId, `${label} trip id`),
     routeId: optionalText(trip.routeId),
     directionId,
     startDate,
     startTime,
+    nyct: decodeNyctTripDescriptor(trip, label),
   });
 }
 
-function assertCompatibleTrip(
-  update: NormalizedTripDescriptor,
-  vehicle: NormalizedTripDescriptor,
-  entityId: string,
-): void {
-  for (const field of ['routeId', 'directionId', 'startDate', 'startTime'] as const) {
-    if (update[field] !== null && vehicle[field] !== null && update[field] !== vehicle[field]) {
-      throw new Error(`Trip update ${entityId} has contradictory vehicle trip ${field}`);
-    }
+function validateServiceDate(value: string, label: string): void {
+  if (!/^\d{8}$/.test(value)) throw new Error(`${label} has invalid Gregorian service date`);
+  const year = Number(value.slice(0, 4));
+  const month = Number(value.slice(4, 6));
+  const day = Number(value.slice(6, 8));
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) {
+    throw new Error(`${label} has invalid Gregorian service date`);
   }
+}
+
+function canonicalTrainInstanceId(trip: NormalizedTripDescriptor): string {
+  const canonical = JSON.stringify({
+    tripId: trip.tripId,
+    routeId: trip.routeId,
+    startDate: trip.startDate,
+    startTime: trip.startTime,
+    directionId: trip.directionId,
+    nyctDirection: trip.nyct.direction,
+    nyctTrainId: trip.nyct.trainId,
+    isAssigned: trip.nyct.isAssigned,
+  });
+  return `nyct-train:sha256:${createHash('sha256').update(canonical).digest('hex')}`;
+}
+
+function descriptorsCompatible(left: NormalizedTripDescriptor, right: NormalizedTripDescriptor): boolean {
+  const pairs: ReadonlyArray<readonly [unknown, unknown]> = [
+    [left.tripId, right.tripId], [left.routeId, right.routeId], [left.startDate, right.startDate],
+    [left.startTime, right.startTime], [left.directionId, right.directionId],
+    [left.nyct.direction, right.nyct.direction], [left.nyct.trainId, right.nyct.trainId],
+    [left.nyct.isAssigned, right.nyct.isAssigned],
+  ];
+  return pairs.every(([a, b]) => a === null || b === null || a === b);
 }
 
 function withoutTrip(position: NormalizedVehiclePosition): NormalizedVehicleProgress {
@@ -226,10 +364,18 @@ function withoutTrip(position: NormalizedVehiclePosition): NormalizedVehicleProg
   });
 }
 
-function normalizeEventTime(
-  event: transit_realtime.TripUpdate.IStopTimeEvent | null | undefined,
+function sourceTimestamp(
+  value: number | { toString(): string },
   label: string,
-): Date | null {
+  input: NormalizeRealtimeInput,
+): Date {
+  const date = timestampToDate(value, label);
+  if (date > input.feedTimestamp) throw new Error(`${label} is after feed header timestamp`);
+  if (date > input.retrievedAt) throw new Error(`${label} is after accepted retrieval time`);
+  return date;
+}
+
+function normalizeEventTime(event: transit_realtime.TripUpdate.IStopTimeEvent | null | undefined, label: string): Date | null {
   if (!event) return null;
   if (!own(event, 'time')) throw new Error(`${label} requires an absolute time`);
   return timestampToDate(event.time!, label);
@@ -243,6 +389,32 @@ export function timestampToDate(value: number | { toString(): string }, label: s
   const date = new Date(milliseconds);
   if (!Number.isFinite(date.getTime())) throw new Error(`${label} is invalid`);
   return date;
+}
+
+function selectTranslation(value: transit_realtime.ITranslatedString | null | undefined): { text: string; language: string | null } | null {
+  const translations = value?.translation ?? [];
+  const selected = translations.find((item) => item.text?.trim() && item.language?.toLowerCase().startsWith('en'))
+    ?? translations.find((item) => item.text?.trim());
+  return selected?.text?.trim() ? { text: selected.text, language: optionalText(selected.language) } : null;
+}
+
+function plainText(value: string): string {
+  return value.replace(/<[^>]*>/g, ' ').replace(/&amp;/gi, '&').replace(/\s+/g, ' ').trim();
+}
+
+const GtfsRealtimeBindingsProxy = {
+  effect(value: number): string | null {
+    const effects: Record<number, string> = {
+      1: 'NO_SERVICE', 2: 'REDUCED_SERVICE', 3: 'SIGNIFICANT_DELAYS', 4: 'DETOUR', 5: 'ADDITIONAL_SERVICE',
+      6: 'MODIFIED_SERVICE', 7: 'OTHER_EFFECT', 8: 'UNKNOWN_EFFECT', 9: 'STOP_MOVED', 10: 'NO_EFFECT',
+      11: 'ACCESSIBILITY_ISSUE',
+    };
+    return effects[value] ?? null;
+  },
+};
+
+function alertEnumName(value: number, lookup: (value: number) => string | null): string | null {
+  return lookup(value);
 }
 
 function integer(value: number | { toString(): string }, label: string): number {
@@ -274,10 +446,6 @@ function enumName<T extends Readonly<Record<number, string>>>(values: T, value: 
 
 function own(value: object, key: PropertyKey): boolean {
   return Object.prototype.hasOwnProperty.call(value, key);
-}
-
-function fail(message: string): never {
-  throw new Error(message);
 }
 
 function compareText(left: string, right: string): number {

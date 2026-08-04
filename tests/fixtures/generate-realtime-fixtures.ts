@@ -1,82 +1,110 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
-import GtfsRealtimeBindings from 'gtfs-realtime-bindings';
+import type { transit_realtime as TransitRealtime } from 'gtfs-realtime-bindings';
 
-const { transit_realtime } = GtfsRealtimeBindings;
+import {
+  encodeNyctFeed,
+  nyctFeedHeaderUnknown,
+  nyctStopUnknown,
+  nyctTripUnknown,
+} from './nyct-realtime-fixture';
 
 const directory = resolve('tests', 'fixtures', 'realtime');
 await mkdir(directory, { recursive: true });
 
 await write('current.pb', {
   header: {
-    gtfsRealtimeVersion: '2.0',
-    incrementality: 'FULL_DATASET',
+    gtfsRealtimeVersion: '1.0',
+    incrementality: 0,
     timestamp: 1_785_823_200,
+    $unknowns: nyctFeedHeaderUnknown(),
   },
   entity: [
     {
-      id: 'trip-update-a',
+      id: 'trip-update-north',
       tripUpdate: {
         trip: {
-          tripId: 'trip-a',
+          tripId: 'shared-trip',
           routeId: 'A',
-          directionId: 0,
-          startDate: '20260804',
-          startTime: '02:00:00',
+          startDate: '20260803',
+          $unknowns: nyctTripUnknown({ trainId: '0A 0200 FAR/207', isAssigned: true, direction: 1 }),
         },
         stopTimeUpdate: [
           {
-            stopSequence: 1,
             stopId: 'A23N',
-            arrival: { time: 1_785_823_140 },
-            departure: { time: 1_785_823_170 },
-          },
-          {
-            stopSequence: 2,
-            stopId: 'A24N',
             arrival: { time: 1_785_823_320 },
             departure: { time: 1_785_823_350 },
+            $unknowns: nyctStopUnknown({ scheduledTrack: '4', actualTrack: '3' }),
           },
           {
-            stopSequence: 3,
-            stopId: 'A25N',
+            stopId: 'A24N',
             arrival: { time: 1_785_823_500 },
+            $unknowns: nyctStopUnknown({ scheduledTrack: '4' }),
           },
         ],
         timestamp: 1_785_823_190,
       },
     },
     {
-      id: 'vehicle-a',
+      id: 'vehicle-north',
       vehicle: {
         trip: {
-          tripId: 'trip-a',
+          tripId: 'shared-trip',
           routeId: 'A',
-          directionId: 0,
-          startDate: '20260804',
-          startTime: '02:00:00',
+          startDate: '20260803',
+          $unknowns: nyctTripUnknown({ trainId: '0A 0200 FAR/207', isAssigned: true, direction: 1 }),
         },
-        vehicle: { id: 'train-a' },
-        currentStopSequence: 1,
         stopId: 'A23N',
-        currentStatus: 'IN_TRANSIT_TO',
+        currentStatus: 2,
         timestamp: 1_785_823_185,
       },
     },
     {
-      id: 'trip-update-secondary',
+      id: 'trip-update-south',
       tripUpdate: {
         trip: {
-          tripId: 'trip-secondary',
+          tripId: 'shared-trip',
           routeId: 'A',
-          directionId: 0,
           startDate: '20260804',
-          startTime: '02:05:00',
+          $unknowns: nyctTripUnknown({ trainId: '0A 0210 207/FAR', isAssigned: true, direction: 3 }),
         },
         stopTimeUpdate: [
-          { stopSequence: 1, stopId: 'A24N', arrival: { time: 1_785_823_800 } },
+          {
+            stopId: 'A24S',
+            arrival: { time: 1_785_823_440 },
+            $unknowns: nyctStopUnknown({ scheduledTrack: '1', actualTrack: '1' }),
+          },
         ],
+        timestamp: 1_785_823_195,
+      },
+    },
+    {
+      id: 'vehicle-south',
+      vehicle: {
+        trip: {
+          tripId: 'shared-trip',
+          routeId: 'A',
+          startDate: '20260804',
+          $unknowns: nyctTripUnknown({ trainId: '0A 0210 207/FAR', isAssigned: true, direction: 3 }),
+        },
+        stopId: 'A24S',
+        currentStatus: 1,
+        timestamp: 1_785_823_180,
+      },
+    },
+    {
+      id: 'delayed-north',
+      alert: {
+        informedEntity: [{
+          trip: {
+            tripId: 'shared-trip',
+            routeId: 'A',
+            startDate: '20260803',
+            $unknowns: nyctTripUnknown({ trainId: '0A 0200 FAR/207', isAssigned: true, direction: 1 }),
+          },
+        }],
+        headerText: { translation: [{ text: 'Train delayed' }] },
       },
     },
   ],
@@ -84,9 +112,10 @@ await write('current.pb', {
 
 await write('holding.pb', {
   header: {
-    gtfsRealtimeVersion: '2.0',
-    incrementality: 'FULL_DATASET',
+    gtfsRealtimeVersion: '1.0',
+    incrementality: 0,
     timestamp: 1_785_823_230,
+    $unknowns: nyctFeedHeaderUnknown(),
   },
   entity: [
     {
@@ -94,20 +123,28 @@ await write('holding.pb', {
       tripUpdate: {
         trip: { tripId: 'trip-unknown' },
         stopTimeUpdate: [
-          { stopSequence: 1, stopId: 'A24N', arrival: { time: 1_785_823_500 } },
+          {
+            stopId: 'A24S',
+            arrival: { time: 1_785_823_500 },
+            $unknowns: nyctStopUnknown({}),
+          },
         ],
+        timestamp: 1_785_823_220,
       },
     },
     {
       id: 'vehicle-unknown',
-      vehicle: { trip: { tripId: 'trip-unknown' } },
+      vehicle: {
+        trip: {
+          tripId: 'trip-unknown',
+          $unknowns: nyctTripUnknown({ isAssigned: false, direction: 3 }),
+        },
+        timestamp: 1_785_823_210,
+      },
     },
   ],
 });
 
-async function write(name: string, input: Record<string, unknown>): Promise<void> {
-  const message = transit_realtime.FeedMessage.fromObject(input);
-  const failure = transit_realtime.FeedMessage.verify(message);
-  if (failure) throw new Error(`${name}: ${failure}`);
-  await writeFile(resolve(directory, name), transit_realtime.FeedMessage.encode(message).finish());
+async function write(name: string, input: TransitRealtime.IFeedMessage): Promise<void> {
+  await writeFile(resolve(directory, name), encodeNyctFeed(input));
 }
