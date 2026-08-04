@@ -338,6 +338,41 @@ describe('two-update exact-identity Live recovery', () => {
     });
   });
 
+  test('an exact replay after completed recovery preserves live readmission eligibility', () => {
+    const engine = governor();
+    engine.observeTargetRemoved({ provenance: evidence('adverse', 10) });
+    present(engine, 'recover-1', 20);
+    const completed = present(engine, 'recover-2', 30);
+
+    expect(present(engine, 'recover-2', 30)).toEqual(completed);
+    expect(engine.assess(at(30))).toEqual(completed);
+  });
+
+  test('recovery confirmations require distinct evidence IDs and restart after an ID collision', () => {
+    const engine = governor();
+    engine.observeTargetRemoved({ provenance: evidence('adverse', 10) });
+    expect(present(engine, 'reused', 20)).toMatchObject({
+      reasonCode: 'recovery-confirmation-required',
+      clocks: { recoveryCount: 1 },
+    });
+
+    expect(present(engine, 'reused', 30)).toMatchObject({
+      kind: 'precision-withheld',
+      reasonCode: 'recovery-conditions-not-proven',
+      clocks: { recoveryCount: 0 },
+      adverseEvidence: { evidenceId: 'adverse', sourceTimestamp: at(10).toISOString() },
+      latestEvidence: { evidenceId: 'reused', sourceTimestamp: at(30).toISOString() },
+    });
+    expect(present(engine, 'restart-1', 40)).toMatchObject({
+      reasonCode: 'recovery-confirmation-required',
+      clocks: { recoveryCount: 1 },
+    });
+    expect(present(engine, 'restart-2', 50)).toMatchObject({
+      kind: 'live-readmission-eligible',
+      clocks: { recoveryCount: 2 },
+    });
+  });
+
   test('a thrown invalid movement update is atomic and corrected identical provenance can start recovery', () => {
     const engine = governor();
     engine.observeTargetRemoved({ provenance: evidence('adverse', 10) });

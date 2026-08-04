@@ -287,6 +287,21 @@ describe('per-group preservation, fallback eligibility, and feed recovery', () =
     });
   });
 
+  test('invalid anomaly comparison is atomic before stale-prior recovery can be created', () => {
+    const governor = new FeedHealthGovernor();
+    const control = new FeedHealthGovernor();
+    governor.observe(snapshot('ace', 0, 100), at(0));
+    control.observe(snapshot('ace', 0, 100), at(0));
+    const before = JSON.stringify(governor.assess('ace', at(100)));
+
+    expect(() => governor.observe(snapshot('ace', 100, 1.5), at(100)))
+      .toThrow(/invalid candidate entity count/i);
+
+    expect(JSON.stringify(governor.assess('ace', at(100)))).toBe(before);
+    expect(JSON.stringify(governor.assess('ace', at(100))))
+      .toBe(JSON.stringify(control.assess('ace', at(100))));
+  });
+
   test('a no-prior-context failure still reports recovery update one without restoring evidence', () => {
     const governor = new FeedHealthGovernor();
     governor.reject({

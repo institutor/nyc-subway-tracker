@@ -179,7 +179,7 @@ export class TrainRecoveryGovernor {
     assertEvidenceNotBackward(evidence, this.#latestEvidence);
     const replay = sameEvidence(evidence, this.#latestEvidence);
     if (replay) {
-      if (observation.entity.kind === 'present' && this.#recoveryCount > 0) {
+      if (observation.entity.kind === 'present' && this.#recoveryCount === 1) {
         this.#recoveryCount = 0;
         this.#firstRecovery = null;
         this.#status = 'withheld';
@@ -308,8 +308,10 @@ export class TrainRecoveryGovernor {
       && evidence.sourceTimestampMs > this.#adverseEvidence.sourceTimestampMs;
     const newerThanFirst = this.#firstRecovery === null
       || evidence.sourceTimestampMs > this.#firstRecovery.sourceTimestampMs;
+    const distinctFromFirst = this.#firstRecovery === null
+      || evidence.evidenceId !== this.#firstRecovery.evidenceId;
 
-    if (!qualifying || !newerThanAdverse || !newerThanFirst) {
+    if (!qualifying || !newerThanAdverse || !newerThanFirst || !distinctFromFirst) {
       this.#status = 'withheld';
       this.#reasonCode = 'recovery-conditions-not-proven';
       this.#recoveryCount = 0;

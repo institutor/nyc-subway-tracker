@@ -127,12 +127,15 @@ export class FeedHealthGovernor {
     validInstant(assessedAt, 'feed assessment instant');
     const snapshot = copySnapshot(suppliedSnapshot);
     const candidateAge = classifyFeedAge(snapshot.feedTimestamp, assessedAt);
-    const state = this.#state(snapshot.feedGroupId);
+    const existingState = this.#groups.get(snapshot.feedGroupId);
+    const comparisonSnapshot = existingState?.recovery?.first ?? existingState?.lastGood;
+    const anomaly = assessSnapshotAnomaly(snapshot, comparisonSnapshot, context);
 
-    if (isOlderThanControllingRecoveryEvidence(snapshot, state.recovery)) {
+    if (isOlderThanControllingRecoveryEvidence(snapshot, existingState?.recovery)) {
       return this.#decision(snapshot.feedGroupId, assessedAt);
     }
 
+    const state = this.#state(snapshot.feedGroupId);
     if (state.lastGood && !state.recovery) {
       const priorAge = classifyFeedAge(state.lastGood.feedTimestamp, assessedAt);
       if (priorAge.kind !== 'current') {
@@ -145,8 +148,6 @@ export class FeedHealthGovernor {
       }
     }
 
-    const comparisonSnapshot = state.recovery?.first ?? state.lastGood;
-    const anomaly = assessSnapshotAnomaly(snapshot, comparisonSnapshot, context);
     if (anomaly.kind === 'quarantined') {
       state.recovery = {
         triggerReasonCode: anomaly.reasonCode,
