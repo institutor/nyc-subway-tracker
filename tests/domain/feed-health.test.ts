@@ -344,6 +344,87 @@ describe('per-group preservation, fallback eligibility, and feed recovery', () =
     });
   });
 
+  test('older anomalous and coherent snapshots cannot replace or recover past a newer rejected incident', () => {
+    const governor = new FeedHealthGovernor();
+    governor.observe(snapshot('ace', 0, 100), at(0));
+    governor.reject({
+      feedGroupId: 'ace',
+      evidenceId: 'invalid-at-30',
+      observedAt: at(30),
+      reasonCode: 'invalid-decoding',
+    });
+
+    for (const [sourceSecond, entityCount, assessmentSecond] of [
+      [25, 60, 31],
+      [26, 100, 32],
+      [27, 99, 33],
+    ] as const) {
+      expect(governor.observe(snapshot('ace', sourceSecond, entityCount), at(assessmentSecond)))
+        .toMatchObject({
+          kind: 'unavailable',
+          reasonCode: 'invalid-decoding',
+          triggerReasonCode: 'invalid-decoding',
+          recoveryCount: 0,
+          lastGood: { entityCount: 100, contentHash: 'ace-0-100' },
+          adverseEvidence: { evidenceId: 'invalid-at-30', authoritativeAt: at(30).toISOString() },
+        });
+    }
+  });
+
+  test('identical rejection replay is idempotent while only genuinely newer rejection replaces recovery evidence', () => {
+    const governor = new FeedHealthGovernor();
+    governor.observe(snapshot('ace', 0, 100), at(0));
+    governor.reject({
+      feedGroupId: 'ace',
+      evidenceId: 'bad-at-30',
+      observedAt: at(30),
+      reasonCode: 'invalid-decoding',
+    });
+    governor.observe(snapshot('ace', 40, 100), at(40));
+
+    expect(governor.reject({
+      feedGroupId: 'ace',
+      evidenceId: 'bad-at-30',
+      observedAt: at(30),
+      reasonCode: 'invalid-decoding',
+    })).toMatchObject({
+      reasonCode: 'recovery-confirmation-required',
+      triggerReasonCode: 'invalid-decoding',
+      recoveryCount: 1,
+      adverseEvidence: { evidenceId: 'bad-at-30', authoritativeAt: at(30).toISOString() },
+    });
+
+    expect(() => governor.reject({
+      feedGroupId: 'ace',
+      evidenceId: 'different-at-35',
+      observedAt: at(35),
+      reasonCode: 'malformed-snapshot',
+    })).toThrow(/newer than accepted recovery evidence/i);
+    expect(() => governor.reject({
+      feedGroupId: 'ace',
+      evidenceId: 'different-at-40',
+      observedAt: at(40),
+      reasonCode: 'malformed-snapshot',
+    })).toThrow(/newer than accepted recovery evidence/i);
+    expect(governor.assess('ace', at(40))).toMatchObject({
+      reasonCode: 'recovery-confirmation-required',
+      recoveryCount: 1,
+      adverseEvidence: { evidenceId: 'bad-at-30' },
+    });
+
+    expect(governor.reject({
+      feedGroupId: 'ace',
+      evidenceId: 'newer-at-45',
+      observedAt: at(45),
+      reasonCode: 'hard-fetch-validation',
+    })).toMatchObject({
+      reasonCode: 'hard-fetch-validation',
+      triggerReasonCode: 'hard-fetch-validation',
+      recoveryCount: 0,
+      adverseEvidence: { evidenceId: 'newer-at-45', authoritativeAt: at(45).toISOString() },
+    });
+  });
+
   test('validates an entire simultaneous-loss batch before mutating any group', () => {
     const governor = new FeedHealthGovernor();
     governor.observe(snapshot('ace', 0, 100), at(0));

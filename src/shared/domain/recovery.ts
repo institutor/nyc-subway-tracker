@@ -176,6 +176,7 @@ export class TrainRecoveryGovernor {
     const validatedConditions = observation.entity.kind === 'present'
       ? validateConditions(observation.entity.conditions, evidence.sourceTimestampMs)
       : undefined;
+    assertEvidenceNotBackward(evidence, this.#latestEvidence);
     const replay = sameEvidence(evidence, this.#latestEvidence);
     if (replay) {
       if (observation.entity.kind === 'present' && this.#recoveryCount > 0) {
@@ -186,7 +187,6 @@ export class TrainRecoveryGovernor {
       }
       return this.#decision(evidence.observedAtMs);
     }
-    assertEvidenceNotBackward(evidence, this.#latestEvidence);
     const elapsedTriggered = this.#applyElapsedSuppression(evidence.sourceTimestampMs);
     this.#latestEvidence = evidence;
 

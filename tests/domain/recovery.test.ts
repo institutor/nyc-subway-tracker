@@ -365,6 +365,39 @@ describe('two-update exact-identity Live recovery', () => {
     });
   });
 
+  test('a replay with backward observed time fails before replay mutation and leaves recovery one intact', () => {
+    const engine = governor();
+    engine.observeTargetRemoved({ provenance: evidence('adverse', 10) });
+    const recoveryOne = {
+      feedGroupId: 'ace',
+      evidenceId: 'recovery-observed-30',
+      sourceTimestamp: at(20),
+      observedAt: at(30),
+    };
+    expect(engine.observeHealthySnapshot({
+      provenance: recoveryOne,
+      entity: {
+        kind: 'present',
+        trainIdentity: '20260804:shared-trip:0A-0200',
+        conditions: conditions({ movementAt: at(20) }),
+      },
+    })).toMatchObject({ clocks: { recoveryCount: 1 }, latestEvidence: { observedAt: at(30).toISOString() } });
+
+    expect(() => engine.observeHealthySnapshot({
+      provenance: { ...recoveryOne, observedAt: at(25) },
+      entity: {
+        kind: 'present',
+        trainIdentity: '20260804:shared-trip:0A-0200',
+        conditions: conditions({ movementAt: at(20) }),
+      },
+    })).toThrow(/evidence cannot move backward/i);
+    expect(engine.assess(at(30))).toMatchObject({
+      reasonCode: 'recovery-confirmation-required',
+      clocks: { recoveryCount: 1 },
+      latestEvidence: { evidenceId: 'recovery-observed-30', observedAt: at(30).toISOString() },
+    });
+  });
+
   test.each([
     ['stableIdentity', 'false'],
     ['plausibleStopOrder', 1],

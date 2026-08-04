@@ -129,6 +129,10 @@ export class FeedHealthGovernor {
     const candidateAge = classifyFeedAge(snapshot.feedTimestamp, assessedAt);
     const state = this.#state(snapshot.feedGroupId);
 
+    if (isOlderThanControllingRecoveryEvidence(snapshot, state.recovery)) {
+      return this.#decision(snapshot.feedGroupId, assessedAt);
+    }
+
     if (state.lastGood && !state.recovery) {
       const priorAge = classifyFeedAge(state.lastGood.feedTimestamp, assessedAt);
       if (priorAge.kind !== 'current') {
@@ -213,7 +217,9 @@ export class FeedHealthGovernor {
     const observedAtMs = validInstant(observation.observedAt, 'rejected observation instant');
     validateRejectedIdentity(observation);
     const existing = this.#groups.get(observation.feedGroupId);
-    validateRejectedChronology(existing, observation, observedAtMs);
+    if (validateRejectedChronology(existing, observation, observedAtMs) === 'replay') {
+      return this.#decision(observation.feedGroupId, observation.observedAt);
+    }
     const state = this.#state(observation.feedGroupId);
     state.recovery = {
       triggerReasonCode: observation.reasonCode,
@@ -325,6 +331,16 @@ function isStrictlyNewRecovery(snapshot: NormalizedSnapshotEvidence, recovery: R
   if (!recovery.first) return true;
   return snapshot.feedTimestamp.getTime() > recovery.first.feedTimestamp.getTime()
     && snapshot.contentHash !== recovery.first.contentHash;
+}
+
+function isOlderThanControllingRecoveryEvidence(
+  snapshot: NormalizedSnapshotEvidence,
+  recovery: RecoveryState | undefined,
+): boolean {
+  if (!recovery) return false;
+  const candidateAtMs = snapshot.feedTimestamp.getTime();
+  if (recovery.first) return candidateAtMs < recovery.first.feedTimestamp.getTime();
+  return candidateAtMs <= recovery.adverseAtMs;
 }
 
 function normalAgeDecision(
@@ -452,7 +468,16 @@ function validateRejectedChronology(
   state: GroupState | undefined,
   observation: RejectedFeedObservation,
   observedAtMs: number,
-): void {
+): 'new' | 'replay' {
+  if (state?.recovery
+    && observedAtMs === state.recovery.adverseAtMs
+    && observation.evidenceId === state.recovery.adverseEvidenceId
+    && observation.reasonCode === state.recovery.triggerReasonCode) {
+    return 'replay';
+  }
+  if (state?.recovery?.first && observedAtMs <= state.recovery.first.feedTimestamp.getTime()) {
+    throw new Error('Rejected observation must be newer than accepted recovery evidence');
+  }
   const priorAtMs = Math.max(
     state?.lastGood?.feedTimestamp.getTime() ?? Number.NEGATIVE_INFINITY,
     state?.recovery?.adverseAtMs ?? Number.NEGATIVE_INFINITY,
@@ -463,6 +488,7 @@ function validateRejectedChronology(
       || observation.reasonCode !== state.recovery.triggerReasonCode)) {
     throw new Error('Non-new rejected observation cannot overwrite feed incident provenance');
   }
+  return 'new';
 }
 
 function wholeElapsedSeconds(from: Date, to: Date, label: string): number {
