@@ -1,4 +1,9 @@
-import { normalizeCanonicalIdentity } from './canonical';
+import {
+  encodeCanonicalIdentityTuple,
+  encodeCanonicalStringTuple,
+  normalizeBoundedIdentity,
+  normalizeCanonicalIdentity,
+} from './canonical';
 import {
   resolveAlertScope,
   type AlertScopeDecision,
@@ -110,6 +115,10 @@ const DESTRUCTIVE = new Set<ServiceAlertEvidence['declaredConsequence']>([
   'station-closure',
 ]);
 
+// Exact object provenance is intentionally private and cannot survive copying,
+// serialization, descriptor cloning, symbols, or Proxy wrapping.
+const ISSUED_SERVICE_CHANGE_DECISIONS = new WeakSet<object>();
+
 export function evaluateServiceChanges(input: ServiceChangeEvaluationInput): ServiceChangeDecision {
   validateEvaluationInput(input);
   const evaluatedClaim = freezeClaim(input.claim);
@@ -137,7 +146,13 @@ export function evaluateServiceChanges(input: ServiceChangeEvaluationInput): Ser
   const hard = evaluated.filter((item) => item.assessment === 'resolved-hard-risk');
   const unavailable = evaluated.filter((item) => item.assessment === 'high-impact-unresolved');
   const quarantined = evaluated.filter((item) => item.assessment === 'quarantined');
-  const adverseAt = input.snapshot.feedTimestamp ?? input.snapshot.assessedAt;
+  const adverseAt = input.snapshot.assessedAt;
+
+  const feedTimestamp = input.snapshot.feedTimestamp;
+  if (priorRisk && feedTimestamp && feedTimestamp.getTime() <= priorRisk.adverseAt.getTime()) {
+    const reset = resetRiskBoundary(priorRisk, evaluatedClaim, input.snapshot.assessedAt);
+    return carryForward(reset, evaluatedClaim, input.snapshot.kind, 0, contextDetails);
+  }
 
   if (hard.length > 0) {
     const riderCopy = hard.map((item) => item.scope.official.header).filter(Boolean).sort(compareText)[0]
@@ -187,17 +202,23 @@ export function serviceChangeClaimDisposition(decision: ServiceChangeDecision): 
 }
 
 export function validateServiceChangeDecision(decision: ServiceChangeDecision): void {
-  if (!decision || typeof decision !== 'object'
+  if (!decision || typeof decision !== 'object' || !ISSUED_SERVICE_CHANGE_DECISIONS.has(decision)) {
+    throw new Error('Expected an issued service-change decision');
+  }
+  if (!Object.isFrozen(decision)
     || !['eligible-context', 'resolved-suppression', 'arrival-claim-unavailable', 'quarantine-or-limitation'].includes(decision.kind)
     || !['eligible', 'resolved-ineligible', 'high-impact-unresolved', 'quarantined'].includes(decision.disposition)
     || typeof decision.claimIdentity !== 'string' || !decision.claimIdentity
-    || !isExactClaim(decision.evaluatedClaim)
+    || !isExactClaim(decision.evaluatedClaim) || !Object.isFrozen(decision.evaluatedClaim)
     || decision.claimIdentity !== serviceClaimIdentity(decision.evaluatedClaim)
-    || !Array.isArray(decision.officialDetails) || !Array.isArray(decision.contextDetails)
-    || !Array.isArray(decision.rawOfficialAudit) || !Array.isArray(decision.auditEvidence)
-    || !Array.isArray(decision.suppressedProducts) || ![0, 1, 2].includes(decision.recoveryCount)
+    || !Array.isArray(decision.officialDetails) || !Object.isFrozen(decision.officialDetails)
+    || !Array.isArray(decision.contextDetails) || !Object.isFrozen(decision.contextDetails)
+    || !Array.isArray(decision.rawOfficialAudit) || !Object.isFrozen(decision.rawOfficialAudit)
+    || !Array.isArray(decision.auditEvidence) || !Object.isFrozen(decision.auditEvidence)
+    || !Array.isArray(decision.suppressedProducts) || !Object.isFrozen(decision.suppressedProducts)
+    || typeof decision.carriedForward !== 'boolean' || ![0, 1, 2].includes(decision.recoveryCount)
     || !['current', 'stale', 'missing', 'failed', 'quarantined'].includes(decision.contextKind)) {
-    throw new Error('Invalid service-change decision');
+    throw new Error('Invalid issued service-change decision');
   }
   const expectedDisposition: Record<ServiceChangeDecisionKind, ServiceChangeGateDisposition> = {
     'eligible-context': 'eligible',
@@ -207,14 +228,44 @@ export function validateServiceChangeDecision(decision: ServiceChangeDecision): 
   };
   if (decision.disposition !== expectedDisposition[decision.kind]) throw new Error('Invalid service-change discriminant');
   const suppresses = decision.kind === 'resolved-suppression' || decision.kind === 'arrival-claim-unavailable';
-  if (suppresses !== (decision.suppressedProducts.length === CLAIM_SUPPRESSED_PRODUCTS.length)
-    || decision.suppressedProducts.some((item, index) => item !== CLAIM_SUPPRESSED_PRODUCTS[index])) {
+  if (suppresses !== hasExactSuppressedProducts(decision.suppressedProducts)) {
     throw new Error('Invalid service-change suppressed products');
   }
-  if (decision.carryover && (decision.carryover.claimIdentity !== decision.claimIdentity
-    || serviceClaimIdentity(decision.carryover.evaluatedClaim) !== decision.claimIdentity)) {
+
+  if (decision.kind === 'eligible-context') {
+    if (decision.riderCopy !== null || decision.suppressedProducts.length !== 0 || decision.carryover !== null
+      || decision.carriedForward || ![0, 2].includes(decision.recoveryCount)
+      || (decision.recoveryCount === 2 && decision.contextKind !== 'current')) {
+      throw new Error('Invalid eligible service-change decision');
+    }
+    return;
+  }
+  if (decision.kind === 'quarantine-or-limitation') {
+    if (decision.riderCopy !== SERVICE_CHANGE_LIMITATION_COPY || decision.suppressedProducts.length !== 0
+      || decision.carryover !== null || decision.carriedForward || decision.recoveryCount !== 0) {
+      throw new Error('Invalid limited service-change decision');
+    }
+    return;
+  }
+
+  const risk = decision.carryover;
+  if (!risk || !Object.isFrozen(risk) || risk.kind !== decision.kind
+    || risk.claimIdentity !== decision.claimIdentity || !isExactClaim(risk.evaluatedClaim)
+    || !Object.isFrozen(risk.evaluatedClaim)
+    || serviceClaimIdentity(risk.evaluatedClaim) !== decision.claimIdentity
+    || !(risk.adverseAt instanceof Date) || !Number.isFinite(risk.adverseAt.getTime())
+    || typeof decision.riderCopy !== 'string' || !decision.riderCopy
+    || risk.riderCopy !== decision.riderCopy || !hasExactSuppressedProducts(risk.suppressedProducts)
+    || !Array.isArray(risk.officialDetails) || !Array.isArray(risk.rawOfficialAudit)
+    || !Array.isArray(risk.auditEvidence) || decision.recoveryCount === 2
+    || (!decision.carriedForward && decision.recoveryCount !== 0)) {
     throw new Error('Invalid service-change carryover claim');
   }
+}
+
+function hasExactSuppressedProducts(products: readonly ClaimSuppressedProduct[]): boolean {
+  return products.length === CLAIM_SUPPRESSED_PRODUCTS.length
+    && products.every((item, index) => item === CLAIM_SUPPRESSED_PRODUCTS[index]);
 }
 
 /** Shared by service and track hard-risk recovery. */
@@ -312,7 +363,7 @@ function destructiveFieldsAgree(alert: ServiceAlertEvidence, official: ResolvedO
 }
 
 function contradictsDestructiveEffect(text: string): boolean {
-  return /\bnot\s+closed\b|\bremain(?:s|ed|ing)?\s+open\b|\bcontinue(?:s|d|ing)?\s+(?:to\s+)?(?:stop|stopping|serve|serving|make)\b|\ball\s+[a-z0-9 -]*stops?\s+continue\b|\ball\s+(?:scheduled\s+)?stops?\b/.test(text);
+  return /\bnot\s+closed\b|\bremain(?:s|ed|ing)?\s+open\b|\bcontinue(?:s|d|ing)?\s+(?:to\s+)?(?:stop|stopping|serve|serving|make)\b|\ball\s+[a-z0-9 -]*stops?\s+continue\b|\ball\s+(?:scheduled\s+)?stops?\b|\bskip(?:s|ping)?\s+no\s+stops?\b|\b(?:do|does)\s+not\s+(?:skip|terminate|end\s+early|run\s+via|reroute|bypass)\b|\bnot\s+(?:bypass(?:ing|ed)?|rerout(?:ed|ing)?|running\s+via)\b|\bnormal\s+service\s+continue(?:s|d|ing)?\b/.test(text);
 }
 
 function hasNarrowClaimScope(alert: ServiceAlertEvidence, scope: AlertScopeDecision): boolean {
@@ -400,7 +451,7 @@ function canonicalOfficial(details: readonly ResolvedOfficialAlertDetails[]): re
   const byKey = new Map<string, ResolvedOfficialAlertDetails>();
   for (const item of details) {
     const normalized = Object.freeze({ ...item, alertId: normalizeCanonicalIdentity(item.alertId) });
-    byKey.set(`${normalized.alertId}\0${normalized.header}\0${normalized.description}`, normalized);
+    byKey.set(encodeCanonicalStringTuple([normalized.alertId, normalized.header, normalized.description]), normalized);
   }
   return Object.freeze([...byKey.values()].sort((left, right) => compareText(left.alertId, right.alertId)
     || compareText(left.header, right.header) || compareText(left.description, right.description)));
@@ -412,7 +463,8 @@ function canonicalContext(details: readonly ServiceContextDetail[]): readonly Se
     const normalized = Object.freeze({ relation: item.relation, official: Object.freeze({
       ...item.official, alertId: normalizeCanonicalIdentity(item.official.alertId),
     }) });
-    byKey.set(`${normalized.relation}\0${normalized.official.alertId}\0${normalized.official.header}\0${normalized.official.description}`,
+    byKey.set(encodeCanonicalStringTuple([normalized.relation, normalized.official.alertId,
+      normalized.official.header, normalized.official.description]),
       normalized);
   }
   return Object.freeze([...byKey.values()].sort((left, right) => compareText(left.official.alertId, right.official.alertId)
@@ -423,7 +475,8 @@ function canonicalRawOfficial(details: readonly RawOfficialAlertAudit[]): readon
   const byKey = new Map<string, RawOfficialAlertAudit>();
   for (const item of details) {
     const normalized = Object.freeze({ ...item, alertId: normalizeCanonicalIdentity(item.alertId) });
-    const key = `${normalized.alertId}\0${normalized.rawHeader}\0${normalized.rawDescription}\0${stableAuditFields(normalized.rawAuditFields)}`;
+    const key = encodeCanonicalStringTuple([normalized.alertId, normalized.rawHeader, normalized.rawDescription,
+      stableAuditFields(normalized.rawAuditFields)]);
     byKey.set(key, normalized);
   }
   return Object.freeze([...byKey.values()].sort((left, right) => compareText(left.alertId, right.alertId)
@@ -456,7 +509,8 @@ function canonicalAudit(items: readonly ServiceAuditEvidence[]): readonly Servic
   const byKey = new Map<string, ServiceAuditEvidence>();
   for (const item of items) {
     const normalized = Object.freeze({ ...item, alertId: normalizeCanonicalIdentity(item.alertId) });
-    byKey.set(`${normalized.alertId}\0${normalized.consequence}\0${normalized.structuredEffect}\0${normalized.temporalState}\0${normalized.scope}\0${normalized.assessment}`,
+    byKey.set(encodeCanonicalStringTuple([normalized.alertId, normalized.consequence, normalized.structuredEffect,
+      normalized.temporalState, normalized.scope, normalized.assessment]),
       normalized);
   }
   return Object.freeze([...byKey.values()].sort((left, right) => compareText(left.alertId, right.alertId)
@@ -500,6 +554,9 @@ function recoverOrCarry(
   rawOfficialAudit: readonly RawOfficialAlertAudit[],
   auditEvidence: readonly ServiceAuditEvidence[],
 ): ServiceChangeDecision {
+  if (input.snapshot.assessedAt.getTime() <= risk.adverseAt.getTime()) {
+    return carryForward(risk, evaluatedClaim, input.snapshot.kind, 0, contextDetails);
+  }
   const recoveryCount = countQualifyingRecovery(input.recoveryUpdates ?? [], risk.adverseAt, input.snapshot.assessedAt);
   if (recoveryCount < 2) return carryForward(risk, evaluatedClaim, input.snapshot.kind, recoveryCount, contextDetails);
   return freezeDecision('eligible-context', 'eligible', evaluatedClaim, null, officialDetails, contextDetails,
@@ -523,7 +580,8 @@ function resetRiskBoundary(
   evaluatedClaim: ServiceClaimScope,
   adverseAt: Date,
 ): ServiceRiskCarryover {
-  return freezeRisk(risk.kind, evaluatedClaim, adverseAt, risk.riderCopy, risk.officialDetails, risk.rawOfficialAudit,
+  const monotonicAdverseAt = new Date(Math.max(risk.adverseAt.getTime(), validDate(adverseAt, 'adverse service-change instant')));
+  return freezeRisk(risk.kind, evaluatedClaim, monotonicAdverseAt, risk.riderCopy, risk.officialDetails, risk.rawOfficialAudit,
     risk.auditEvidence);
 }
 
@@ -568,7 +626,7 @@ function freezeDecision(
   contextKind: AlertSnapshotDecision['kind'],
 ): ServiceChangeDecision {
   const claim = freezeClaim(evaluatedClaim);
-  return Object.freeze({
+  const decision = Object.freeze({
     kind,
     disposition,
     claimIdentity: serviceClaimIdentity(claim),
@@ -584,23 +642,32 @@ function freezeDecision(
     recoveryCount,
     contextKind,
   });
+  ISSUED_SERVICE_CHANGE_DECISIONS.add(decision);
+  return decision;
 }
 
 function freezeClaim(claim: ServiceClaimScope): ServiceClaimScope {
   return Object.freeze({
-    claimId: normalizeCanonicalIdentity(claim.claimId),
-    routeId: normalizeCanonicalIdentity(claim.routeId),
-    exactDirectionalStopId: normalizeCanonicalIdentity(claim.exactDirectionalStopId),
-    constituentStopId: normalizeCanonicalIdentity(claim.constituentStopId),
+    claimId: normalizeBoundedIdentity(claim.claimId, 'service claim'),
+    routeId: normalizeBoundedIdentity(claim.routeId, 'service claim'),
+    exactDirectionalStopId: normalizeBoundedIdentity(claim.exactDirectionalStopId, 'service claim'),
+    constituentStopId: normalizeBoundedIdentity(claim.constituentStopId, 'service claim'),
     direction: claim.direction,
-    ...(claim.tripId !== undefined ? { tripId: normalizeCanonicalIdentity(claim.tripId) } : {}),
-    ...(claim.trainId !== undefined ? { trainId: normalizeCanonicalIdentity(claim.trainId) } : {}),
+    ...(claim.tripId !== undefined ? { tripId: normalizeBoundedIdentity(claim.tripId, 'service claim') } : {}),
+    ...(claim.trainId !== undefined ? { trainId: normalizeBoundedIdentity(claim.trainId, 'service claim') } : {}),
   });
 }
 
 function serviceClaimIdentity(claim: ServiceClaimScope): string {
-  return [claim.claimId, claim.routeId, claim.exactDirectionalStopId, claim.constituentStopId, claim.direction,
-    claim.tripId ?? '', claim.trainId ?? ''].map(normalizeCanonicalIdentity).join('\0');
+  return encodeCanonicalIdentityTuple([
+    claim.claimId,
+    claim.routeId,
+    claim.exactDirectionalStopId,
+    claim.constituentStopId,
+    claim.direction,
+    claim.tripId ?? null,
+    claim.trainId ?? null,
+  ], 'service claim');
 }
 
 function validateEvaluationInput(input: ServiceChangeEvaluationInput): void {
@@ -608,7 +675,19 @@ function validateEvaluationInput(input: ServiceChangeEvaluationInput): void {
   if (!['current', 'stale', 'missing', 'failed', 'quarantined'].includes(input.snapshot.kind)
     || !Array.isArray(input.snapshot.alerts) || !(input.snapshot.assessedAt instanceof Date)
     || !Number.isFinite(input.snapshot.assessedAt.getTime())) throw new Error('Invalid alert snapshot decision');
+  if (input.snapshot.feedTimestamp !== null
+    && (!(input.snapshot.feedTimestamp instanceof Date) || !Number.isFinite(input.snapshot.feedTimestamp.getTime())
+      || input.snapshot.feedTimestamp.getTime() > input.snapshot.assessedAt.getTime())) {
+    throw new Error('Invalid alert snapshot chronology');
+  }
+  if (input.snapshot.kind === 'current' && input.snapshot.feedTimestamp === null) {
+    throw new Error('Current alert snapshot requires a feed timestamp');
+  }
   if (!isExactClaim(input.claim)) throw new Error('Exact service claim is required');
+  [input.claim.claimId, input.claim.routeId, input.claim.exactDirectionalStopId, input.claim.constituentStopId,
+    input.claim.tripId, input.claim.trainId].forEach((identity) => {
+    if (identity !== undefined) normalizeBoundedIdentity(identity, 'service claim');
+  });
   if (input.recoveryUpdates !== undefined && !Array.isArray(input.recoveryUpdates)) throw new Error('Invalid service recovery updates');
 }
 
@@ -625,6 +704,7 @@ function validateRecoveryUpdate(update: ServiceRecoveryUpdate): void {
     || !(update.sourceTimestamp instanceof Date) || !Number.isFinite(update.sourceTimestamp.getTime())
     || [update.currentFeed, update.coherentIdentity, update.exactDirectionalStop, update.coherentPath, update.noCurrentVeto]
       .some((value) => typeof value !== 'boolean')) throw new Error('Invalid service recovery evidence');
+  normalizeBoundedIdentity(update.evidenceId, 'service recovery evidence');
 }
 
 function recoverySignature(update: ServiceRecoveryUpdate): string {

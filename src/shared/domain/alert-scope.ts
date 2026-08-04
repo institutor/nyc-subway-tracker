@@ -1,4 +1,4 @@
-import { normalizeCanonicalIdentity } from './canonical';
+import { normalizeBoundedIdentity, normalizeCanonicalIdentity } from './canonical';
 import type { Direction } from './types';
 
 export type ResolvedServiceDirection = Exclude<Direction, 'unknown'>;
@@ -262,18 +262,32 @@ function validateAlert(alert: ServiceAlertEvidence): void {
   if (!['delay-only', 'holding', 'express-running-local', 'local-running-express', 'reroute', 'short-turn',
     'partial-suspension', 'full-suspension', 'station-closure', 'entrance-equipment', 'platform-track',
     'generic-affected'].includes(alert.declaredConsequence)) throw new Error('Invalid declared service consequence');
+  normalizeBoundedIdentity(alert.alertId, 'alert');
   if (alert.independentHighImpactBasis !== undefined
     && (!alert.independentHighImpactBasis || typeof alert.independentHighImpactBasis !== 'object'
       || !['verified-terminal-change', 'verified-reroute', 'verified-suspension'].includes(alert.independentHighImpactBasis.kind)
       || !alert.independentHighImpactBasis.evidenceId?.trim())) throw new Error('Invalid independent high-impact basis');
+  if (alert.independentHighImpactBasis) {
+    normalizeBoundedIdentity(alert.independentHighImpactBasis.evidenceId, 'independent high-impact evidence');
+  }
   const seen = new Set<string>();
   for (const selector of alert.selectors) {
     if (!selector || typeof selector !== 'object' || !selector.selectorId?.trim()) throw new Error('Alert selector identity is required');
-    const id = normalizeCanonicalIdentity(selector.selectorId);
+    const id = normalizeBoundedIdentity(selector.selectorId, 'alert selector');
     if (seen.has(id)) throw new Error('Duplicate alert selector identity');
     seen.add(id);
     if (selector.direction !== undefined && selector.direction !== null && !isResolvedDirection(selector.direction)) {
       throw new Error('Invalid alert selector direction');
+    }
+    for (const identity of [selector.routeId, selector.exactDirectionalStopId, selector.tripId, selector.trainId,
+      selector.claimId]) {
+      if (identity !== undefined && identity !== null) normalizeBoundedIdentity(identity, 'alert selector dimension');
+    }
+    for (const identities of [selector.constituentStopIds, selector.exactDirectionalSegmentStopIds]) {
+      if (identities !== undefined && identities !== null) {
+        if (!Array.isArray(identities)) throw new Error('Invalid alert selector identity list');
+        identities.forEach((identity) => normalizeBoundedIdentity(identity, 'alert selector dimension'));
+      }
     }
   }
 }
@@ -283,6 +297,10 @@ function validateClaim(claim: ServiceClaimScope): void {
     || !claim.exactDirectionalStopId?.trim() || !claim.constituentStopId?.trim() || !isResolvedDirection(claim.direction)) {
     throw new Error('Complete exact service claim scope is required');
   }
+  [claim.claimId, claim.routeId, claim.exactDirectionalStopId, claim.constituentStopId, claim.tripId, claim.trainId]
+    .forEach((identity) => {
+      if (identity !== undefined) normalizeBoundedIdentity(identity, 'service claim');
+    });
 }
 
 function isResolvedDirection(direction: string): direction is ResolvedServiceDirection {
@@ -318,7 +336,7 @@ function freezeSnapshot(
 
 function freezeAlert(alert: ServiceAlertEvidence): ServiceAlertEvidence {
   const selectors = alert.selectors.map((selector) => Object.freeze({
-    selectorId: normalizeCanonicalIdentity(selector.selectorId),
+    selectorId: normalizeBoundedIdentity(selector.selectorId, 'alert selector'),
     ...(selector.routeId !== undefined ? { routeId: normalizeOptionalIdentity(selector.routeId) } : {}),
     ...(selector.constituentStopIds !== undefined ? {
       constituentStopIds: selector.constituentStopIds === null ? null
@@ -339,10 +357,10 @@ function freezeAlert(alert: ServiceAlertEvidence): ServiceAlertEvidence {
   const official = Object.freeze({ headerRaw: alert.official.headerRaw, descriptionRaw: alert.official.descriptionRaw });
   const basis = alert.independentHighImpactBasis ? Object.freeze({
     kind: alert.independentHighImpactBasis.kind,
-    evidenceId: normalizeCanonicalIdentity(alert.independentHighImpactBasis.evidenceId),
+    evidenceId: normalizeBoundedIdentity(alert.independentHighImpactBasis.evidenceId, 'independent high-impact evidence'),
   }) : undefined;
   return Object.freeze({
-    alertId: normalizeCanonicalIdentity(alert.alertId),
+    alertId: normalizeBoundedIdentity(alert.alertId, 'alert'),
     activePeriods: Object.freeze(periods),
     selectors: Object.freeze(selectors),
     structuredEffect: alert.structuredEffect,
@@ -369,7 +387,7 @@ function freezePeriod(period: AlertActivePeriod): AlertActivePeriod {
 }
 
 function normalizeOptionalIdentity(value: string | null): string | null {
-  return value === null ? null : normalizeCanonicalIdentity(value);
+  return value === null ? null : normalizeBoundedIdentity(value, 'alert selector dimension');
 }
 
 function deepFreezeAuditRecord(record: Readonly<Record<string, unknown>>): Readonly<Record<string, unknown>> {
@@ -388,8 +406,16 @@ function deepFreezeAuditValue(
 ): unknown {
   budget.remaining -= 1;
   if (budget.remaining < 0 || depth > 16) throw new Error('Raw audit fields exceed normalization limits');
-  if (value === null || typeof value === 'boolean' || typeof value === 'number') return value;
-  if (typeof value === 'string') return value.normalize('NFC');
+  if (value === null || typeof value === 'boolean') return value;
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) throw new Error('Unsupported raw audit field');
+    return value;
+  }
+  if (typeof value === 'string') {
+    const normalized = normalizeCanonicalIdentity(value);
+    if (normalized.length > 65_536) throw new Error('Raw audit string exceeds normalization limits');
+    return normalized;
+  }
   if (value instanceof Date) return new Date(validDate(value, 'raw audit date')).toISOString();
   if (typeof value !== 'object') throw new Error('Unsupported raw audit field');
   if (seen.has(value)) throw new Error('Cyclic raw audit fields are not supported');
@@ -404,9 +430,29 @@ function deepFreezeAuditValue(
   if (prototype !== Object.prototype && prototype !== null) throw new Error('Unsupported raw audit object');
   const entries = Object.entries(value as Record<string, unknown>);
   if (entries.length > 1_000) throw new Error('Raw audit object exceeds normalization limits');
-  entries.sort(([left], [right]) => compareText(left, right));
-  const result: Record<string, unknown> = {};
-  for (const [key, item] of entries) result[normalizeCanonicalIdentity(key)] = deepFreezeAuditValue(item, depth + 1, budget, seen);
+  const normalizedEntries = entries.map(([key, item]) => {
+    const normalizedKey = normalizeCanonicalIdentity(key);
+    if (!normalizedKey || normalizedKey.length > 256 || /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/u.test(normalizedKey)) {
+      throw new Error('Raw audit key exceeds normalization limits');
+    }
+    if (['__proto__', 'constructor', 'prototype'].includes(normalizedKey)) throw new Error('Unsafe raw audit key');
+    return [normalizedKey, item] as const;
+  });
+  const keys = new Set<string>();
+  for (const [key] of normalizedEntries) {
+    if (keys.has(key)) throw new Error('Canonical duplicate raw audit key');
+    keys.add(key);
+  }
+  normalizedEntries.sort(([left], [right]) => compareText(left, right));
+  const result: Record<string, unknown> = Object.create(null) as Record<string, unknown>;
+  for (const [key, item] of normalizedEntries) {
+    Object.defineProperty(result, key, {
+      configurable: false,
+      enumerable: true,
+      writable: false,
+      value: deepFreezeAuditValue(item, depth + 1, budget, seen),
+    });
+  }
   seen.delete(value);
   return Object.freeze(result);
 }

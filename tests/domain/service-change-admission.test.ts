@@ -184,12 +184,65 @@ describe('service-change arrival admission seam', () => {
       .toMatchObject({ kind: 'admitted', confidence: 'live' });
   });
 
-  test('rejects forged service-change discriminants atomically', () => {
+  test('fails closed on forged service-change discriminants atomically', () => {
     const valid = admitArrivalCandidate(candidate(), scope);
-    expect(() => admitArrivalCandidate(candidate({
+    expect(admitArrivalCandidate(candidate({
       serviceChangeGate: { ...decision([]), kind: 'magically-clear' } as never,
-    }), scope)).toThrow(/service-change/i);
+    }), scope)).toMatchObject({
+      kind: 'rejected', failedGate: 'service', disposition: 'unissued-service-decision',
+      boardTreatment: 'quarantine-or-limitation',
+    });
     expect(admitArrivalCandidate(candidate(), scope)).toEqual(valid);
+  });
+
+  test('accepts only resolver-issued decision instances and rejects every public-field reconstruction', () => {
+    const issuedEligible = decision([]);
+    const issuedClosure = decision([serviceAlert()]);
+    expect(admitArrivalCandidate(candidate({ serviceChangeGate: issuedEligible }), scope).kind).toBe('admitted');
+    expect(Object.isFrozen(issuedEligible)).toBe(true);
+    expect(() => ((issuedEligible as { disposition: string }).disposition = 'resolved-ineligible')).toThrow();
+
+    const rewrittenClosure = Object.freeze({
+      ...issuedClosure,
+      kind: 'eligible-context' as const,
+      disposition: 'eligible' as const,
+      riderCopy: null,
+      suppressedProducts: Object.freeze([]),
+      carryover: null,
+      carriedForward: false,
+      recoveryCount: 0 as const,
+    });
+    const descriptorCopy = Object.freeze(Object.create(
+      Object.getPrototypeOf(issuedEligible),
+      Object.getOwnPropertyDescriptors(issuedEligible),
+    )) as ServiceChangeDecision;
+    const symbol = Symbol('copied-brand');
+    const symbolCopy = Object.freeze({ ...issuedEligible, [symbol]: true }) as ServiceChangeDecision;
+    const forgeries = [
+      { ...issuedEligible },
+      structuredClone(issuedEligible),
+      JSON.parse(JSON.stringify(issuedEligible)) as ServiceChangeDecision,
+      Object.freeze({ ...issuedEligible }),
+      descriptorCopy,
+      symbolCopy,
+      new Proxy(issuedEligible, {}),
+      rewrittenClosure,
+    ] as readonly ServiceChangeDecision[];
+
+    for (const forged of forgeries) {
+      expect(() => serviceChangeClaimDisposition(forged)).toThrow(/issued service-change decision/i);
+      expect(admitArrivalCandidate(candidate({ serviceChangeGate: forged }), scope)).toMatchObject({
+        kind: 'rejected', failedGate: 'service', disposition: 'unissued-service-decision',
+        boardTreatment: 'quarantine-or-limitation',
+      });
+      expect(admitArrivalCandidate(candidate({
+        serviceChangeGate: forged,
+        serviceDisposition: 'resolved-ineligible',
+      }), scope)).toMatchObject({
+        kind: 'rejected', failedGate: 'service', disposition: 'resolved-ineligible',
+        boardTreatment: 'resolved-suppression',
+      });
+    }
   });
 
   test('binds a service decision to the exact candidate claim before freshness or identity', () => {
@@ -228,7 +281,7 @@ describe('service-change arrival admission seam', () => {
       evaluatedClaim: { ...legitimate.evaluatedClaim, routeId: 'E' },
     } as ServiceChangeDecision;
     expect(admitArrivalCandidate(candidate({ serviceChangeGate: forged, freshness: 'unavailable' }), scope)).toMatchObject({
-      kind: 'rejected', failedGate: 'service', disposition: 'claim-scope-mismatch',
+      kind: 'rejected', failedGate: 'service', disposition: 'unissued-service-decision',
       boardTreatment: 'quarantine-or-limitation',
     });
   });

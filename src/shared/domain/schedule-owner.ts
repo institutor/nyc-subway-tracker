@@ -27,6 +27,26 @@ export interface ScheduleClaim {
 
 export type ScheduleCurrencyState = 'current' | 'stale' | 'topology' | 'quarantined';
 
+export interface ScheduleAgeClassification {
+  readonly state: ScheduleCurrencyState;
+  readonly ageMs: number;
+}
+
+/** Shared Task 4 age rule for any accepted schedule-edition provenance. */
+export function classifyScheduleEditionAge(ageAnchor: Date, comparisonAt: Date): ScheduleAgeClassification {
+  const anchorMs = validDate(ageAnchor, 'schedule edition age anchor').getTime();
+  const comparisonMs = validDate(comparisonAt, 'authoritative schedule comparison').getTime();
+  const ageMs = comparisonMs - anchorMs;
+  const state: ScheduleCurrencyState = ageMs < 0
+    ? 'quarantined'
+    : ageMs <= TWO_HOURS_MS
+      ? 'current'
+      : ageMs <= TWENTY_FOUR_HOURS_MS
+        ? 'stale'
+        : 'topology';
+  return Object.freeze({ state, ageMs });
+}
+
 export interface ScheduleCurrencyDecision {
   readonly state: ScheduleCurrencyState;
   readonly ageAnchorKind: 'published' | 'first-retrieved';
@@ -185,13 +205,14 @@ export class ScheduleEditionRegistry {
     const comparison = validDate(comparisonAt, 'authoritative schedule comparison').getTime();
     validateClaim(claim);
     const anchor = edition.publishedAt ?? edition.firstRetrievedAt;
-    const ageMs = comparison - Date.parse(anchor);
+    const age = classifyScheduleEditionAge(new Date(anchor), new Date(comparison));
+    const ageMs = age.ageMs;
     const lastRetrievalAgeMs = comparison - Date.parse(edition.retrievals.at(-1)!);
     const inCoverage = edition.coverage.some((mask) => maskContains(mask, claim));
     const superseded = this.#isSuperseded(edition, claim);
     const ageAnchorKind = edition.publishedAt ? ('published' as const) : ('first-retrieved' as const);
 
-    if (ageMs < 0) {
+    if (age.state === 'quarantined') {
       return decision('quarantined', 'Edition age is negative', ageAnchorKind, ageMs, lastRetrievalAgeMs, superseded, inCoverage);
     }
     if (!inCoverage) {
@@ -200,10 +221,10 @@ export class ScheduleEditionRegistry {
     if (superseded) {
       return decision('topology', 'Edition is superseded for this claim', ageAnchorKind, ageMs, lastRetrievalAgeMs, true, true);
     }
-    if (ageMs <= TWO_HOURS_MS) {
+    if (age.state === 'current') {
       return decision('current', 'Current schedule', ageAnchorKind, ageMs, lastRetrievalAgeMs, false, true);
     }
-    if (ageMs <= TWENTY_FOUR_HOURS_MS) {
+    if (age.state === 'stale') {
       return decision('stale', 'Stored schedule—service changes may differ', ageAnchorKind, ageMs, lastRetrievalAgeMs, false, true);
     }
     return decision('topology', 'Edition is older than 24 hours', ageAnchorKind, ageMs, lastRetrievalAgeMs, false, true);

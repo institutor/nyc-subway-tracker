@@ -1,9 +1,48 @@
 const encoder = new TextEncoder();
 
+export const MAX_CANONICAL_IDENTITY_CODE_POINTS = 256;
+
 /** The identity representation used only as a neutral final tie-breaker. */
 export function normalizeCanonicalIdentity(value: string): string {
   assertUnicodeScalars(value);
   return value.normalize('NFC');
+}
+
+/**
+ * Normalizes an externally supplied identifier while keeping it safe for use
+ * in claim keys, maps, and audit records. Operational identifiers are tokens,
+ * so Unicode separators and non-printing code points are never meaningful.
+ */
+export function normalizeBoundedIdentity(
+  value: string,
+  label = 'canonical',
+  maxCodePoints = MAX_CANONICAL_IDENTITY_CODE_POINTS,
+): string {
+  if (typeof value !== 'string') throw new Error(`Invalid ${label} identity`);
+  const normalized = normalizeCanonicalIdentity(value);
+  if (!normalized || [...normalized].length > maxCodePoints || /[\p{C}\p{Z}]/u.test(normalized)) {
+    throw new Error(`Invalid ${label} identity`);
+  }
+  return normalized;
+}
+
+/** A self-delimiting encoding whose fields cannot alias across tuple boundaries. */
+export function encodeCanonicalStringTuple(values: readonly (string | null)[]): string {
+  return values.map((value) => {
+    if (value === null) return 'n;';
+    const normalized = normalizeCanonicalIdentity(value);
+    return `s${encoder.encode(normalized).length}:${normalized};`;
+  }).join('');
+}
+
+/** A bounded identity-tuple variant for externally supplied operational keys. */
+export function encodeCanonicalIdentityTuple(
+  values: readonly (string | null)[],
+  label = 'claim',
+): string {
+  return encodeCanonicalStringTuple(values.map((value) => value === null
+    ? null
+    : normalizeBoundedIdentity(value, label)));
 }
 
 /** Compares NFC identities by unsigned UTF-8 bytes, including explicit prefix handling. */

@@ -109,14 +109,17 @@ export function admitArrivalCandidate(
   const serviceGateBinding = candidate.serviceChangeGate
     ? bindServiceChangeGate(candidate.serviceChangeGate, candidate, scope)
     : 'absent';
-  const structuredServiceDisposition = serviceGateBinding === 'mismatch'
+  const structuredServiceDisposition = serviceGateBinding === 'mismatch' || serviceGateBinding === 'unissued'
     ? 'quarantined'
-    : candidate.serviceChangeGate?.disposition ?? 'eligible';
+    : serviceGateBinding === 'bound' ? candidate.serviceChangeGate!.disposition : 'eligible';
   const serviceDisposition = worseDisposition(structuredServiceDisposition, candidate.serviceDisposition);
   if (dispositionRank(candidate.trackDisposition) > dispositionRank(serviceDisposition)) {
     return rejected('track', candidate.trackDisposition);
   }
   if (serviceDisposition !== 'eligible') {
+    if (serviceGateBinding === 'unissued' && serviceDisposition === 'quarantined') {
+      return rejected('service', 'unissued-service-decision');
+    }
     if (serviceGateBinding === 'mismatch' && serviceDisposition === 'quarantined') {
       return rejected('service', 'claim-scope-mismatch');
     }
@@ -244,19 +247,13 @@ function bindServiceChangeGate(
   gate: ServiceChangeDecision,
   candidate: ArrivalAdmissionCandidate,
   scope: ArrivalBoardScope,
-): 'bound' | 'mismatch' {
+): 'bound' | 'mismatch' | 'unissued' {
   try {
     validateServiceChangeDecision(gate);
-  } catch (error) {
-    // Invalid discriminants are malformed program input and retain the existing
-    // throwing contract. Claim metadata is untrusted data and fails closed at
-    // the service gate without allowing its asserted disposition to take effect.
-    if (!gate || typeof gate !== 'object'
-      || !['eligible-context', 'resolved-suppression', 'arrival-claim-unavailable', 'quarantine-or-limitation'].includes(gate.kind)
-      || !['eligible', 'resolved-ineligible', 'high-impact-unresolved', 'quarantined'].includes(gate.disposition)) {
-      throw error;
-    }
-    return 'mismatch';
+  } catch {
+    // Do not inspect any attacker-controlled public fields after provenance
+    // validation fails; Proxy traps and forged discriminants are untrusted.
+    return 'unissued';
   }
 
   const claim = gate.evaluatedClaim;

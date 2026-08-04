@@ -7,10 +7,34 @@ import {
 
 const BASE = new Date('2026-08-04T12:00:00.000Z');
 const at = (seconds: number) => new Date(BASE.getTime() + seconds * 1_000);
+const HOUR_MS = 60 * 60 * 1_000;
 
-const reroute = (overrides: Partial<RerouteClaimInput> = {}): RerouteClaimInput => ({
+type ExistingPattern = NonNullable<RerouteClaimInput['effectiveSupplementedPattern']>;
+type ReviewedPattern = Omit<ExistingPattern, 'provenance'> & {
+  readonly provenance: ExistingPattern['provenance'] & {
+    readonly canonicalContentId: string;
+    readonly publishedAt: Date;
+    readonly acceptedAt: Date;
+    readonly sourceOrder: number;
+    readonly priorAcceptedEdition: {
+      readonly editionId: string;
+      readonly canonicalContentId: string;
+      readonly publishedAt: Date;
+      readonly observedAt: Date;
+      readonly acceptedAt: Date;
+      readonly sourceOrder: number;
+    };
+  };
+};
+type ReviewedRerouteInput = Omit<RerouteClaimInput, 'effectiveSupplementedPattern'> & {
+  readonly assessedAt: Date;
+  readonly effectiveSupplementedPattern: ReviewedPattern | null;
+};
+
+const reroute = (overrides: Partial<ReviewedRerouteInput> = {}): ReviewedRerouteInput => ({
   changeKind: 'reroute',
   planned: true,
+  assessedAt: BASE,
   alertScope: 'match',
   originalRoute: { id: 'F', label: 'F' },
   direction: 'northbound',
@@ -23,7 +47,12 @@ const reroute = (overrides: Partial<RerouteClaimInput> = {}): RerouteClaimInput 
     orderedDirectionalStopIds: ['B02N', 'F14N', 'A24N', 'A25N', 'A27N'],
     provenance: {
       source: 'supplemented-gtfs', acceptance: 'accepted', currency: 'current',
-      editionId: 'supplemented-gtfs:20260804-weekend', observedAt: BASE,
+      editionId: 'supplemented-gtfs:20260804-weekend', canonicalContentId: '20260804-weekend',
+      publishedAt: new Date(BASE.getTime() - HOUR_MS), observedAt: at(-60), acceptedAt: at(-30), sourceOrder: 2,
+      priorAcceptedEdition: {
+        editionId: 'supplemented-gtfs:20260803-weekend', canonicalContentId: '20260803-weekend',
+        publishedAt: new Date(BASE.getTime() - 2 * HOUR_MS), observedAt: at(-3_700), acceptedAt: at(-3_650), sourceOrder: 1,
+      },
     },
   },
   liveRemainingStopIds: ['F14N', 'A24N', 'A25N', 'A27N'],
@@ -112,6 +141,49 @@ describe('route-on-route and stopping-pattern resolution', () => {
     expect(resolveRerouteClaim(reroute({
       effectiveSupplementedPattern: { ...valid, provenance: { ...valid.provenance, source: 'forged' as never } },
     }))).toMatchObject({ kind: 'quarantine-or-limitation' });
+  });
+
+  test('derives supplemented-pattern usability from accepted chronology at the governed 24-hour boundary', () => {
+    const valid = reroute().effectiveSupplementedPattern!;
+    const provenance = valid.provenance;
+    const boundaryPrior = {
+      ...provenance.priorAcceptedEdition,
+      publishedAt: new Date(BASE.getTime() - 25 * HOUR_MS),
+    };
+    expect(resolveRerouteClaim(reroute({
+      effectiveSupplementedPattern: {
+        ...valid,
+        provenance: { ...provenance, currency: 'stale', publishedAt: new Date(BASE.getTime() - 24 * HOUR_MS),
+          priorAcceptedEdition: boundaryPrior },
+      },
+    }))).toMatchObject({ kind: 'admitted' });
+    expect(resolveRerouteClaim(reroute({
+      effectiveSupplementedPattern: {
+        ...valid,
+        provenance: { ...provenance, currency: 'stale', publishedAt: new Date(BASE.getTime() - 24 * HOUR_MS - 1),
+          priorAcceptedEdition: boundaryPrior },
+      },
+    }))).toMatchObject({ kind: 'quarantine-or-limitation', reason: 'unusable-supplemented-pattern' });
+
+    const invalidChronology: Array<Partial<ReviewedPattern['provenance']>> = [
+      { publishedAt: new Date('2099-01-01T00:00:00.000Z') },
+      { observedAt: new Date('2099-01-01T00:00:00.000Z') },
+      { acceptedAt: new Date('2099-01-01T00:00:00.000Z') },
+      { publishedAt: at(-20), observedAt: at(-30) },
+      { observedAt: at(-10), acceptedAt: at(-20) },
+      { sourceOrder: 1 },
+      { publishedAt: new Date(BASE.getTime() - 3 * HOUR_MS) },
+      { editionId: 'regular-gtfs:20260804-weekend' },
+      { canonicalContentId: '' },
+    ];
+    for (const overrides of invalidChronology) {
+      expect(resolveRerouteClaim(reroute({
+        effectiveSupplementedPattern: { ...valid, provenance: { ...provenance, ...overrides } },
+      }))).toMatchObject({ kind: 'quarantine-or-limitation', reason: 'unusable-supplemented-pattern' });
+    }
+    expect(resolveRerouteClaim(reroute({ assessedAt: at(-120) }))).toMatchObject({
+      kind: 'quarantine-or-limitation', reason: 'unusable-supplemented-pattern',
+    });
   });
 
   test('resolves alert scope after the planned pattern and before live reroute evidence', () => {
@@ -212,6 +284,48 @@ describe('resolved track conflict', () => {
     expect(evaluateTrackConflict({ ...conflict, targetExactDirectionalStopId: 'D16N' })).toMatchObject({ kind: 'eligible-context' });
     expect(evaluateTrackConflict({ ...conflict, terminal: true })).toMatchObject({ kind: 'eligible-context' });
     expect(evaluateTrackConflict({ ...conflict, actualTrack: '1' })).toMatchObject({ kind: 'eligible-context' });
+  });
+
+  test('normalizes bounded printable track IDs and treats malformed values as missing context', () => {
+    const conflict = {
+      evidenceId: 'track-normalization', routeId: 'F', direction: 'northbound' as const,
+      conflictStopId: 'D17N', targetExactDirectionalStopId: 'A24N',
+      actualTrack: '2', scheduledTrack: '1', terminal: false,
+      downstreamExactDirectionalStopIds: ['A24N'], observedAt: BASE,
+    };
+    for (const actualTrack of [' ', '\u00a0', ' 2', '2 ', '2\u0000', 'x'.repeat(65)]) {
+      expect(evaluateTrackConflict({ ...conflict, actualTrack })).toMatchObject({
+        kind: 'eligible-context', disposition: 'eligible',
+      });
+    }
+    expect(evaluateTrackConflict({ ...conflict, actualTrack: 'Caf\u00e9', scheduledTrack: 'Cafe\u0301' }))
+      .toMatchObject({ kind: 'eligible-context' });
+    expect(evaluateTrackConflict({ ...conflict, actualTrack: 'Track 2', scheduledTrack: 'Track 1' }))
+      .toMatchObject({ kind: 'resolved-suppression' });
+    expect(evaluateTrackConflict(conflict)).toMatchObject({ kind: 'resolved-suppression' });
+    expect(evaluateTrackConflict({ ...conflict, terminal: true })).toMatchObject({ kind: 'eligible-context' });
+  });
+
+  test('rejects track claim tuple delimiter collisions and bounded identity violations', () => {
+    const collisionInputs = [
+      {
+        evidenceId: 'track-collision-one', routeId: 'F', direction: 'northbound' as const,
+        conflictStopId: 'a\0b', targetExactDirectionalStopId: 'c',
+        actualTrack: '2', scheduledTrack: '1', terminal: false,
+        downstreamExactDirectionalStopIds: ['c'], observedAt: BASE,
+      },
+      {
+        evidenceId: 'track-collision-two', routeId: 'F', direction: 'northbound' as const,
+        conflictStopId: 'a', targetExactDirectionalStopId: 'b\0c',
+        actualTrack: '2', scheduledTrack: '1', terminal: false,
+        downstreamExactDirectionalStopIds: ['b\0c'], observedAt: BASE,
+      },
+    ];
+    for (const input of collisionInputs) expect(() => evaluateTrackConflict(input)).toThrow(/identity/i);
+    for (const routeId of ['F\u001fN', 'F\u0085N', 'F\u2028N', 'x'.repeat(257)]) {
+      expect(() => evaluateTrackConflict({ ...collisionInputs[0], routeId, conflictStopId: 'a',
+        targetExactDirectionalStopId: 'c', downstreamExactDirectionalStopIds: ['c'] })).toThrow(/identity/i);
+    }
   });
 
   test('requires two qualifying updates before a cleared track conflict restores downstream arrivals', () => {

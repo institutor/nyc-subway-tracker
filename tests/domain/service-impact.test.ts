@@ -168,6 +168,65 @@ describe('authoritative alert currency and temporal scope', () => {
       recoveryUpdates: [recovery('new-1', 11), recovery('new-2', 12)] }))
       .toMatchObject({ kind: 'eligible-context', recoveryCount: 2 });
   });
+
+  test('never moves a recovery boundary backward when an accepted snapshot feed clock regresses', () => {
+    const hardSnapshot = classifyAlertSnapshot({
+      status: 'accepted', feedTimestamp: at(10), alerts: [alert({
+        declaredConsequence: 'station-closure', structuredEffect: 'NO_SERVICE',
+        selectors: [{ selectorId: 'closed', routeId: 'F', exactDirectionalStopId: 'A24N' }],
+        official: { headerRaw: 'Station closed', descriptionRaw: 'F trains are not stopping here.' },
+      })],
+    }, at(10));
+    const hard = evaluateServiceChanges({ snapshot: hardSnapshot, claim: claim() });
+    if (!hard.carryover) throw new Error('hard fixture must carry risk');
+
+    const contradiction = classifyAlertSnapshot({
+      status: 'accepted', feedTimestamp: at(5), alerts: [alert({
+        declaredConsequence: 'station-closure', structuredEffect: 'NO_SERVICE',
+        selectors: [{ selectorId: 'contradiction', routeId: 'F', exactDirectionalStopId: 'A24N' }],
+        official: { headerRaw: 'Station is not closed', descriptionRaw: 'Normal service continues.' },
+      })],
+    }, at(20));
+    const update = (evidenceId: string, seconds: number, currentFeed = true): ServiceRecoveryUpdate => ({
+      evidenceId, sourceTimestamp: at(seconds), currentFeed, coherentIdentity: true,
+      exactDirectionalStop: true, coherentPath: true, noCurrentVeto: true,
+    });
+    const carried = evaluateServiceChanges({
+      snapshot: contradiction,
+      claim: claim(),
+      priorRisk: hard.carryover,
+      recoveryUpdates: [update('old-one', 6), update('old-two', 7)],
+    });
+    expect(carried).toMatchObject({ kind: 'resolved-suppression', recoveryCount: 0, carriedForward: true });
+    expect(carried.carryover?.adverseAt.toISOString()).toBe(at(20).toISOString());
+    if (!carried.carryover) throw new Error('regressed snapshot must retain risk');
+
+    const earlierAssessment = classifyAlertSnapshot({
+      status: 'accepted', feedTimestamp: at(4), alerts: [alert({
+        declaredConsequence: 'station-closure', structuredEffect: 'NO_SERVICE',
+        selectors: [{ selectorId: 'older-contradiction', routeId: 'F', exactDirectionalStopId: 'A24N' }],
+        official: { headerRaw: 'Station is not closed', descriptionRaw: 'Normal service continues.' },
+      })],
+    }, at(15));
+    const neverBackward = evaluateServiceChanges({
+      snapshot: earlierAssessment, claim: claim(), priorRisk: carried.carryover,
+    });
+    expect(neverBackward.carryover?.adverseAt.toISOString()).toBe(at(20).toISOString());
+
+    const clean = classifyAlertSnapshot({ status: 'accepted', feedTimestamp: at(30), alerts: [] }, at(30));
+    expect(evaluateServiceChanges({ snapshot: clean, claim: claim(), priorRisk: carried.carryover,
+      recoveryUpdates: [update('old-one', 6), update('old-two', 7)] }))
+      .toMatchObject({ kind: 'resolved-suppression', recoveryCount: 0 });
+    expect(evaluateServiceChanges({ snapshot: clean, claim: claim(), priorRisk: carried.carryover,
+      recoveryUpdates: [update('equal-one', 20), update('equal-two', 20)] }))
+      .toMatchObject({ kind: 'resolved-suppression', recoveryCount: 0 });
+    expect(evaluateServiceChanges({ snapshot: clean, claim: claim(), priorRisk: carried.carryover,
+      recoveryUpdates: [update('new-one', 21), update('broken', 22, false), update('new-two', 23)] }))
+      .toMatchObject({ kind: 'resolved-suppression', recoveryCount: 1 });
+    expect(evaluateServiceChanges({ snapshot: clean, claim: claim(), priorRisk: carried.carryover,
+      recoveryUpdates: [update('new-one', 21), update('new-two', 22)] }))
+      .toMatchObject({ kind: 'eligible-context', recoveryCount: 2 });
+  });
 });
 
 describe('atomic alert scope', () => {
@@ -314,6 +373,52 @@ describe('atomic alert scope', () => {
     expect(Object.isFrozen(classified.alerts[0].selectors[0].constituentStopIds)).toBe(true);
     expect(Object.isFrozen(classified.alerts[0].rawAuditFields)).toBe(true);
   });
+
+  test('rejects canonical duplicate and prototype-sensitive raw audit keys without source-order choice', () => {
+    const duplicateForward: Record<string, unknown> = {};
+    duplicateForward['Caf\u00e9'] = { source: 'first' };
+    duplicateForward['Cafe\u0301'] = { source: 'second' };
+    const duplicateReverse: Record<string, unknown> = {};
+    duplicateReverse['Cafe\u0301'] = { source: 'second' };
+    duplicateReverse['Caf\u00e9'] = { source: 'first' };
+    for (const rawAuditFields of [duplicateForward, duplicateReverse]) {
+      const before = Object.entries(rawAuditFields).map(([key, value]) => [key, JSON.stringify(value)]);
+      expect(() => snapshot([alert({ rawAuditFields })])).toThrow(/canonical duplicate raw audit key/i);
+      expect(Object.entries(rawAuditFields).map(([key, value]) => [key, JSON.stringify(value)])).toEqual(before);
+    }
+
+    const dangerous = JSON.parse('{"__proto__":{"polluted":true},"constructor":{"value":1},"prototype":{"value":2}}') as
+      Record<string, unknown>;
+    expect(Object.prototype).not.toHaveProperty('polluted');
+    expect(() => snapshot([alert({ rawAuditFields: dangerous })])).toThrow(/unsafe raw audit key/i);
+    expect(Object.prototype).not.toHaveProperty('polluted');
+    expect(Object.keys(dangerous)).toEqual(['__proto__', 'constructor', 'prototype']);
+  });
+
+  test('uses null-prototype audit copies and bounds cycles, depth, keys, arrays, and strings', () => {
+    const rawAuditFields = { nested: { value: 'safe' }, array: [{ value: 'safe' }] };
+    const classified = snapshot([alert({ rawAuditFields })]);
+    const frozenAudit = classified.alerts[0].rawAuditFields!;
+    expect(Object.getPrototypeOf(frozenAudit)).toBeNull();
+    expect(Object.getPrototypeOf(frozenAudit.nested)).toBeNull();
+    expect(Object.getPrototypeOf((frozenAudit.array as readonly unknown[])[0])).toBeNull();
+    expect(rawAuditFields).toEqual({ nested: { value: 'safe' }, array: [{ value: 'safe' }] });
+
+    const cycle: Record<string, unknown> = {};
+    cycle.self = cycle;
+    expect(() => snapshot([alert({ rawAuditFields: cycle })])).toThrow(/cyclic raw audit/i);
+
+    let deep: Record<string, unknown> = { leaf: true };
+    for (let depth = 0; depth < 18; depth += 1) deep = { nested: deep };
+    expect(() => snapshot([alert({ rawAuditFields: deep })])).toThrow(/normalization limits/i);
+    expect(() => snapshot([alert({ rawAuditFields: { values: Array.from({ length: 1_001 }, () => 1) } })]))
+      .toThrow(/array exceeds normalization limits/i);
+    expect(() => snapshot([alert({ rawAuditFields: Object.fromEntries(
+      Array.from({ length: 1_001 }, (_, index) => [`key-${index}`, index]),
+    ) })])).toThrow(/object exceeds normalization limits/i);
+    expect(() => snapshot([alert({ rawAuditFields: { oversized: 'x'.repeat(65_537) } })]))
+      .toThrow(/string exceeds normalization limits/i);
+  });
 });
 
 describe('service consequence and deterministic disposition', () => {
@@ -428,6 +533,54 @@ describe('service consequence and deterministic disposition', () => {
     })]), claim: claim() }).kind).toBe('resolved-suppression');
   });
 
+  test('rejects explicit destructive-predicate negation across case, punctuation, and Unicode whitespace', () => {
+    const cases: ServiceAlertEvidence[] = [
+      alert({
+        alertId: 'skip-no-stops', declaredConsequence: 'local-running-express',
+        selectors: [{ selectorId: 'exact-segment', routeId: 'F', exactDirectionalSegmentStopIds: ['A24N'] }],
+        official: { headerRaw: 'F trains run express?', descriptionRaw: 'F trains SKIP NO STOPS; normal service continues.' },
+      }),
+      alert({
+        alertId: 'do-not-skip', declaredConsequence: 'local-running-express',
+        selectors: [{ selectorId: 'exact-segment', routeId: 'F', exactDirectionalSegmentStopIds: ['A24N'] }],
+        official: { headerRaw: 'Service update', descriptionRaw: 'F trains\u00a0DO NOT SKIP 14 St.' },
+      }),
+      alert({
+        alertId: 'not-bypassing', declaredConsequence: 'local-running-express',
+        selectors: [{ selectorId: 'exact-segment', routeId: 'F', exactDirectionalSegmentStopIds: ['A24N'] }],
+        official: { headerRaw: 'F trains are not bypassing 14 St.', descriptionRaw: 'Normal service continues.' },
+      }),
+      alert({
+        alertId: 'do-not-terminate', declaredConsequence: 'short-turn',
+        selectors: [{ selectorId: 'exact-segment', routeId: 'F', exactDirectionalSegmentStopIds: ['A24N'] }],
+        official: { headerRaw: 'F trains DO NOT TERMINATE early.', descriptionRaw: 'Normal service continues.' },
+      }),
+      alert({
+        alertId: 'do-not-run-via', declaredConsequence: 'reroute',
+        selectors: [{ selectorId: 'exact-stop', routeId: 'F', exactDirectionalStopId: 'A24N' }],
+        official: { headerRaw: 'F trains do not run via E.', descriptionRaw: 'Normal service continues.' },
+      }),
+    ];
+    for (const item of cases) {
+      expect(evaluateServiceChanges({ snapshot: snapshot([item]), claim: claim() })).toMatchObject({
+        kind: 'quarantine-or-limitation', disposition: 'quarantined',
+      });
+    }
+
+    const positiveBypass = alert({
+      alertId: 'positive-bypass', declaredConsequence: 'local-running-express',
+      selectors: [{ selectorId: 'exact-segment', routeId: 'F', exactDirectionalSegmentStopIds: ['A24N'] }],
+      official: { headerRaw: 'F trains run express', descriptionRaw: 'F trains skip 14 St.' },
+    });
+    const positiveClosure = alert({
+      alertId: 'positive-closure', declaredConsequence: 'station-closure', structuredEffect: 'NO_SERVICE',
+      selectors: [{ selectorId: 'exact-stop', routeId: 'F', exactDirectionalStopId: 'A24N' }],
+      official: { headerRaw: 'Station closed', descriptionRaw: 'F trains are not stopping at 14 St.' },
+    });
+    expect(evaluateServiceChanges({ snapshot: snapshot([positiveBypass]), claim: claim() }).kind).toBe('resolved-suppression');
+    expect(evaluateServiceChanges({ snapshot: snapshot([positiveClosure]), claim: claim() }).kind).toBe('resolved-suppression');
+  });
+
   test('requires exact downstream stop scope for short turns and independent basis for unresolved downstream risk', () => {
     const tripOnly = alert({
       declaredConsequence: 'short-turn', structuredEffect: 'MODIFIED_SERVICE',
@@ -497,6 +650,21 @@ describe('service consequence and deterministic disposition', () => {
     ]);
   });
 
+  test('does not collapse raw official provenance across embedded delimiter boundaries', () => {
+    const first = alert({
+      alertId: 'raw-boundary',
+      official: { headerRaw: 'a\0b', descriptionRaw: 'c' },
+    });
+    const second = alert({
+      alertId: 'raw-boundary',
+      official: { headerRaw: 'a', descriptionRaw: 'b\0c' },
+    });
+    const forward = evaluateServiceChanges({ snapshot: snapshot([first, second]), claim: claim() });
+    const reverse = evaluateServiceChanges({ snapshot: snapshot([second, first]), claim: claim() });
+    expect(forward.rawOfficialAudit).toHaveLength(2);
+    expect(reverse.rawOfficialAudit).toEqual(forward.rawOfficialAudit);
+  });
+
   test('normalizes duplicate alert identities and deterministically quarantines conflicting variants', () => {
     const exact = alert({
       alertId: 'Caf\u00e9', declaredConsequence: 'delay-only', structuredEffect: 'SIGNIFICANT_DELAYS',
@@ -536,6 +704,40 @@ describe('service consequence and deterministic disposition', () => {
     const conflicts = [update('Caf\u00e9', 1), update('Cafe\u0301', 1, false), update('second', 2)];
     expect(countQualifyingRecovery(conflicts, BASE, at(3))).toBe(0);
     expect(countQualifyingRecovery([...conflicts].reverse(), BASE, at(3))).toBe(0);
+  });
+
+  test('rejects delimiter-collision, control, separator, and oversized identities before risk replay', () => {
+    const collisionClaims = [
+      claim({ claimId: 'a\0b', routeId: 'c' }),
+      claim({ claimId: 'a', routeId: 'b\0c' }),
+    ];
+    for (const malformed of collisionClaims) {
+      expect(() => evaluateServiceChanges({ snapshot: snapshot([]), claim: malformed })).toThrow(/identity/i);
+    }
+
+    for (const separator of ['\u001f', '\u007f', '\u0085', '\u2028']) {
+      expect(() => evaluateServiceChanges({
+        snapshot: snapshot([]), claim: claim({ claimId: `claim${separator}split` }),
+      })).toThrow(/identity/i);
+      expect(() => snapshot([alert({ alertId: `alert${separator}split` })])).toThrow(/identity/i);
+      expect(() => snapshot([alert({
+        selectors: [{ selectorId: `selector${separator}split`, routeId: 'F' }],
+      })])).toThrow(/identity/i);
+      expect(() => countQualifyingRecovery([{
+        evidenceId: `recovery${separator}split`, sourceTimestamp: at(1), currentFeed: true,
+        coherentIdentity: true, exactDirectionalStop: true, coherentPath: true, noCurrentVeto: true,
+      }], BASE, at(2))).toThrow(/identity/i);
+    }
+    expect(() => evaluateServiceChanges({
+      snapshot: snapshot([]), claim: claim({ claimId: 'x'.repeat(257) }),
+    })).toThrow(/identity/i);
+
+    const prefixA = evaluateServiceChanges({ snapshot: snapshot([]), claim: claim({ claimId: 'ab', routeId: 'c' }) });
+    const prefixB = evaluateServiceChanges({ snapshot: snapshot([]), claim: claim({ claimId: 'a', routeId: 'bc' }) });
+    expect(prefixA.claimIdentity).not.toBe(prefixB.claimIdentity);
+    const composed = evaluateServiceChanges({ snapshot: snapshot([]), claim: claim({ claimId: 'Caf\u00e9' }) });
+    const decomposed = evaluateServiceChanges({ snapshot: snapshot([]), claim: claim({ claimId: 'Cafe\u0301' }) });
+    expect(composed.claimIdentity).toBe(decomposed.claimIdentity);
   });
 
   test('binds every decision to an immutable exact evaluated claim scope', () => {

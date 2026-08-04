@@ -1,6 +1,11 @@
-import { normalizeCanonicalIdentity } from './canonical';
+import {
+  encodeCanonicalIdentityTuple,
+  normalizeBoundedIdentity,
+  normalizeCanonicalIdentity,
+} from './canonical';
 import type { RouteIdentity } from './types';
 import { sanitizeOfficialText, type AlertScopeKind, type ResolvedServiceDirection } from './alert-scope';
+import { classifyScheduleEditionAge } from './schedule-owner';
 import {
   CLAIM_SUPPRESSED_PRODUCTS,
   countQualifyingRecovery,
@@ -15,7 +20,21 @@ export interface SupplementedPatternProvenance {
   readonly acceptance: 'accepted' | 'quarantined' | 'rejected';
   readonly currency: 'current' | 'stale';
   readonly editionId: string;
+  readonly canonicalContentId: string;
+  readonly publishedAt: Date;
   readonly observedAt: Date;
+  readonly acceptedAt: Date;
+  readonly sourceOrder: number;
+  readonly priorAcceptedEdition?: AcceptedSupplementedPatternEdition;
+}
+
+export interface AcceptedSupplementedPatternEdition {
+  readonly editionId: string;
+  readonly canonicalContentId: string;
+  readonly publishedAt: Date;
+  readonly observedAt: Date;
+  readonly acceptedAt: Date;
+  readonly sourceOrder: number;
 }
 
 export interface EffectiveSupplementedPattern {
@@ -37,6 +56,7 @@ export interface ReroutePathEvidence {
 export interface RerouteClaimInput {
   readonly changeKind: StoppingPatternChangeKind;
   readonly planned: boolean;
+  readonly assessedAt: Date;
   readonly alertScope: AlertScopeKind;
   readonly originalRoute: RouteIdentity;
   readonly direction: ResolvedServiceDirection;
@@ -97,7 +117,7 @@ export function resolveRerouteClaim(input: RerouteClaimInput): RerouteClaimDecis
   if (!coherentOrderedStops(input.originalDirectionalStopIds, true)) return limited('invalid-ordered-stop-evidence');
   if (input.planned && !input.effectiveSupplementedPattern) return limited('planned-pattern-required');
   const effective = input.effectiveSupplementedPattern;
-  if (effective && !usableSupplementedPattern(effective)) return limited('unusable-supplemented-pattern');
+  if (effective && !usableSupplementedPattern(effective, input.assessedAt)) return limited('unusable-supplemented-pattern');
   if (effective && (!sameIdentity(effective.routeId, input.originalRoute.id) || effective.direction !== input.direction)) {
     return limited('direction-or-route-conflict');
   }
@@ -210,8 +230,10 @@ export function evaluateTrackConflict(input: TrackConflictInput): TrackConflictD
   validateTrackInput(input);
   const claimIdentity = trackClaimIdentity(input);
   const priorRisk = input.priorRisk?.claimIdentity === claimIdentity ? input.priorRisk : null;
-  const resolvedConflict = !input.terminal && Boolean(input.actualTrack) && Boolean(input.scheduledTrack)
-    && !sameIdentity(input.actualTrack!, input.scheduledTrack!)
+  const actualTrack = normalizeTrackId(input.actualTrack);
+  const scheduledTrack = normalizeTrackId(input.scheduledTrack);
+  const resolvedConflict = !input.terminal && actualTrack !== null && scheduledTrack !== null
+    && actualTrack !== scheduledTrack
     && includesIdentity(input.downstreamExactDirectionalStopIds, input.targetExactDirectionalStopId);
   if (resolvedConflict) {
     const riderCopy = 'Track change—downstream arrival information is withheld.';
@@ -233,7 +255,10 @@ function validateRerouteInput(input: RerouteClaimInput): void {
     || !input.originalRoute?.id?.trim() || !input.originalRoute.label?.trim()
     || !isResolvedDirection(input.direction) || !input.targetExactDirectionalStopId?.trim()
     || !Array.isArray(input.originalDirectionalStopIds) || !Array.isArray(input.liveRemainingStopIds)
-    || !Array.isArray(input.pathEvidence)) throw new Error('Complete reroute claim evidence is required');
+    || !Array.isArray(input.pathEvidence) || !(input.assessedAt instanceof Date)
+    || !Number.isFinite(input.assessedAt.getTime())) throw new Error('Complete reroute claim evidence is required');
+  normalizeBoundedIdentity(input.originalRoute.id, 'reroute route');
+  normalizeBoundedIdentity(input.targetExactDirectionalStopId, 'reroute target stop');
   if (input.effectiveSupplementedPattern) {
     if (!input.effectiveSupplementedPattern.sourceId?.trim() || !input.effectiveSupplementedPattern.routeId?.trim()
       || !isResolvedDirection(input.effectiveSupplementedPattern.direction)
@@ -242,6 +267,8 @@ function validateRerouteInput(input: RerouteClaimInput): void {
   for (const proof of input.pathEvidence) {
     if (!proof?.evidenceId?.trim() || !proof.routeId?.trim() || !isResolvedDirection(proof.direction)
       || !Array.isArray(proof.orderedDirectionalStopIds)) throw new Error('Invalid reroute path evidence');
+    normalizeBoundedIdentity(proof.evidenceId, 'reroute path evidence');
+    normalizeBoundedIdentity(proof.routeId, 'reroute path route');
   }
 }
 
@@ -252,27 +279,62 @@ function validateTrackInput(input: TrackConflictInput): void {
     || !(input.observedAt instanceof Date) || !Number.isFinite(input.observedAt.getTime())) {
     throw new Error('Complete resolved track evidence is required');
   }
+  normalizeBoundedIdentity(input.evidenceId, 'track evidence');
+  normalizeBoundedIdentity(input.routeId, 'track route');
+  normalizeBoundedIdentity(input.conflictStopId, 'track conflict stop');
+  normalizeBoundedIdentity(input.targetExactDirectionalStopId, 'track target stop');
+  input.downstreamExactDirectionalStopIds.forEach((stopId) => normalizeBoundedIdentity(stopId, 'track downstream stop'));
 }
 
 function coherentOrderedStops(stops: readonly string[], requireNonempty = false): boolean {
   if (!Array.isArray(stops) || (requireNonempty && stops.length === 0) || stops.some((item) => !item?.trim())) return false;
-  const canonical = stops.map(normalizeCanonicalIdentity);
+  let canonical: string[];
+  try {
+    canonical = stops.map((item) => normalizeBoundedIdentity(item, 'directional stop'));
+  } catch {
+    return false;
+  }
   return new Set(canonical).size === canonical.length;
 }
 
-function usableSupplementedPattern(pattern: EffectiveSupplementedPattern): boolean {
+function usableSupplementedPattern(pattern: EffectiveSupplementedPattern, assessedAt: Date): boolean {
   const provenance = pattern.provenance as SupplementedPatternProvenance | undefined;
-  return Boolean(pattern.sourceId?.trim()
-    && pattern.routeId?.trim()
-    && isResolvedDirection(pattern.direction)
-    && coherentOrderedStops(pattern.orderedDirectionalStopIds, true)
-    && provenance
-    && provenance.source === 'supplemented-gtfs'
-    && provenance.acceptance === 'accepted'
-    && provenance.currency === 'current'
-    && provenance.editionId?.trim()
-    && provenance.observedAt instanceof Date
-    && Number.isFinite(provenance.observedAt.getTime()));
+  if (!pattern.sourceId?.trim() || !pattern.routeId?.trim() || !isResolvedDirection(pattern.direction)
+    || !coherentOrderedStops(pattern.orderedDirectionalStopIds, true) || !provenance
+    || provenance.source !== 'supplemented-gtfs' || provenance.acceptance !== 'accepted'
+    || !['current', 'stale'].includes(provenance.currency)
+    || !Number.isSafeInteger(provenance.sourceOrder) || provenance.sourceOrder < 0) return false;
+  try {
+    normalizeBoundedIdentity(pattern.sourceId, 'supplemented pattern source');
+    normalizeBoundedIdentity(pattern.routeId, 'supplemented pattern route');
+    const contentId = normalizeBoundedIdentity(provenance.canonicalContentId, 'supplemented content');
+    const editionId = normalizeBoundedIdentity(provenance.editionId, 'supplemented edition');
+    if (editionId !== `supplemented-gtfs:${contentId}`) return false;
+    const assessed = validInstant(assessedAt);
+    const published = validInstant(provenance.publishedAt);
+    const observed = validInstant(provenance.observedAt);
+    const accepted = validInstant(provenance.acceptedAt);
+    if (!(published <= observed && observed <= accepted && accepted <= assessed)) return false;
+    const age = classifyScheduleEditionAge(provenance.publishedAt, assessedAt);
+    if ((age.state !== 'current' && age.state !== 'stale') || age.state !== provenance.currency) return false;
+
+    const prior = provenance.priorAcceptedEdition;
+    if (prior) {
+      if (!Number.isSafeInteger(prior.sourceOrder) || prior.sourceOrder < 0) return false;
+      const priorContentId = normalizeBoundedIdentity(prior.canonicalContentId, 'prior supplemented content');
+      const priorEditionId = normalizeBoundedIdentity(prior.editionId, 'prior supplemented edition');
+      if (priorEditionId !== `supplemented-gtfs:${priorContentId}` || priorContentId === contentId) return false;
+      const priorPublished = validInstant(prior.publishedAt);
+      const priorObserved = validInstant(prior.observedAt);
+      const priorAccepted = validInstant(prior.acceptedAt);
+      if (!(priorPublished <= priorObserved && priorObserved <= priorAccepted && priorAccepted <= assessed)
+        || published <= priorPublished || observed <= priorObserved || accepted <= priorAccepted
+        || provenance.sourceOrder <= prior.sourceOrder) return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function isOrderedSubsequence(candidate: readonly string[], reference: readonly string[]): boolean {
@@ -321,8 +383,28 @@ function isResolvedDirection(value: string): value is ResolvedServiceDirection {
 }
 
 function trackClaimIdentity(input: TrackConflictInput): string {
-  return [input.routeId, input.direction, input.conflictStopId, input.targetExactDirectionalStopId]
-    .map(normalizeCanonicalIdentity).join('\0');
+  return encodeCanonicalIdentityTuple(
+    [input.routeId, input.direction, input.conflictStopId, input.targetExactDirectionalStopId],
+    'track claim',
+  );
+}
+
+function normalizeTrackId(value: string | null): string | null {
+  if (typeof value !== 'string') return null;
+  try {
+    const normalized = normalizeCanonicalIdentity(value);
+    const nonAsciiSpaces = normalized.replace(/ /g, '');
+    if (!normalized || normalized.trim() !== normalized || [...normalized].length > 64
+      || /\p{C}/u.test(normalized) || /\p{Z}/u.test(nonAsciiSpaces)) return null;
+    return normalized;
+  } catch {
+    return null;
+  }
+}
+
+function validInstant(value: Date): number {
+  if (!(value instanceof Date) || !Number.isFinite(value.getTime())) throw new Error('Invalid chronology instant');
+  return value.getTime();
 }
 
 function freezeTrack(
