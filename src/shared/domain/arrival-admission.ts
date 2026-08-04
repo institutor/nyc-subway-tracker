@@ -145,7 +145,12 @@ export function admitArrivalCandidate(
       row: freezeRow(candidate, arrival, expected.supportedRange),
     });
   }
-  const arrival: LiveArrival = Object.freeze({ ...common, kind: 'live', at: new Date(eventAt(target.call, scope.comparisonAt.getTime())) });
+  const liveEventAt = eventAt(target.call, scope.comparisonAt.getTime());
+  if (liveEventAt < candidate.confidence.supportedRange.startsAt.getTime()
+    || liveEventAt > candidate.confidence.supportedRange.endsAt.getTime()) {
+    return rejected('movement-time', 'live-event-outside-supported-range');
+  }
+  const arrival: LiveArrival = Object.freeze({ ...common, kind: 'live', at: new Date(liveEventAt) });
   return Object.freeze({
     kind: 'admitted', confidence: 'live', stopCallIdentity: target.identity,
     row: freezeRow(candidate, arrival, candidate.confidence.supportedRange),

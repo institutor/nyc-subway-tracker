@@ -80,6 +80,7 @@ describe('canonical exact-stop and train identity admission', () => {
   test('uses a future departure when arrival is past and never repairs from mutable remainingOrder', () => {
     const result = admitArrivalCandidate(candidate({
       remainingStopCalls: [{ stopId: 'A24N', sourceStopSequence: 13, arrivalAt: at(-2), departureAt: at(2) }],
+      confidence: { kind: 'live', supportedRange: { startsAt: at(1), endsAt: at(3) } },
     }), scope);
     expect(result).toMatchObject({ kind: 'admitted', row: { arrival: { at: at(2) } } });
 
@@ -94,6 +95,31 @@ describe('canonical exact-stop and train identity admission', () => {
         { stopId: 'A24N', arrivalAt: at(200), departureAt: at(210) },
       ],
     }), scope)).toThrow(/stable stop-call occurrence/i);
+  });
+
+  test('admits Live only when the selected future event is inside the closed supported range', () => {
+    for (const supportedRange of [
+      { startsAt: at(300), endsAt: at(400) },
+      { startsAt: at(200), endsAt: at(300) },
+    ]) {
+      const decision = admitArrivalCandidate(candidate({ confidence: { kind: 'live', supportedRange } }), scope);
+      expect(decision).toMatchObject({ kind: 'admitted', confidence: 'live', row: { arrival: { at: at(300) } } });
+      if (decision.kind !== 'admitted') throw new Error('closed endpoint fixture must admit');
+      expect(() => orderPrimaryArrivals([decision.row])).not.toThrow();
+    }
+
+    for (const supportedRange of [
+      { startsAt: at(301), endsAt: at(400) },
+      { startsAt: at(200), endsAt: at(299) },
+      { startsAt: at(400), endsAt: at(500) },
+    ]) {
+      expect(admitArrivalCandidate(candidate({ confidence: { kind: 'live', supportedRange } }), scope)).toMatchObject({
+        kind: 'rejected',
+        failedGate: 'movement-time',
+        disposition: 'live-event-outside-supported-range',
+        boardTreatment: 'quarantine-or-limitation',
+      });
+    }
   });
 
   test('keeps distinct same-time trains and is source-order independent', () => {
@@ -125,6 +151,8 @@ describe('canonical exact-stop and train identity admission', () => {
     expect(admitted.kind === 'admitted' && [admitted, admitted.row, admitted.row.arrival,
       admitted.row.arrival.route, admitted.row.arrival.provenance, admitted.row.supportedRange]
       .every(Object.isFrozen)).toBe(true);
+    if (admitted.kind !== 'admitted') throw new Error('Expected fixture must admit');
+    expect(() => orderPrimaryArrivals([admitted.row])).not.toThrow();
     expect(admitArrivalCandidate({ ...expected, recoveryDisposition: 'live-readmission-eligible' }, scope))
       .toMatchObject({ kind: 'rejected', failedGate: 'identity-recovery' });
     expect(admitArrivalCandidate(candidate({ recoveryDisposition: 'live-readmission-eligible' }), scope))

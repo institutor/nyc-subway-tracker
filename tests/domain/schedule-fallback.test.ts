@@ -44,6 +44,16 @@ function data(times: readonly [string, string][], overrides: Partial<NormalizedS
   };
 }
 
+function routedData(routeId: string, times: readonly [string, string][], overrides: Partial<NormalizedStaticGtfs> = {}): NormalizedStaticGtfs {
+  const base = data(times, overrides);
+  return {
+    ...base,
+    routes: [{ routeId, agencyId: '', shortName: routeId, longName: '', rowIdentity: `route:${routeId}` }],
+    trips: base.trips.map((trip) => ({ ...trip, routeId })),
+    servicePatterns: base.servicePatterns.map((pattern) => ({ ...pattern, routeId })),
+  };
+}
+
 function edition(source: 'supplemented-gtfs' | 'regular-gtfs', id: string, schedule: NormalizedStaticGtfs, coverage = [mask]): StaticGtfsEditionCandidate {
   return {
     source, canonicalContentId: id, retrievedAt: iso(-60), publishedAt: iso(-120), sourceOrder: source === 'supplemented-gtfs' ? 1 : undefined,
@@ -152,6 +162,109 @@ describe('fallback entry and static ownership', () => {
       { occurrenceId: '20260804:a-trip:13', source: 'supplemented-gtfs' },
       { occurrenceId: '20260804:c-trip:13', source: 'regular-gtfs' },
     ] });
+  });
+
+  test('retains an empty tuple owner beside a populated owner and is tuple-order deterministic', () => {
+    const build = (
+      routeIds: readonly string[],
+      routeServiceDates: readonly Readonly<{ routeId: string; serviceDate: string }>[],
+    ) => {
+      const registry = new ScheduleEditionRegistry();
+      registry.observe(edition('regular-gtfs', 'partial-a-owner', routedData('A', [['a-trip', '24:05:00']]), [{
+        ...mask, id: 'a-owner-mask', routeIds: ['A'],
+      }]));
+      registry.observe(edition('supplemented-gtfs', 'empty-b-owner', routedData('B', []), [{
+        ...mask, id: 'b-owner-mask', routeIds: ['B'],
+      }]));
+      return buildScheduleFallback(input(registry, { scope: {
+        ...input(registry).scope,
+        routeIds,
+        serviceDates: ['20260804'],
+        routeServiceDates,
+      } }));
+    };
+    const pairs = [
+      { routeId: 'A', serviceDate: '20260804' },
+      { routeId: 'B', serviceDate: '20260804' },
+    ];
+    const first = build(['A', 'B'], pairs);
+    const shuffled = build(['B', 'A'], [...pairs].reverse());
+    expect(first).toMatchObject({
+      source: 'mixed',
+      currency: 'current',
+      rows: [{
+        occurrenceId: '20260804:a-trip:13',
+        source: 'regular-gtfs',
+        arrival: { provenance: { source: 'regular-gtfs', sourceId: 'regular-gtfs:partial-a-owner' } },
+      }],
+      exclusions: [],
+    });
+    expect(JSON.stringify(first)).toBe(JSON.stringify(shuffled));
+  });
+
+  test('retains all exact owners when every requested tuple is empty', () => {
+    const registry = new ScheduleEditionRegistry();
+    registry.observe(edition('regular-gtfs', 'empty-a-owner', routedData('A', []), [{ ...mask, id: 'empty-a-mask', routeIds: ['A'] }]));
+    registry.observe(edition('supplemented-gtfs', 'empty-b-owner', routedData('B', []), [{ ...mask, id: 'empty-b-mask', routeIds: ['B'] }]));
+    const scoped = input(registry).scope;
+    expect(buildScheduleFallback(input(registry, { scope: {
+      ...scoped,
+      routeIds: ['A', 'B'],
+      routeServiceDates: [
+        { routeId: 'A', serviceDate: '20260804' },
+        { routeId: 'B', serviceDate: '20260804' },
+      ],
+    } }))).toMatchObject({ source: 'mixed', currency: 'current', rows: [], exclusions: [] });
+  });
+
+  test('completes missing owners independently across dates when another tuple has a row or exclusion', () => {
+    const base = routedData('A', [['valid-d1', '24:05:00'], ['conflict-d2', '24:06:00']]);
+    const conflict = base.stopTimes.find((item) => item.tripId === 'conflict-d2')!;
+    const regularSchedule: NormalizedStaticGtfs = {
+      ...base,
+      trips: base.trips.map((trip) => ({ ...trip, serviceId: trip.tripId === 'valid-d1' ? 'D1' : 'D2' })),
+      stopTimes: [...base.stopTimes, {
+        ...conflict,
+        arrivalTime: '24:07:00', departureTime: '24:07:00', arrivalSeconds: 86_820, departureSeconds: 86_820,
+        rowIdentity: 'conflict-d2:alternate',
+      }],
+      calendars: [
+        { serviceId: 'D1', weekdays: [true, true, true, true, true, true, true], startDate: '20260804', endDate: '20260804', rowIdentity: 'd1-cal' },
+        { serviceId: 'D2', weekdays: [true, true, true, true, true, true, true], startDate: '20260805', endDate: '20260805', rowIdentity: 'd2-cal' },
+      ],
+    };
+    const registry = new ScheduleEditionRegistry();
+    registry.observe(edition('regular-gtfs', 'multi-date-a-owner', regularSchedule, [{
+      ...mask,
+      id: 'multi-date-a-mask',
+      routeIds: ['A'],
+      serviceDates: ['20260804', '20260805'],
+      effectiveUntil: '2026-08-06T05:55:00.000Z',
+    }]));
+    registry.observe(edition('supplemented-gtfs', 'multi-date-empty-b-owner', routedData('B', []), [{
+      ...mask,
+      id: 'multi-date-b-mask',
+      routeIds: ['B'],
+      serviceDates: ['20260805'],
+      effectiveUntil: '2026-08-06T05:55:00.000Z',
+    }]));
+    const scoped = input(registry).scope;
+    const result = buildScheduleFallback(input(registry, { scope: {
+      ...scoped,
+      routeIds: ['A', 'B'],
+      serviceDates: ['20260804', '20260805'],
+      routeServiceDates: [
+        { routeId: 'A', serviceDate: '20260804' },
+        { routeId: 'A', serviceDate: '20260805' },
+        { routeId: 'B', serviceDate: '20260805' },
+      ],
+    } }));
+    expect(result).toMatchObject({
+      source: 'mixed',
+      currency: 'current',
+      rows: [{ occurrenceId: '20260804:valid-d1:13', source: 'regular-gtfs' }],
+      exclusions: [{ occurrenceId: '20260805:conflict-d2:13', disposition: 'conflict' }],
+    });
   });
 
   test('preserves requested route/service-date tuples instead of inventing their Cartesian product', () => {

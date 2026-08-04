@@ -102,7 +102,15 @@ export function buildScheduleFallback(input: ScheduleFallbackInput): ScheduleFal
   if (editions.length === 0) return frozenDecision('scheduled-fallback', 'none', [], [], 'No scheduled departures available.');
   const exclusions: ScheduledFallbackExclusion[] = [];
   const occurrences: EnumeratedOccurrence[] = [];
-  const selectedOwners = new Map<string, NonNullable<ReturnType<ScheduleEditionRegistry['resolveOwner']>>['selection']>();
+  type OwnerSelection = NonNullable<ReturnType<ScheduleEditionRegistry['resolveOwner']>>['selection'];
+  const tupleOwners = new Map<string, Map<string, OwnerSelection>>();
+  const recordTupleOwner = (routeId: string, serviceDate: string, selection: OwnerSelection): void => {
+    if (!selection.editionId) return;
+    const key = routeServiceDateKey(routeId, serviceDate);
+    const owners = tupleOwners.get(key) ?? new Map<string, OwnerSelection>();
+    owners.set(selection.editionId, selection);
+    tupleOwners.set(key, owners);
+  };
   for (const edition of editions) {
     const enumerated = enumerate(edition.candidate.data, edition.candidate.coverage, input.scope);
     exclusions.push(...enumerated.exclusions);
@@ -118,7 +126,7 @@ export function buildScheduleFallback(input: ScheduleFallbackInput): ScheduleFal
         stopTimeOccurrenceId: occurrence.rowIdentity,
       }, input.scope.comparisonAt);
       if (!owner?.selection.editionId || !owner.selection.currency) continue;
-      selectedOwners.set(owner.selection.editionId, owner.selection);
+      recordTupleOwner(occurrence.claim.routeId, occurrence.claim.serviceDate, owner.selection);
       if (owner.selection.editionId !== edition.editionId
         || owner.selection.currency === 'topology' || owner.selection.currency === 'quarantined') continue;
       const source: StaticScheduleSource = owner.selection.source as StaticScheduleSource;
@@ -134,16 +142,15 @@ export function buildScheduleFallback(input: ScheduleFallbackInput): ScheduleFal
       }));
     }
   }
-  if (selectedOwners.size === 0) {
-    for (const pair of requestedRouteServiceDates(input.scope)) {
-      const owner = input.registry.resolveOwner({
-        ...pair,
-        at: input.scope.comparisonAt.toISOString(),
-        direction: input.scope.direction,
-        operationalAxis: input.scope.operationalAxis,
-      }, input.scope.comparisonAt);
-      if (owner?.selection.editionId) selectedOwners.set(owner.selection.editionId, owner.selection);
-    }
+  for (const pair of requestedRouteServiceDates(input.scope)) {
+    if ((tupleOwners.get(routeServiceDateKey(pair.routeId, pair.serviceDate))?.size ?? 0) > 0) continue;
+    const owner = input.registry.resolveOwner({
+      ...pair,
+      at: input.scope.comparisonAt.toISOString(),
+      direction: input.scope.direction,
+      operationalAxis: input.scope.operationalAxis,
+    }, input.scope.comparisonAt);
+    if (owner?.selection.editionId) recordTupleOwner(pair.routeId, pair.serviceDate, owner.selection);
   }
   const eligible: EnumeratedOccurrence[] = [];
   for (const occurrence of occurrences) {
@@ -172,7 +179,7 @@ export function buildScheduleFallback(input: ScheduleFallbackInput): ScheduleFal
   const distinctExclusions = [...new Map(exclusions.map((item) => [`${item.occurrenceId}\0${item.disposition}`, item])).values()];
   distinctExclusions.sort((left, right) => compareCanonicalIdentity(left.occurrenceId, right.occurrenceId)
     || compareCanonicalIdentity(left.disposition, right.disposition));
-  const ownerSelections = [...selectedOwners.values()];
+  const ownerSelections = [...tupleOwners.values()].flatMap((owners) => [...owners.values()]);
   const sources = [...new Set(ownerSelections.map((owner) => owner.source).filter((source) => source !== 'none'))];
   const currencies = [...new Set(ownerSelections.map((owner) => owner.currency).filter((value) => value !== undefined))];
   const source = sources.length === 0 ? 'none' : sources.length === 1 ? sources[0] : 'mixed';
@@ -252,6 +259,10 @@ function enumerate(data: NormalizedStaticGtfs, coverage: readonly import('./sche
 function requestedRouteServiceDates(scope: ScheduleFallbackScope): readonly Readonly<{ routeId: string; serviceDate: string }>[] {
   if (scope.routeServiceDates) return scope.routeServiceDates;
   return scope.routeIds.flatMap((routeId) => scope.serviceDates.map((serviceDate) => ({ routeId, serviceDate })));
+}
+
+function routeServiceDateKey(routeId: string, serviceDate: string): string {
+  return `${routeId}\0${serviceDate}`;
 }
 
 function toRow(item: EnumeratedOccurrence): ScheduledFallbackRow {
