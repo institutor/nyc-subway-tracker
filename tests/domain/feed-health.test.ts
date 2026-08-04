@@ -116,6 +116,16 @@ describe('snapshot anomaly quarantine', () => {
     });
   });
 
+  test('quarantines silent source replacement inside one feed group', () => {
+    expect(assessSnapshotAnomaly(
+      snapshot('ace', 30, 100, { sourceId: 'unexpected-mirror' }),
+      snapshot('ace', 0, 100),
+    )).toMatchObject({
+      kind: 'quarantined',
+      reasonCode: 'source-provenance-drift',
+    });
+  });
+
   test('rejects cross-group population comparisons', () => {
     expect(() => assessSnapshotAnomaly(snapshot('ace', 30, 60), snapshot('nqrw', 0, 100)))
       .toThrow(/same feed group/i);
@@ -237,6 +247,22 @@ describe('per-group preservation, fallback eligibility, and feed recovery', () =
     });
   });
 
+  test('compares recovery update two with recovery update one for destructive population loss', () => {
+    const governor = new FeedHealthGovernor();
+    governor.observe(snapshot('ace', 0, 100), at(0));
+    governor.observe(snapshot('ace', 10, 60), at(10));
+    expect(governor.observe(snapshot('ace', 20, 150), at(20))).toMatchObject({ recoveryCount: 1 });
+
+    expect(governor.observe(snapshot('ace', 30, 90), at(30))).toMatchObject({
+      kind: 'unavailable',
+      reasonCode: 'bulk-population-loss',
+      triggerReasonCode: 'bulk-population-loss',
+      recoveryCount: 0,
+      lastGood: { entityCount: 100 },
+      adverseEvidence: { evidenceId: 'ace-30-90', authoritativeAt: at(30).toISOString() },
+    });
+  });
+
   test('recovery chronology uses source timestamps rather than later retrieval or assessment time', () => {
     const governor = new FeedHealthGovernor();
     governor.observe(snapshot('ace', 0, 100, { retrievedAt: at(5) }), at(5));
@@ -283,6 +309,52 @@ describe('per-group preservation, fallback eligibility, and feed recovery', () =
       reasonCode: 'feed-recovered',
       triggerReasonCode: 'malformed-snapshot',
     });
+  });
+
+  test('an older rejected incident cannot overwrite or recover past a newer adverse observation', () => {
+    const governor = new FeedHealthGovernor();
+    governor.observe(snapshot('ace', 0, 100), at(0));
+    expect(governor.reject({
+      feedGroupId: 'ace',
+      evidenceId: 'newer-invalid-decode',
+      observedAt: at(30),
+      reasonCode: 'invalid-decoding',
+    })).toMatchObject({
+      reasonCode: 'invalid-decoding',
+      adverseEvidence: { evidenceId: 'newer-invalid-decode', authoritativeAt: at(30).toISOString() },
+    });
+
+    expect(() => governor.reject({
+      feedGroupId: 'ace',
+      evidenceId: 'older-malformed',
+      observedAt: at(20),
+      reasonCode: 'malformed-snapshot',
+    })).toThrow(/older rejected observation/i);
+    expect(governor.assess('ace', at(30))).toMatchObject({
+      reasonCode: 'invalid-decoding',
+      recoveryCount: 0,
+      adverseEvidence: { evidenceId: 'newer-invalid-decode', authoritativeAt: at(30).toISOString() },
+    });
+
+    expect(governor.observe(snapshot('ace', 25, 99), at(31))).toMatchObject({ recoveryCount: 0 });
+    expect(governor.observe(snapshot('ace', 26, 98), at(32))).toMatchObject({
+      kind: 'unavailable',
+      triggerReasonCode: 'invalid-decoding',
+      recoveryCount: 0,
+    });
+  });
+
+  test('validates an entire simultaneous-loss batch before mutating any group', () => {
+    const governor = new FeedHealthGovernor();
+    governor.observe(snapshot('ace', 0, 100), at(0));
+    governor.observe(snapshot('nqrw', 0, 100), at(0));
+
+    expect(() => governor.rejectSimultaneousLoss([
+      { feedGroupId: 'ace', evidenceId: 'valid-first' },
+      { feedGroupId: 'nqrw', evidenceId: '' },
+    ], at(30))).toThrow(/identity is required/i);
+    expect(governor.assess('ace', at(30))).toMatchObject({ kind: 'current', reasonCode: 'accepted-current' });
+    expect(governor.assess('nqrw', at(30))).toMatchObject({ kind: 'current', reasonCode: 'accepted-current' });
   });
 
   test('initial degraded recovery compares against the accepted source timestamp, not retrieval time', () => {

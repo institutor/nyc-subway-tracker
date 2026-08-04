@@ -200,6 +200,33 @@ describe('target and stop-order adverse evidence', () => {
       clocks: { stopOrderRegressionCount: 1 },
     });
   });
+
+  test('a completed recovery clears the prior stop-regression confirmation episode', () => {
+    const engine = governor();
+    engine.observeStopOrderRegression({ provenance: evidence('regression-old', 10), regressionKey: 'A27>A24' });
+    present(engine, 'recover-old-1', 20);
+    expect(present(engine, 'recover-old-2', 30)).toMatchObject({ kind: 'live-readmission-eligible' });
+
+    expect(engine.observeStopOrderRegression({ provenance: evidence('regression-new', 40), regressionKey: 'A27>A24' })).toMatchObject({
+      kind: 'precision-withheld',
+      reasonCode: 'single-stop-order-regression',
+      clocks: { stopOrderRegressionCount: 1 },
+    });
+  });
+
+  test('an elapsed absence remains the controlling suppression when a regression arrives at 60 seconds', () => {
+    const engine = governor();
+    engine.observeHealthySnapshot({ provenance: evidence('absent-1', 10), entity: { kind: 'absent' } });
+
+    expect(engine.observeStopOrderRegression({
+      provenance: evidence('regression-at-60', 70),
+      regressionKey: 'A27>A24',
+    })).toMatchObject({
+      kind: 'hard-suppressed',
+      reasonCode: 'absence-elapsed-60-seconds',
+      clocks: { entityAbsenceCount: 1, entityAbsenceAgeSeconds: 60, stopOrderRegressionCount: 1 },
+    });
+  });
 });
 
 describe('two-update exact-identity Live recovery', () => {
@@ -302,7 +329,69 @@ describe('two-update exact-identity Live recovery', () => {
     expect(present(engine, 'recover-1', 20)).toMatchObject({
       kind: 'precision-withheld',
       reasonCode: 'recovery-replay',
+      clocks: { recoveryCount: 0 },
+    });
+    expect(present(engine, 'recover-2', 30)).toMatchObject({
+      kind: 'precision-withheld',
+      reasonCode: 'recovery-confirmation-required',
       clocks: { recoveryCount: 1 },
     });
+  });
+
+  test('a thrown invalid movement update is atomic and corrected identical provenance can start recovery', () => {
+    const engine = governor();
+    engine.observeTargetRemoved({ provenance: evidence('adverse', 10) });
+    const candidate = evidence('candidate', 20);
+
+    expect(() => engine.observeHealthySnapshot({
+      provenance: candidate,
+      entity: {
+        kind: 'present',
+        trainIdentity: '20260804:shared-trip:0A-0200',
+        conditions: conditions({ movementAt: at(21) }),
+      },
+    })).toThrow(/movement instant cannot be in the future/i);
+    expect(engine.observeHealthySnapshot({
+      provenance: candidate,
+      entity: {
+        kind: 'present',
+        trainIdentity: '20260804:shared-trip:0A-0200',
+        conditions: conditions({ movementAt: at(20) }),
+      },
+    })).toMatchObject({
+      reasonCode: 'recovery-confirmation-required',
+      clocks: { recoveryCount: 1 },
+      latestEvidence: { evidenceId: 'candidate' },
+    });
+  });
+
+  test.each([
+    ['stableIdentity', 'false'],
+    ['plausibleStopOrder', 1],
+    ['targetServed', null],
+    ['noUnresolvedServiceOrTrackConflict', 'true'],
+  ] as const)('rejects non-boolean recovery condition %s atomically', (key, invalid) => {
+    const engine = governor();
+    engine.observeTargetRemoved({ provenance: evidence('adverse', 10) });
+    const candidate = evidence(`invalid-${key}`, 20);
+    const malformed = { ...conditions({ movementAt: at(20) }), [key]: invalid } as unknown as RecoveryConditions;
+
+    expect(() => engine.observeHealthySnapshot({
+      provenance: candidate,
+      entity: { kind: 'present', trainIdentity: '20260804:shared-trip:0A-0200', conditions: malformed },
+    })).toThrow(/recovery condition.*boolean/i);
+    expect(engine.observeHealthySnapshot({
+      provenance: candidate,
+      entity: {
+        kind: 'present',
+        trainIdentity: '20260804:shared-trip:0A-0200',
+        conditions: conditions({ movementAt: at(20) }),
+      },
+    })).toMatchObject({ clocks: { recoveryCount: 1 } });
+  });
+
+  test('rejects backward assessment chronology instead of preserving exact Live', () => {
+    const engine = governor();
+    expect(() => engine.assess(at(-1))).toThrow(/assessment.*before latest evidence/i);
   });
 });

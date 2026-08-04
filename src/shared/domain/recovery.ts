@@ -139,6 +139,11 @@ interface StoredEvidence {
   readonly sourceTimestampMs: number;
 }
 
+interface ValidatedRecoveryConditions {
+  readonly movementAtMs: number;
+  readonly movementAgeSeconds: number;
+}
+
 export class TrainRecoveryGovernor {
   readonly #feedGroupId: string;
   readonly #trainIdentity: string;
@@ -168,22 +173,30 @@ export class TrainRecoveryGovernor {
 
   observeHealthySnapshot(observation: HealthySnapshotObservation): TrainRecoveryDecision {
     const evidence = storeEvidence(observation.provenance, this.#feedGroupId);
+    const validatedConditions = observation.entity.kind === 'present'
+      ? validateConditions(observation.entity.conditions, evidence.sourceTimestampMs)
+      : undefined;
     const replay = sameEvidence(evidence, this.#latestEvidence);
     if (replay) {
       if (observation.entity.kind === 'present' && this.#recoveryCount > 0) {
+        this.#recoveryCount = 0;
+        this.#firstRecovery = null;
+        this.#status = 'withheld';
         this.#reasonCode = 'recovery-replay';
       }
       return this.#decision(evidence.observedAtMs);
     }
+    assertEvidenceNotBackward(evidence, this.#latestEvidence);
     const elapsedTriggered = this.#applyElapsedSuppression(evidence.sourceTimestampMs);
     this.#latestEvidence = evidence;
 
     if (observation.entity.kind === 'absent') return this.#observeAbsence(evidence, elapsedTriggered);
-    return this.#observePresence(evidence, observation.entity);
+    return this.#observePresence(evidence, observation.entity, validatedConditions!);
   }
 
   observeNonCountable(observation: NonCountableObservation): TrainRecoveryDecision {
     const evidence = storeEvidence(observation.provenance, this.#feedGroupId);
+    assertEvidenceNotBackward(evidence, this.#latestEvidence);
     if (!sameEvidence(evidence, this.#latestEvidence)) this.#latestEvidence = evidence;
     this.#applyElapsedSuppression(evidence.sourceTimestampMs);
     this.#recoveryCount = 0;
@@ -197,6 +210,7 @@ export class TrainRecoveryGovernor {
 
   observeTargetRemoved(observation: { readonly provenance: TrainEvidenceProvenance }): TrainRecoveryDecision {
     const evidence = storeEvidence(observation.provenance, this.#feedGroupId);
+    assertEvidenceNotBackward(evidence, this.#latestEvidence);
     this.#latestEvidence = evidence;
     this.#recordAdverse(evidence, 'target-removed', 'suppressed');
     this.#absenceCount = 0;
@@ -207,10 +221,13 @@ export class TrainRecoveryGovernor {
   observeStopOrderRegression(observation: StopOrderRegressionObservation): TrainRecoveryDecision {
     if (!observation.regressionKey) throw new Error('Stop-order regression key is required');
     const evidence = storeEvidence(observation.provenance, this.#feedGroupId);
+    assertEvidenceNotBackward(evidence, this.#latestEvidence);
+    const elapsedTriggered = this.#applyElapsedSuppression(evidence.sourceTimestampMs);
     const prior = this.#regressions.at(-1);
     if (prior && observation.regressionKey === this.#regressionKey
       && (sameEvidence(evidence, prior) || evidence.sourceTimestampMs <= prior.sourceTimestampMs)) {
       this.#latestEvidence = evidence;
+      if (elapsedTriggered) return this.#decision(evidence.observedAtMs);
       this.#status = 'withheld';
       this.#reasonCode = 'stop-order-regression-replay';
       return this.#decision(evidence.observedAtMs);
@@ -222,6 +239,7 @@ export class TrainRecoveryGovernor {
     if (this.#regressions.length < 2) this.#regressions.push(evidence);
     this.#recoveryCount = 0;
     this.#firstRecovery = null;
+    if (elapsedTriggered) return this.#decision(evidence.observedAtMs);
     this.#adverseEvidence = evidence;
     if (this.#regressions.length === 1) {
       this.#status = 'withheld';
@@ -235,6 +253,9 @@ export class TrainRecoveryGovernor {
 
   assess(assessedAt: Date): TrainRecoveryDecision {
     const assessedAtMs = validInstant(assessedAt, 'train recovery assessment instant');
+    if (assessedAtMs < this.#latestEvidence.observedAtMs) {
+      throw new Error('Train recovery assessment cannot be before latest evidence');
+    }
     this.#applyElapsedSuppression(assessedAtMs);
     return this.#decision(assessedAtMs);
   }
@@ -256,6 +277,7 @@ export class TrainRecoveryGovernor {
   #observePresence(
     evidence: StoredEvidence,
     entity: Extract<HealthyEntityObservation, { kind: 'present' }>,
+    conditions: ValidatedRecoveryConditions,
   ): TrainRecoveryDecision {
     this.#absenceCount = 0;
     this.#absenceStartedAtMs = null;
@@ -267,7 +289,6 @@ export class TrainRecoveryGovernor {
       return this.#decision(evidence.observedAtMs);
     }
 
-    const conditions = validateConditions(entity.conditions, evidence.sourceTimestampMs);
     this.#movementAtMs = conditions.movementAtMs;
     if (!entity.conditions.targetServed) {
       this.#recordAdverse(evidence, 'target-removed', 'suppressed');
@@ -307,6 +328,8 @@ export class TrainRecoveryGovernor {
     this.#status = 'readmission-eligible';
     this.#reasonCode = 'two-coherent-recovery-updates';
     this.#recoveryCount = 2;
+    this.#regressions.length = 0;
+    this.#regressionKey = null;
     return this.#decision(evidence.observedAtMs);
   }
 
@@ -409,8 +432,16 @@ export class TrainRecoveryGovernor {
 function validateConditions(
   conditions: RecoveryConditions,
   sourceTimestampMs: number,
-): { movementAtMs: number; movementAgeSeconds: number } {
+): ValidatedRecoveryConditions {
   if (!conditions || typeof conditions !== 'object') throw new Error('Recovery conditions are required');
+  for (const [name, value] of [
+    ['stableIdentity', conditions.stableIdentity],
+    ['plausibleStopOrder', conditions.plausibleStopOrder],
+    ['targetServed', conditions.targetServed],
+    ['noUnresolvedServiceOrTrackConflict', conditions.noUnresolvedServiceOrTrackConflict],
+  ] as const) {
+    if (typeof value !== 'boolean') throw new Error(`Recovery condition ${name} must be boolean`);
+  }
   const movementAtMs = validInstant(conditions.movementAt, 'recovery movement instant');
   if (movementAtMs > sourceTimestampMs) throw new Error('Recovery movement instant cannot be in the future');
   return {
@@ -439,6 +470,12 @@ function sameEvidence(left: StoredEvidence, right: StoredEvidence): boolean {
   return left.feedGroupId === right.feedGroupId
     && left.evidenceId === right.evidenceId
     && left.sourceTimestampMs === right.sourceTimestampMs;
+}
+
+function assertEvidenceNotBackward(candidate: StoredEvidence, latest: StoredEvidence): void {
+  if (candidate.observedAtMs < latest.observedAtMs || candidate.sourceTimestampMs < latest.sourceTimestampMs) {
+    throw new Error('Train evidence cannot move backward from latest evidence');
+  }
 }
 
 function freezeEvidence(evidence: StoredEvidence): FrozenTrainEvidenceProvenance {

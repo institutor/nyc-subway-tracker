@@ -34,6 +34,11 @@ export interface FrozenSnapshotProvenance {
   readonly coveredRouteIds: readonly string[];
 }
 
+export interface FrozenFeedAdverseEvidence {
+  readonly evidenceId: string;
+  readonly authoritativeAt: string;
+}
+
 interface FeedHealthDecisionBase {
   readonly feedGroupId: string;
   readonly reasonCode: FeedHealthReasonCode;
@@ -44,6 +49,7 @@ interface FeedHealthDecisionBase {
   readonly liveEvidenceEligibility: 'proceed' | 'blocked' | 'reevaluate';
   readonly recoveryCount: 0 | 1;
   readonly lastGood: FrozenSnapshotProvenance | null;
+  readonly adverseEvidence: FrozenFeedAdverseEvidence | null;
   readonly operationalClaim: 'not-inferred';
 }
 
@@ -135,7 +141,8 @@ export class FeedHealthGovernor {
       }
     }
 
-    const anomaly = assessSnapshotAnomaly(snapshot, state.lastGood, context);
+    const comparisonSnapshot = state.recovery?.first ?? state.lastGood;
+    const anomaly = assessSnapshotAnomaly(snapshot, comparisonSnapshot, context);
     if (anomaly.kind === 'quarantined') {
       state.recovery = {
         triggerReasonCode: anomaly.reasonCode,
@@ -163,10 +170,18 @@ export class FeedHealthGovernor {
         return this.#decision(snapshot.feedGroupId, assessedAt);
       }
 
-      const recoveredFrom = state.recovery.triggerReasonCode;
+      const completedRecovery = state.recovery;
       state.lastGood = snapshot;
       delete state.recovery;
-      return currentDecision(snapshot.feedGroupId, snapshot, assessedAt, 'feed-recovered', 'reevaluate', recoveredFrom);
+      return currentDecision(
+        snapshot.feedGroupId,
+        snapshot,
+        assessedAt,
+        'feed-recovered',
+        'reevaluate',
+        completedRecovery.triggerReasonCode,
+        freezeAdverseEvidence(completedRecovery),
+      );
     }
 
     if (anomaly.kind === 'replay') {
@@ -196,7 +211,9 @@ export class FeedHealthGovernor {
 
   reject(observation: RejectedFeedObservation): FeedHealthDecision {
     const observedAtMs = validInstant(observation.observedAt, 'rejected observation instant');
-    if (!observation.feedGroupId || !observation.evidenceId) throw new Error('Rejected observation identity is required');
+    validateRejectedIdentity(observation);
+    const existing = this.#groups.get(observation.feedGroupId);
+    validateRejectedChronology(existing, observation, observedAtMs);
     const state = this.#state(observation.feedGroupId);
     state.recovery = {
       triggerReasonCode: observation.reasonCode,
@@ -216,11 +233,17 @@ export class FeedHealthGovernor {
     if (uniqueGroups.size < 2 || uniqueGroups.size !== observations.length) {
       throw new Error('Simultaneous group loss requires at least two distinct groups');
     }
-    return Object.freeze(observations.map((item) => this.reject({
+    const prepared = observations.map((item) => ({
       ...item,
       observedAt,
-      reasonCode: 'simultaneous-group-loss',
-    })));
+      reasonCode: 'simultaneous-group-loss' as const,
+    }));
+    const observedAtMs = observedAt.getTime();
+    for (const item of prepared) {
+      validateRejectedIdentity(item);
+      validateRejectedChronology(this.#groups.get(item.feedGroupId), item, observedAtMs);
+    }
+    return Object.freeze(prepared.map((item) => this.reject(item)));
   }
 
   assess(feedGroupId: string, assessedAt: Date): FeedHealthDecision {
@@ -248,6 +271,7 @@ export class FeedHealthGovernor {
         recoveryCount === 1 ? 'recovery-confirmation-required' : triggerReasonCode,
         triggerReasonCode,
         recoveryCount,
+        state?.recovery ? freezeAdverseEvidence(state.recovery) : null,
       );
     }
     if (!state.recovery) return normalAgeDecision(feedGroupId, state.lastGood, assessedAt);
@@ -268,6 +292,7 @@ export class FeedHealthGovernor {
         liveEvidenceEligibility: 'blocked',
         recoveryCount: state.recovery.count,
         lastGood: provenance,
+        adverseEvidence: freezeAdverseEvidence(state.recovery),
         operationalClaim: 'not-inferred',
       });
     }
@@ -289,6 +314,7 @@ export class FeedHealthGovernor {
       liveEvidenceEligibility: 'blocked',
       recoveryCount: state.recovery.count,
       lastGood: provenance,
+      adverseEvidence: freezeAdverseEvidence(state.recovery),
       operationalClaim: 'not-inferred',
     }) as DegradedFeedDecision | UnavailableFeedDecision;
   }
@@ -321,6 +347,7 @@ function normalAgeDecision(
       liveEvidenceEligibility: 'blocked',
       recoveryCount: 0,
       lastGood: provenance,
+      adverseEvidence: null,
       operationalClaim: 'not-inferred',
     });
   }
@@ -335,6 +362,7 @@ function normalAgeDecision(
     liveEvidenceEligibility: 'blocked',
     recoveryCount: 0,
     lastGood: provenance,
+    adverseEvidence: null,
     operationalClaim: 'not-inferred',
   });
 }
@@ -346,6 +374,7 @@ function currentDecision(
   reasonCode: 'accepted-current' | 'feed-recovered',
   eligibility: 'proceed' | 'reevaluate',
   triggerReasonCode: FeedHealthReasonCode = reasonCode,
+  adverseEvidence: FrozenFeedAdverseEvidence | null = null,
 ): CurrentFeedDecision {
   return Object.freeze({
     kind: 'current',
@@ -358,6 +387,7 @@ function currentDecision(
     liveEvidenceEligibility: eligibility,
     recoveryCount: 0,
     lastGood: snapshotProvenance(snapshot),
+    adverseEvidence,
     operationalClaim: 'not-inferred',
   });
 }
@@ -367,6 +397,7 @@ function unavailableWithoutContext(
   reasonCode: FeedHealthReasonCode,
   triggerReasonCode: FeedHealthReasonCode = reasonCode,
   recoveryCount: 0 | 1 = 0,
+  adverseEvidence: FrozenFeedAdverseEvidence | null = null,
 ): UnavailableFeedDecision {
   return Object.freeze({
     kind: 'unavailable',
@@ -379,6 +410,7 @@ function unavailableWithoutContext(
     liveEvidenceEligibility: 'blocked',
     recoveryCount,
     lastGood: null,
+    adverseEvidence,
     operationalClaim: 'not-inferred',
   });
 }
@@ -403,6 +435,34 @@ function copySnapshot(snapshot: NormalizedSnapshotEvidence): NormalizedSnapshotE
     retrievedAt: new Date(snapshot.retrievedAt.getTime()),
     coveredRouteIds: Object.freeze([...snapshot.coveredRouteIds]),
   });
+}
+
+function freezeAdverseEvidence(recovery: RecoveryState): FrozenFeedAdverseEvidence {
+  return Object.freeze({
+    evidenceId: recovery.adverseEvidenceId,
+    authoritativeAt: new Date(recovery.adverseAtMs).toISOString(),
+  });
+}
+
+function validateRejectedIdentity(observation: Pick<RejectedFeedObservation, 'feedGroupId' | 'evidenceId'>): void {
+  if (!observation.feedGroupId || !observation.evidenceId) throw new Error('Rejected observation identity is required');
+}
+
+function validateRejectedChronology(
+  state: GroupState | undefined,
+  observation: RejectedFeedObservation,
+  observedAtMs: number,
+): void {
+  const priorAtMs = Math.max(
+    state?.lastGood?.feedTimestamp.getTime() ?? Number.NEGATIVE_INFINITY,
+    state?.recovery?.adverseAtMs ?? Number.NEGATIVE_INFINITY,
+  );
+  if (observedAtMs < priorAtMs) throw new Error('Older rejected observation cannot overwrite newer feed state');
+  if (observedAtMs === priorAtMs && state?.recovery
+    && (observation.evidenceId !== state.recovery.adverseEvidenceId
+      || observation.reasonCode !== state.recovery.triggerReasonCode)) {
+    throw new Error('Non-new rejected observation cannot overwrite feed incident provenance');
+  }
 }
 
 function wholeElapsedSeconds(from: Date, to: Date, label: string): number {

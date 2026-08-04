@@ -22,6 +22,7 @@ export interface SnapshotAnomalyContext {
 export type SnapshotAnomalyReasonCode =
   | 'coherent-snapshot'
   | 'snapshot-replay'
+  | 'source-provenance-drift'
   | 'timestamp-regression'
   | 'nonadvancing-content-change'
   | 'bulk-population-loss'
@@ -82,6 +83,9 @@ export function assessSnapshotAnomaly(
     contextualConcerns: concerns,
   };
 
+  if (previous && candidate.sourceId !== previous.sourceId) {
+    return Object.freeze({ ...base, kind: 'quarantined', reasonCode: 'source-provenance-drift' });
+  }
   if (previous && candidate.feedTimestamp.getTime() < previous.feedTimestamp.getTime()) {
     return Object.freeze({ ...base, kind: 'quarantined', reasonCode: 'timestamp-regression' });
   }
