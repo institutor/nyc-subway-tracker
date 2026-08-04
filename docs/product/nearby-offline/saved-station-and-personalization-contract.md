@@ -9,7 +9,7 @@
 | Last validation date | 2026-07-30 |
 | Supersedes | None |
 | Approval evidence | Pending |
-| Scenario results | Not run — Pending; saved-state continuity, hidden-route disruption, UR-C05 contextual ordering, offline open and reconnection, preference controls and station-specific reset, and Nearby Task 14 saved-state and privacy evidence are absent |
+| Scenario results | Not run — Pending; saved-state continuity, hidden-route disruption, UR-C05 contextual ordering, SAVE-O01 multiple-preference ordering, offline open and reconnection, preference controls and station-specific reset, and Nearby Task 14 saved-state and privacy evidence are absent |
 
 ## Purpose and authority
 
@@ -107,9 +107,13 @@ Task 3 remains the sole owner of practical-usefulness eligibility and station or
 1. Begin with Task 3's specific-entrance evidence and baseline nearest-useful order.
 2. Apply every entrance, current-service, closure, exact-scope, complete-path, equipment, and Accessible Route Only hard constraint before personalization. Invalid and Unknown candidates cannot be promoted.
 3. Allow promotion only from an explicit saved preference whose state is Active. If a time window exists, promotion applies only inside that rider-entered window; outside it, the window contributes no ordering influence.
-4. Keep every closer workable station visible. Show the promoted station's and each closer workable station's practical walking distance or time and current usability at their exact supported scope.
-5. Attach a visible saved-preference reason to the promoted card. Never call a farther promoted station or entrance **nearest**.
-6. Preserve current arrival, service-change, closure, accessibility, equipment, and entrance truth unchanged.
+4. Form one qualifying promotion cohort only from applicable Active saved candidates already present in Task 3's deterministic baseline first three. Preserve their baseline relative order, move that cohort ahead of non-promoted baseline-first-three candidates, and preserve the remaining candidates' baseline relative order.
+5. A saved candidate below baseline position three remains directly available in Saved and the station picker but receives no automatic Nearby promotion. Promoting it would either hide a closer workable complex or exceed the three-card contract; neither is allowed.
+6. Keep every closer workable station visible. Show the promoted station's and each closer workable station's practical walking distance or time and current usability at their exact supported scope.
+7. Attach a visible saved-preference reason to every promoted card. Never call a farther promoted station or entrance **nearest**.
+8. Preserve current arrival, service-change, closure, accessibility, equipment, and entrance truth unchanged.
+
+The final Nearby order is therefore total and repeatable. Multiple qualifying preferences never compete through save time, source order, retrieval order, record enumeration, last-opened state, route popularity, arrival quantity, or render order. Adding or removing a preference changes only the explicitly affected cohort membership; every retained candidate keeps the relative order supplied above.
 
 A Paused record supplies no automatic default, promotion, or time-window influence. Opening it deliberately is not permission to reactivate it. The app never infers a preferred station, entrance, direction, destination, route, or time window from movement, prior opens, searches, location history, account activity, or an undisclosed habit model.
 
@@ -118,6 +122,17 @@ Task 11 consumes Task 3's UR-C05 result without changing it. Its exact visible e
 **Saved preference · 7-minute walk. A is closer at 4 minutes.**
 
 Complex A remains visible as the closer workable result with its current usability, and Complex B may appear first only because the rider's explicit applicable preference is Active. Complex B is not nearest.
+
+### SAVE-O01 — multiple Active preferences at the three-card cutoff
+
+| Case field | Fixed value |
+|---|---|
+| Inputs | Task 3 supplies baseline complexes A, B, C, D in that deterministic order. B, C, and D have applicable Active saved preferences; A remains the closest workable result. Repeat with saved records, wrappers, retrievals, and enumeration shuffled. |
+| Qualifying cohort | B and C qualify because they are already in the baseline first three. D remains available in Saved and the picker but cannot enter the automatic Nearby cohort because doing so would hide a closer result or exceed three cards. |
+| Final Nearby order | B, C, A in every run. B remains ahead of C because their baseline relative order is stable; A remains visible; D does not displace any of them. |
+| Visible treatment | B and C each carry a visible **Saved preference** reason and their supported walks. A retains its closer-walk and current-usability treatment. None of B, C, or D is called nearest. |
+| Prohibited result | Save-time or source-order competition; C before B after shuffled inputs; D entering the first three; A hidden; four automatic cards; arrival-based ordering; or implicit priority inferred from the most recently opened station. |
+| Evidence status | **Not run — Pending** |
 
 ## Rider controls
 
@@ -174,7 +189,7 @@ This is an expected fixed-version fixture, not observed evidence.
 
 | Decision | Authoritative owner | Task 11 consumption | Current disposition |
 |---|---|---|---|
-| Saved fields, immediate open, explicit preference application, Active/Paused behavior, station-specific controls, and SAVE-C01/SAVE-R01 expected results | This contract, Task 11 | Own rider-visible intent behavior without creating operational or privacy assurance. | Draft; SAVE-C01 and SAVE-R01 Not run — Pending |
+| Saved fields, immediate open, explicit preference application, deterministic multi-preference cohort, Active/Paused behavior, station-specific controls, and SAVE-C01/SAVE-R01/SAVE-O01 expected results | This contract, Task 11 | Own rider-visible intent behavior without creating operational or privacy assurance. | Draft; SAVE-C01, SAVE-R01, and SAVE-O01 Not run — Pending |
 | Practical entrance eligibility, baseline nearest-useful order, and closer-result protection | [Useful station and entrance ranking rules](station-ranking-and-entrance-rules.md), Task 3 | Supply only explicit Active preference and time-window inputs; consume UR-C05 unchanged. | Draft; UR-C05 Not run — Pending |
 | Board direction, filter, Save/Saved, refresh, hidden-route disruption, and reading continuity | [Station board and controls contract](station-board-and-controls-contract.md), Task 5 | Restore saved intent and require explicit edit/save; do not redefine controls or truth. | Draft; Task 14 Not run — Pending |
 | Offline banner, historical-value rules, preserved screen, and reconnection priority | [Offline, degraded, and reconnection states contract](offline-degraded-and-reconnection-states.md), Task 10 | Open immediately and consume the exact offline and recovery behavior. | Draft; OFF-T23 and Task 14 Not run — Pending |
@@ -193,6 +208,7 @@ This is an expected fixed-version fixture, not observed evidence.
 | SAVE-C01 | Online open, session direction change, Map, Offline, return through Saved, and ordered reconnection preserve intent and honest freshness without implicit save. | **Not run — Pending** |
 | SAVE-R01 | Inspect, cancel, pause, station-specific reset, and delete have exact bounded effects while the open board and official information remain coherent. | **Not run — Pending** |
 | UR-C05 consumption | Exact **Saved preference · 7-minute walk. A is closer at 4 minutes.** remains visible; the closer workable station remains present and the farther station is never called nearest. | **Not run — Pending** |
+| SAVE-O01 | Multiple applicable Active preferences form one cohort from the deterministic baseline first three, retain baseline relative order, preserve every closer result, and cannot alter cutoff membership through input order. | **Not run — Pending** |
 
 Approved-specification scenario 22 remains owned by the [zero-tap startup and location-permission flow](zero-tap-startup-and-permission-flow.md), Task 2. Task 11 consumes a selected saved station after that fallback and does not reassign, duplicate, or claim scenario 22.
 
@@ -209,8 +225,9 @@ All Task 11 observations must identify one fixed product version and record expe
 | Do invalid entrance, path, direction, and guidance choices fail closed without silent substitution? | Yes by contract; not observed. | Fixed invalid-preference branches with owner provenance |
 | Does Offline preserve the exact Task 10 banner and cached treatment and Task 8 reference label without any current claim? | Yes by consumption; not observed. | SAVE-C01 Offline and assistive-output observation |
 | Does contextual ordering start from Task 3 and retain every closer workable result with distance and usability? | Yes by contract; not observed. | UR-C05 fixed-version observation |
+| Do multiple applicable Active preferences preserve deterministic baseline-relative order and the three-card membership under shuffled inputs? | Yes by contract; not observed. | SAVE-O01 repeated-run observation |
 | Do pause, station reset, and delete preserve their exact bounded state and leave official truth intact? | Yes by contract; not observed. | SAVE-R01 before/after comparison |
 | Does station reset silently disable Accessible Route Only or does delete blank an already open board? | No. | SAVE-R01 accessibility and open-board branches |
 | Are Task 12 privacy assurance, retention, diagnostics, notification, optional synchronization, broad reset, and deletion kept out of Task 11 ownership? | Yes. | Task 12 cross-domain review and PRIV-S01 |
 | Are all five reviewer roles and §28.3 applying provenance aligned between the artifact and Draft index row? | Yes; no reviewer decision or approval is implied. | Same-version decisions from Product, Accessibility, Data Quality, Content, and Privacy |
-| Does this Draft claim Gate 0 passage, SAVE-C01, SAVE-R01, UR-C05, Task 14, privacy assurance, companion approval, or release readiness? | No. The decision remains **NO-GO — GATE 0 NOT PASSED**; public boards blocked. | Fixed evidence, all mandatory reviews, and the later release gate |
+| Does this Draft claim Gate 0 passage, SAVE-C01, SAVE-R01, SAVE-O01, UR-C05, Task 14, privacy assurance, companion approval, or release readiness? | No. The decision remains **NO-GO — GATE 0 NOT PASSED**; public boards blocked. | Fixed evidence, all mandatory reviews, and the later release gate |

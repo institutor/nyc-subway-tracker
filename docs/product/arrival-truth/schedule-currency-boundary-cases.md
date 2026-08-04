@@ -67,11 +67,11 @@ Do not show preserved and Scheduled rows together; enter fallback immediately fr
 
 **Setup**
 
-Prove the relevant route/feed group Unavailable. Provide no validated supplemented edition applicable to the proposed operating service date and departure. Provide a valid regular-GTFS trip that covers both, with no applicable veto.
+Prove the relevant route/feed group Unavailable. Provide no validated, usable supplemented edition whose coverage mask applies to the requested route/scope, operating service date, effective time, and horizon. Provide a valid regular-GTFS trip for that otherwise uncovered request, with no applicable veto.
 
 **Expected state**
 
-Record why supplemented GTFS is not departure-eligible, then select regular GTFS. Show only the separated scheduled clock-time treatment with **Live data unavailable**, successful retrieval age, and effective service date.
+Record why no usable supplemented coverage mask applies, then select regular GTFS. Show only the separated scheduled clock-time treatment with **Live data unavailable**, successful retrieval age, and effective service date.
 
 **Prohibited outcome**
 
@@ -95,7 +95,7 @@ Do not borrow a trip from another service date, infer service from topology, mov
 
 **Setup**
 
-Prove the relevant route/feed group Unavailable. Provide a validated recent supplemented edition whose effective coverage or horizon does not include the proposed departure, and provide no other departure-eligible supplemented edition for that claim. Provide regular GTFS that validly covers the operating service date and departure.
+Prove the relevant route/feed group Unavailable. Provide a validated recent supplemented edition whose effective coverage or horizon does not contain the requested time, and provide no other usable supplemented coverage mask for that route/scope, service date, and time. Provide regular GTFS that validly covers the otherwise uncovered operating service date and departure.
 
 **Expected state**
 
@@ -374,19 +374,19 @@ Map every record to one authoritative New York instant using its source-supporte
 
 Do not add a grace period; roll a past or equal time forward; use the phone date; repeat a prior-day trip; borrow a service calendar; synthesize a departure; or show more than the one coherent future exact-stop occurrence.
 
-### Case FB2 — Supplemented-first equivalence, distinct trains, and unresolved conflict
+### Case FB2 — Supplemented coverage ownership, distinct trains, and unresolved conflict
 
 **Setup**
 
-Prove fallback eligibility and supply: a supplemented and regular record canonically proven to represent the same scheduled occurrence; two distinct coherently identified trains with the same route, destination, and departure instant; and two conflicting records for which neither equivalence nor distinct occurrence identity can be proven. All records otherwise target the same exact direction.
+Prove fallback eligibility and provide one usable supplemented coverage mask for the requested scope and time. Inside that mask supply: a supplemented occurrence and a canonically equivalent regular record; two distinct coherently identified supplemented trains with the same route, destination, and departure instant; and two conflicting supplemented records for which neither equivalence nor distinct occurrence identity can be proven. All records otherwise target the same exact direction.
 
 **Expected state**
 
-Retain only the supplemented winner for the canonically equivalent occurrence. Retain both distinct same-time trains as separate candidates. Withhold both unresolved conflicting records and record the supported limitation. No duplicate or unresolved record consumes a Scheduled position.
+Apply supplemented ownership before occurrence matching and exclude the regular record from the covered candidate source, including its equivalent occurrence. Within the supplemented owner, retain both distinct same-time trains as separate candidates. Withhold both unresolved conflicting supplemented records and record the supported limitation. No excluded-source, duplicate, or unresolved record consumes a Scheduled position.
 
 **Prohibited outcome**
 
-Do not show the regular copy beside its supplemented winner; merge distinct trains merely because their public fields match; choose the more optimistic conflicting record; invent occurrence identity; or let an excluded record reduce the visible cap.
+Do not run per-occurrence source competition inside the supplemented mask; show the regular copy; merge distinct trains merely because their public fields match; choose the more optimistic conflicting record; invent occurrence identity; or let an excluded record reduce the visible cap.
 
 ### Case FB3 — Deterministic ordering and three-row cap
 
@@ -430,6 +430,20 @@ Combine only eligible Scheduled rows from fallback-qualified groups for the exac
 
 Do not apply a station-wide or network-wide fallback; mix Scheduled rows into a healthy primary list; count the opposite direction toward the cap; force all operational axes into one pair; exceed three Scheduled rows; or degrade an unaffected route, direction, or axis.
 
+### Case FB6 — Applicable weekend supplement masks omitted regular service
+
+**Setup**
+
+Prove the exact route/feed group Unavailable. Provide a validated, non-superseded **Current schedule** supplemented edition whose declared coverage mask contains the route, operating service date, effective interval, horizon, direction, and operational axis under review. The supplement contains at least one explicit coherent future departure but omits a different trip that regular GTFS lists in the same covered scope. In a second branch, the supplement retains a trip but omits the target exact directional stop that regular GTFS includes. Supply no independent evidence that resolves either omission as a cancellation, bypass, or suspension. Repeat once with an independently resolved scoped change consequence.
+
+**Expected state**
+
+Establish supplemented coverage ownership without requiring either desired occurrence to appear. Enumerate only explicit supplemented departures inside the mask. Do not show the omitted regular trip or reconstruct the omitted stop. Use the applicable neutral partial or empty fallback copy and do not infer cancellation, bypass, or no service from omission alone. In the independent-change branch, show only the separately supported narrow consequence at its exact scope.
+
+**Prohibited outcome**
+
+Do not fall through to regular GTFS per trip, departure, or stop; merge regular normal service into the covered weekend board; call the omission a cancellation or bypass without independent evidence; weaken or widen an independently supported consequence; or imply that the supplemented feed documents every planned change.
+
 ## Truth Gate result record
 
 | Case | Required actual-result evidence | Status |
@@ -456,9 +470,10 @@ Do not apply a station-wide or network-wide fallback; mix Scheduled rows into a 
 | S17 — Known veto | Veto defeats schedule in exact scope before presentation | Pending |
 | S18 — Cleared hard veto | No schedule restoration without two qualifying live recovery updates; unrelated fallback preserved | Pending |
 | FB1 — Future and service-date eligibility | Only explicit coherent future exact-stop departures survive authoritative service-day chronology; past, equal-time, and phone-date inventions excluded | Pending |
-| FB2 — Equivalence and conflict | Supplemented copy wins canonical equivalence; distinct trains remain; unresolved conflicts consume no row | Pending |
+| FB2 — Coverage ownership and conflict | Applicable supplemented mask excludes regular before occurrence matching; distinct supplemented trains remain; unresolved conflicts consume no row | Pending |
 | FB3 — Deterministic first three | Full chronology and fixed tie-breakers produce the identical first three across wrapper and retrieval-order changes | Pending |
 | FB4 — Partial and empty boards | Exact one/two/zero copy and scoped veto/unavailability behavior; no weak backfill or no-service inference | Pending |
 | FB5 — Scope isolation | Three-row cap applies only to the exact fallback direction; healthy groups, opposite direction, and other axes remain independent | Pending |
+| FB6 — Weekend supplement coverage mask | Applicable usable supplement remains sole positive source despite omitted regular occurrence or stop; no regular resurrection or unsupported negative inference | Pending |
 
 The result record remains Pending until it links durable observed evidence for a fixed reviewed version. Every prohibited-result check must be recorded. A failure remains in the record and must link its correction and rerun.

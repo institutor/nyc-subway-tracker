@@ -285,7 +285,7 @@ The detailed fixed-version, input, expected, prohibited, actual, reviewer, date,
 | ARO-12 | Convey a separate bus-inclusive evaluation without weakening subway truth. | **Not run — Pending** |
 | ARO-13 | Use A11Y-T3-02 visibly and through assistive technology; never accessible now. | **Not run — Pending** |
 | ARO-14 | Use A11Y-T3-03 visibly and through assistive technology; exclude the alternative. | **Not run — Pending** |
-| ARO-15 | Visible and assistive path order follows the exact lexicographic result. | **Not run — Pending** |
+| ARO-15 | Visible and assistive path order remains identical across the shuffled full-tie runs after the five rider-relevant levels and neutral canonical-identity tie-break; do not expose the identity or describe the tied first alternative as better, shorter, safer, or more accessible. | **Not run — Pending** |
 | ARO-16 | Do not call the faster, less resilient path best. | **Not run — Pending** |
 
 ## Task 4 fixture traceability

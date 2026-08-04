@@ -43,6 +43,7 @@ Every fixture inherits the following fixed values unless its row explicitly over
 | Task 2 | All twelve gates Pass, with exact route, direction, scope, decision consequence, currentness, and no duplicate |
 | Task 3 | Applicable threshold/persistence/confirmed-impact rule Passes |
 | Accessibility | Not applicable; when overridden, exact path/version, connection, state, freshness, impact, and alternative decision are fixed |
+| Recommended action identity | When a first recommended action exists, unique owner-supplied stable canonical identity `ACTION-SYN-{fixture}-01` is fixed and is not rider-facing; Not applicable when no action exists |
 | Opportunity/recheck | Evaluate at the row’s stated opportunity; all twelve final-recheck items Pass using the same rendering evidence |
 | Prior material state | No prior delivered notification for the episode/impact |
 | Deltas | No added-time, place, direction, severity, active-period, or action delta |
@@ -78,7 +79,7 @@ Every row also fixes expected delivery count. A suppressed or held row renders n
 
 ## Escalation fixtures
 
-For `E01`–`E14`, override prior state to one successfully delivered message for the same synthetic episode and material impact at 7:30 AM. Its supported added time is 600 seconds, affected scope is the saved segment/direction, active end is 8:00 AM, and verified action is **Use Fixture Alternate A.** The delivered message is the baseline; every other inherited field still applies.
+For `E01`–`E14`, override prior state to one successfully delivered message for the same synthetic episode and material impact at 7:30 AM. Its supported added time is 600 seconds, affected scope is the saved segment/direction, active end is 8:00 AM, and verified action is **Use Fixture Alternate A.** Its stable canonical recommended-action identity is `ACTION-SYN-E-ALT-A`; that evidence identity is not rider-facing. The delivered message is the baseline; every other inherited field still applies.
 
 | Fixture/source | Fixed material delta from delivered baseline | Expected visible and assistive result | Fixture-specific prohibited result |
 |---|---|---|---|
@@ -93,9 +94,9 @@ For `E01`–`E14`, override prior state to one successfully delivered message fo
 | `E09`; `E09-SRC-v1` | `oldEnd=8:00:00`, `newEnd=8:30:00`; extension into window is 1,800 seconds | One `COMMUTE-N07` | Treat boundary as exclusive |
 | `E10`; `E10-SRC-v1` | `oldEnd=8:00:00`, `newEnd=8:30:01`; extension into window is 1,801 seconds | One `COMMUTE-N07` | More than one escalation |
 | `E11`; `E11-SRC-v1` | `oldEnd=9:00:00`, `newEnd=9:30:00`; `min` formula adds zero inside `[P,E)` | Suppress; zero escalation | Count extension wholly beyond `E` |
-| `E12`; `E12-SRC-v1` | First independently verified action changes from Fixture Alternate A to Fixture Alternate B | One `COMMUTE-N07` with B left unselected | Keep stale action A; auto-select B |
-| `E13`; `E13-SRC-v1` | Delivered action A becomes invalid; current complete review finds no verified alternative | One `COMMUTE-N07` with exact no-verified-alternative result | Recommend A, unsafe candidate, or vague substitute |
-| `E14`; `E14-SRC-v1` | Only copy and renewed timestamp change; a correction is present but no independent material branch passes | Suppress; zero escalation | Correction-only push; baseline switch |
+| `E12`; `E12-SRC-v1` | An accepted owner decision changes one rider-relevant disruption-risk value after every higher rank level ties, so the first independently verified action changes from Fixture Alternate A and `ACTION-SYN-E-ALT-A` to Fixture Alternate B and distinct canonical identity `ACTION-SYN-E-ALT-B` | One `COMMUTE-N07` with B left unselected and the supported action change stated | Keep stale action A; compare only identities, labels, or positions; auto-select B |
+| `E13`; `E13-SRC-v1` | Delivered action A and `ACTION-SYN-E-ALT-A` become invalid; current complete review finds no verified alternative | One `COMMUTE-N07` with exact no-verified-alternative result | Recommend A, unsafe candidate, or vague substitute |
+| `E14`; `E14-SRC-v1` | Fixed subcase A changes only copy and renewed timestamp and includes a correction. Fixed subcase B repeats the same fully tied verified alternatives and canonical identities as the delivered baseline but shuffles source, retrieval, wrapper, and record-enumeration order; neutral canonical ordering keeps `ACTION-SYN-E-ALT-A` first. No independent material branch passes in either subcase. | Suppress both subcases; zero escalation | Correction-only push; baseline switch; treat shuffled list position as a new action; false second push |
 
 ## Recovery fixtures
 

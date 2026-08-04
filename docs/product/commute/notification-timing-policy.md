@@ -71,7 +71,7 @@ Immediately before every initial, escalation, reminder, or recovery delivery dec
 7. every owner freshness and source-health decision supports the exact claim;
 8. route, direction, segment, station, constituent, entrance, exit, transfer, and accessible-path scope still match;
 9. no current negative veto contradicts the rendered claim;
-10. each recommended alternative remains independently verified and safe;
+10. each recommended alternative remains independently verified and safe, and any first recommended action has one unique stable canonical recommended-action identity supplied by its owner;
 11. the material incident state still changes a rider decision; and
 12. prior-delivery history permits this message.
 
@@ -90,11 +90,13 @@ One escalation candidate may be created when at least one independently supporte
 | Newly affected direction | The exact relevant direction is new relative to the delivered baseline |
 | Severity increases | An approved owner-supplied ordered severity value strictly increases |
 | Active period extends into the occurrence | `min(newEnd,E) − min(oldEnd,E) ≥ 1,800 seconds`; 1,799 fails, 1,800 and 1,801 pass |
-| Recommended action changes | The first independently verified recommended action changes, or the delivered action becomes invalid and the current result is no verified alternative |
+| Recommended action changes | The current first independently verified action has a different stable canonical recommended-action identity from the delivered baseline **and** the owner records an accepted change in eligible tier, action eligibility, or at least one rider-relevant ranking value that makes the different action first; or the delivered action identity becomes invalid and the current result is no verified alternative. An identity difference is necessary but not sufficient. A change caused only by the neutral canonical tie-break, candidate enumeration, list position, label, copy, source order, or retrieval order fails this branch. |
 
 Missing, free-text, renamed, or unordered severity cannot pass the severity branch. An extension wholly beyond `E` adds zero time inside the occurrence. Several simultaneous material changes create one escalation, not one per branch. A later escalation is possible only from a new comparison against the successfully delivered escalation baseline.
 
-Copy edits, renewed timestamps, equivalent alert records, changes under 300 seconds, extensions under 1,800 seconds, a baseline switch, an unsafe or unresolved alternative, and correction wording alone never create an escalation. A correction can accompany a push only when an independent material branch passes.
+For an accessibility action, consume the stable canonical recommended-action identity and final order supplied by the accessibility owner; when the action is exactly one path, that action identity binds the stable canonical path identity without using its evidence version or rider-facing label as identity. Repeating a fully tied ranking package with shuffled source, retrieval, response, wrapper, enumeration, or render order must retain the same first action identity and creates no escalation candidate. Adding or removing a fully tied candidate may alter the neutral identity order, but it is not a material action escalation while the delivered action remains eligible and no eligible tier or rider-relevant rank value changes. Missing, duplicate, mutable, conflicting, or unexplained current or baseline action identity makes this branch unresolved and produces Hold, not a guessed action change.
+
+Copy edits, renewed timestamps, equivalent alert records, changes under 300 seconds, extensions under 1,800 seconds, a baseline switch, an unsafe or unresolved alternative, source or retrieval reordering, and correction wording alone never create an escalation. A correction can accompany a push only when an independent material branch passes.
 
 ## Repeated planned work
 
@@ -109,7 +111,7 @@ Copy edits, renewed timestamps, equivalent alert records, changes under 300 seco
 
 ## Required decision record
 
-Every delivery decision records the fixed policy and product versions, commute/window/occurrence IDs, Task 6 episode and material-impact handoff when available, `L/P/S/E`, local dates, lifecycle, permission, connectivity, source and effective intervals, Task 2 and Task 3 results, accessibility decision and freshness when applicable, evaluation opportunity, complete final-recheck results, prior successful delivery baseline, every material delta, seen state, selected rendered template and fields, expected and prohibited results, actual result, reviewer decisions and dates, evidence, correction, preserved original, and rerun.
+Every delivery decision records the fixed policy and product versions, commute/window/occurrence IDs, Task 6 episode and material-impact handoff when available, `L/P/S/E`, local dates, lifecycle, permission, connectivity, source and effective intervals, Task 2 and Task 3 results, accessibility decision and freshness when applicable, evaluation opportunity, complete final-recheck results, prior successful delivery baseline, baseline and current stable canonical recommended-action identities, the owner-supplied ranking decision and shuffled-input result when applicable, every material delta, seen state, selected rendered template and fields, expected and prohibited results, actual result, reviewer decisions and dates, evidence, correction, preserved original, and rerun.
 
 No record contains a guessed home/work label, passive location history, movement history, or unrelated journey history.
 
@@ -129,6 +131,7 @@ No record contains a guessed home/work label, passive location history, movement
 - [ ] Every message passes the immediate final recheck using the same rendering evidence.
 - [ ] Permission restoration and reconnect never replay missed work.
 - [ ] Every escalation compares with the last successful same-impact delivery and applies exact inclusive thresholds.
+- [ ] A fully tied accessibility ranking repeated with shuffled source or retrieval order preserves the same canonical first-action identity and cannot create a false escalation or second push.
 - [ ] Repeated work, Seen state, overnight dates, and DST behavior follow the governed rules.
 - [ ] All `CMS-T01`–`CMS-T10`, `S36`–`S39`, `E01`–`E14`, `R01`–`R13`, and `M01`–`M09` actuals remain **Not run — Pending** until fixed evidence exists.
 

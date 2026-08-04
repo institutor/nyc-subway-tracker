@@ -51,11 +51,11 @@ Complete this record before evaluating edges. Blank, placeholder, or unversioned
 
 | Review-package field | Required record |
 |---|---|
-| Path-record identity | Stable identity for this candidate chain; no real value is supplied by Task 1 |
+| Canonical path identity | One unique stable identity for this candidate chain, including its fixed normalized comparison form; it is separate from the mutable display label and evidence-package version, and no real value is supplied by Task 1 |
 | Review purpose | Exact journey and claim being reviewed |
 | Fixed product version | Immutable reviewed product version |
 | Contract version | Fixed version of the complete-path contract and this checklist |
-| Source package | Fixed structural, directional, equipment, service, and platform evidence package |
+| Evidence-package version | Immutable version of the fixed structural, directional, equipment, service, and platform evidence package; it changes when that evidence changes without changing the canonical path identity |
 | Expected result | Expected complete-path disposition before observation |
 | Prohibited result | Any accessibility inference or claim that must not occur |
 | Actual result | Observed visible, assistive, and decision result |
@@ -186,7 +186,7 @@ Apply this decision in order:
 4. Review all seven fields for every required edge.
 5. Apply the separate step-free, official-membership, current-availability, and current-scope checks.
 6. Stop and reject the reviewed chain when any required result is Fail or Unknown.
-7. If an alternate chain is proposed, review it under a separate path identity with a complete independent inventory and evidence package.
+7. If an alternate chain is proposed, require its own distinct canonical path identity and review it with a complete independent inventory and evidence package.
 8. Mark a chain eligible for later accessible-now consideration only when every required result is Pass for that same chain.
 
 | Final condition | Required disposition | Prohibited disposition |
@@ -286,6 +286,8 @@ The detailed abstract records and pass/fail branches are in the [station-directi
 - [ ] Actual visible, assistive, and decision results are recorded separately.
 - [ ] The path begins at one exact origin street entrance.
 - [ ] The path ends at one exact destination street endpoint.
+- [ ] The complete-path owner supplied one unique stable canonical path identity and fixed normalized comparison form, separate from the display label and evidence-package version.
+- [ ] No candidate chain shares, changes, or receives a downstream-invented canonical path identity.
 - [ ] Fare control or mezzanine, every required transfer passage, correct directional platform, boarding area, destination platform, and exit path are present in order.
 - [ ] Every required edge has a stable identity and ordered position.
 - [ ] Every required edge has all seven evidence fields.
@@ -308,7 +310,7 @@ The detailed abstract records and pass/fail branches are in the [station-directi
 - [ ] Structural eligibility contains no current runtime status, and an outage does not erase a structural row.
 - [ ] No equipment presence, escalator, station badge, empty outage response, similar name, or neighboring chain supplies missing evidence.
 - [ ] A failed or Unknown required edge invalidates its chain.
-- [ ] Every alternate chain is reviewed independently without inherited evidence.
+- [ ] Every alternate chain has its own distinct canonical path identity and is reviewed independently without inherited evidence.
 - [ ] Evidence link, reviewer, date, disposition, correction, and rerun fields are complete.
 - [ ] Every required representative trap retains its actual evidence state; until observed, that state is **Not run — Pending**.
 - [ ] Every Task 2 directional and partial-coverage fixture retains its actual evidence state; all seven are **Not run — Pending**.

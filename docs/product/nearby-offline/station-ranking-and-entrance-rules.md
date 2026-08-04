@@ -169,6 +169,8 @@ Re-ranking may update suggestion order. It may not navigate away from an explici
 
 Only explicit saved preferences and their permitted time-of-day context supplied by the [saved stations and rider-controlled personalization contract](saved-station-and-personalization-contract.md) may influence presentation order. The record must be Active; a Paused record supplies no ordering or time-window influence. No optional time window may be inferred or applied outside the rider-entered window.
 
+When multiple preferences qualify, consume Task 11's single promotion cohort exactly: only candidates already in the deterministic baseline first three may join; cohort members retain their baseline relative order; non-members retain theirs; and no preference below the cutoff displaces a closer result. This contract applies no second personalization tie-break.
+
 When a farther but usable station is promoted:
 
 - retain the baseline nearest-useful station and entrance;

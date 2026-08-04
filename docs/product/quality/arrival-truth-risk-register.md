@@ -54,11 +54,11 @@ The approved response is to require positive live stop evidence for a live claim
 The [schedule fallback and currency policy](../arrival-truth/schedule-fallback-and-currency-policy.md) applies that response by:
 
 - entering fallback only when the exact relevant route/feed group is **Unavailable**;
-- selecting a validated departure-eligible supplemented edition before regular GTFS without treating either as live;
+- establishing a usable supplemented coverage mask independently of occurrence presence and making it the sole positive schedule source inside that scope without treating it as complete or live;
 - keeping every current veto and hard-suppression release carryover in force;
 - showing a scheduled New York clock time, currency, service date, and persistent **Live data unavailable**;
 - never using a schedule to repair a missing train or stop in a healthy replacement period; and
-- proceeding to regular GTFS or no estimate when the supplement is ineligible, while never implying that schedule coverage proves normal service.
+- proceeding to regular GTFS only when no usable supplemented mask applies, otherwise withholding an omitted covered occurrence without unsupported cancellation language, while never implying that schedule coverage proves normal service.
 
 Supporting ownership remains with the [source role and precedence matrix](../arrival-truth/source-role-and-precedence-matrix.md), [evidence veto catalog](../arrival-truth/evidence-veto-catalog.md), and [source evidence register](../arrival-truth/source-evidence-register.md).
 

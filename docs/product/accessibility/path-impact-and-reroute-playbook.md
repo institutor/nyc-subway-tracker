@@ -147,6 +147,10 @@ Only eligible candidates enter a tier. Show only the first verified alternative 
 4. lower disruption risk; and
 5. travel time.
 
+If every rider-relevant value ties within that first eligible tier, consume Task 3's neutral final order by ascending stable canonical alternative identity. For an alternative that is exactly one path, use its stable canonical path identity. The unique normalized comparison identity must be fixed before selection and remain stable across evidence refreshes and copy changes for the same alternative. A missing, duplicate, mutable, or conflicting identity makes the first verified alternative indeterminate and blocks promotion until the owner corrects the decision package.
+
+Canonical identity is presentation stability only. It does not make one fully tied candidate better, shorter, safer, more resilient, more accessible, more current, or more trustworthy. Never use source order, retrieval order, response order, wrapper order, record enumeration, render order, a localized label, or prior screen position to choose the first alternative or bounded-list cutoff.
+
 Do not compare a later tier against an earlier eligible tier by travel time, weighted score, convenience, proximity, or hidden override. A rider may inspect another offered option, but the product cannot present it as the governed first alternative.
 
 ## Official alternatives and rider selection
@@ -191,7 +195,7 @@ Every impact decision retains:
 - accepted structural, service, platform, and Task 4 machine decisions with freshness;
 - the evaluated equipment or connection and exact path-membership result;
 - alternate same-complex path identities and every independent pass, Fail, or Unknown decision;
-- all four alternative-tier candidate decisions and the Task 3 within-tier ranking inputs;
+- all four alternative-tier candidate decisions, the Task 3 within-tier ranking inputs, stable canonical alternative identities, initial and final order, first-choice and cutoff membership, and shuffled-input repeat result when values tie;
 - impact class, expected visible and assistive output, prohibited output, and explicit-selection result;
 - actual visible and assistive result;
 - reviewer, review date, durable evidence, correction, and rerun link; and
@@ -209,7 +213,7 @@ The detailed records for IMP-01 through IMP-07 appear below. IMP-08 through IMP-
 | IMP-02 | Required connection fails; independent complete Current same-complex chain exists | **Reroutable within station**; explicit rider selection required | **Not run — Pending** |
 | IMP-03 | Required chained connection fails; no verified same-complex path exists | **Blocking**; entire selected route invalid | **Not run — Pending** |
 | IMP-04 | Relevant escalator fails under Avoid stairs versus wheelchair mode | Affect only the governed preference and exact path; never substitute for elevator | **Not run — Pending** |
-| IMP-05 | Eligible alternatives exist in all four tiers | Use exact tier order; Task 3 ranks only within a tier | **Not run — Pending** |
+| IMP-05 | Eligible alternatives exist in all four tiers and two first-tier alternatives tie on every rider-relevant rank value | Use exact tier order; Task 3 ranks only within a tier and its neutral canonical identity keeps the first choice stable | **Not run — Pending** |
 | IMP-06 | Official suggested alternative lacks complete review | Exclude it; show **Accessibility not confirmed** | **Not run — Pending** |
 | IMP-07 | Ride-past-and-return fully verified versus one added edge Unknown | Eligible only in the fully verified branch | **Not run — Pending** |
 | IMP-08 | Blocking outage appears before departure | Preserve intent; warn with exact impact and first verified action | **Not run — Pending** |
@@ -304,13 +308,13 @@ The detailed records for IMP-01 through IMP-07 appear below. IMP-08 through IMP-
 |---|---|
 | Fixture and product version | `IMP-05-v1`; **Pending — no fixed reviewed product version bound** |
 | Tasks 1–5 artifact versions | **Pending — no immutable contract, register, matrix, policy, playbook, warning matrix, or catalog versions bound** |
-| Synthetic path and machine identities | Broken `PATH-SYN-IMP-05-A` and machine `EQ-SYN-IMP-05-A`; eligible tier paths `PATH-SYN-IMP-05-T1A`, `PATH-SYN-IMP-05-T1B`, `PATH-SYN-IMP-05-T2`, `PATH-SYN-IMP-05-T3`, and bus-inclusive `PATH-SYN-IMP-05-T4` |
-| Path and current-owner decisions | Every named tier candidate independently passes; Task 3 fixed ranking inputs place `PATH-SYN-IMP-05-T1B` first within tier 1 |
+| Synthetic path and machine identities | Broken `PATH-SYN-IMP-05-A` and machine `EQ-SYN-IMP-05-A`; eligible tier paths `PATH-SYN-IMP-05-T1A`, `PATH-SYN-IMP-05-T1B`, `PATH-SYN-IMP-05-T2`, `PATH-SYN-IMP-05-T3`, and bus-inclusive `PATH-SYN-IMP-05-T4`; each candidate has a distinct stable canonical alternative identity |
+| Path and current-owner decisions | Every named tier candidate independently passes. `PATH-SYN-IMP-05-T1A` and `PATH-SYN-IMP-05-T1B` tie exactly on all five rider-relevant Task 3 values; their stable canonical identities put T1A first. Run A and Run B preserve every decision but shuffle source, retrieval, wrapper, and record-enumeration order. |
 | Journey cursor and decision point | Fixed pre-choice context; no progress inference |
-| Expected visible result | Initially show only `PATH-SYN-IMP-05-T1B`; the tier-1 category controls and Task 3 ranking operates only between tier-1 candidates. |
-| Expected assistive result | Announce the same first verified tier-1 action and require explicit selection. |
-| Prohibited visible and assistive result | Faster tier 2 or 3 first, bus insertion, weighted cross-tier comparison, multiple initial alternatives, or auto-selection |
-| Warning and persistence result | The original path remains invalid until an explicit verified replacement is selected or the original full path passes. |
+| Expected visible result | Both runs initially show only `PATH-SYN-IMP-05-T1A`; the tier-1 category controls and Task 3's neutral identity tie-break preserves the same first choice and any bounded-list cutoff. No copy calls T1A better than T1B. |
+| Expected assistive result | Announce the same first verified tier-1 action in both runs, convey no superiority between the tied alternatives, and require explicit selection. |
+| Prohibited visible and assistive result | Faster tier 2 or 3 first, bus insertion, weighted cross-tier comparison, source or retrieval order as a tie-break, changed first choice after the shuffle, superiority wording from canonical identity, multiple initial alternatives, or auto-selection |
+| Warning and persistence result | The original path remains invalid until an explicit verified replacement is selected or the original full path passes. The shuffled input order leaves the first recommended-action identity unchanged and cannot create an accessibility escalation handoff or second-push candidate. |
 | Actual visible and assistive result | **Not observed / Not observed** |
 | Reviewers and review date | **Product, Accessibility, Data Quality, Content, Operations / Not recorded** |
 | Durable evidence | **None** |
@@ -378,8 +382,10 @@ The detailed records for IMP-01 through IMP-07 appear below. IMP-08 through IMP-
 - [ ] An unrelated elevator or escalator never creates complex-wide inaccessibility.
 - [ ] Avoid stairs and wheelchair path effects remain separate.
 - [ ] The four alternative tiers remain exact and only eligible candidates enter them.
-- [ ] Task 3 ranking operates only within the first eligible tier.
+- [ ] Task 3 ranking operates only within the first eligible tier; a full rider-relevant tie uses only the neutral stable canonical alternative identity.
 - [ ] Only the first verified alternative is initially offered and every selection is explicit.
+- [ ] Source, retrieval, response, wrapper, enumeration, render, localized-label, and prior-screen order never choose a tied alternative or change a bounded-list cutoff.
+- [ ] IMP-05 repeats a full within-tier tie with shuffled inputs, preserves the same first recommended-action identity, and creates no false escalation handoff.
 - [ ] Official alternatives receive the full independent accessibility review.
 - [ ] Ride-past-and-return requires every added element to pass.
 - [ ] Explicit-report restoration uses A11Y-T5-07; qualifying two-omission evidence uses A11Y-T5-09 and never says restoration was reported.

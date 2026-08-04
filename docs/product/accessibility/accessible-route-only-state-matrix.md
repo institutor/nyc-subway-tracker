@@ -67,7 +67,7 @@ Each scope below must pass for the one candidate under review. A pass in one row
 Evaluate one candidate path in this order:
 
 1. Preserve the current Accessible Route Only setting.
-2. Freeze one exact journey intent and one candidate identity.
+2. Freeze one exact journey intent, one unique stable canonical path identity, and the candidate's separately versioned evidence package.
 3. Require an accepted atomic station-direction coverage row for every origin, transfer, destination, entrance, platform, and boarding-area scope.
 4. Require one continuous street-to-street chain under the complete-path contract.
 5. Require every edge and every official accessible-path membership decision to pass.
@@ -188,6 +188,10 @@ Compare fully eligible paths lexicographically in this exact order:
 | 5 | Travel time | Shorter | Compare only when levels 1 through 4 tie. |
 
 The ranking is not a weighted score, average, composite index, tunable blend, or hidden override. A later criterion cannot compensate for a worse earlier criterion. In particular, a small travel-time saving cannot outrank fewer single-point elevator dependencies, fewer transfers, shorter accessible walking, or lower disruption risk.
+
+When all five rider-relevant values tie exactly, apply one neutral final tie-break: ascending stable canonical alternative identity supplied by the complete-path owner. For an alternative that is exactly one path, that alternative identity is its stable canonical path identity. The identity's unique normalized comparison form must be fixed in the same decision package, remain stable across evidence refreshes and copy changes for the same alternative, and remain separate from mutable display names and evidence-version identifiers. Missing, duplicate, mutable, or conflicting canonical identities make the first-choice decision incomplete.
+
+This final identity order exists only to keep the initial selection, bounded-list cutoff, and repeated presentation stable. It does not mean the selected alternative is better, shorter, safer, more resilient, more accessible, more current, or more trustworthy than another fully tied candidate. Source order, retrieval order, response order, wrapper order, record enumeration, render order, localized label order, and prior screen position are never tie-breakers.
 
 If a required comparative input is missing, Unknown, incomparable, stale-under-owner-rule, or unreviewed, do not claim that one eligible path is the better-ranked path. Preserve the candidates without a comparative superiority claim until the ranking package is complete; never guess a value or let travel time cross the unresolved criterion.
 
@@ -409,11 +413,11 @@ Every fixture below must be executed against one immutable product version and t
 
 | Evidence field | Record |
 |---|---|
-| Input paths and current decisions | Multiple fully eligible paths have fixed, accepted values for all five ranking levels. |
+| Input paths and current decisions | Four fully eligible alternatives in the same applicable tier have fixed, accepted values for all five ranking levels and tie exactly at every level. Each has a distinct stable canonical alternative identity. Run A and Run B contain the same alternatives and decisions, but source, retrieval, wrapper, and record-enumeration order are shuffled. |
 | Fixed product and artifact versions | Not recorded |
-| Expected visible result | Rank lexicographically by fewer single-point elevator dependencies, fewer transfers, shorter accessible walking distance, lower disruption risk, then travel time. |
-| Expected assistive result | Present the same order and do not announce a later criterion as overriding an earlier one. |
-| Prohibited visible and assistive result | Weighted score, average, hidden override, or comparison of an ineligible path. |
+| Expected visible result | Apply the five rider-relevant levels, then the neutral canonical-identity tie-break. Both runs show the same first alternative and the same membership and order at every bounded-list cutoff, without a superiority claim between tied candidates. |
+| Expected assistive result | Present the same stable order in both runs; do not announce the identity tie-break as a reason that one tied alternative is better, shorter, safer, or more accessible. |
+| Prohibited visible and assistive result | Weighted score, average, hidden override, comparison of an ineligible path, source or retrieval order as a tie-break, changed first choice or cutoff membership after the shuffle, or rider-facing exposure of a canonical identity. |
 | Actual visible, assistive, and decision result | Not observed |
 | Required reviewers and review date | Product, Accessibility, Data Quality, Content; date not recorded |
 | Evidence | None |
@@ -457,8 +461,9 @@ Every fixture below must be executed against one immutable product version and t
 - [ ] Rerouted and official alternatives receive complete independent review.
 - [ ] The exact no-route, offline structural, and unverified-alternative phrases appear visibly and through assistive technology.
 - [ ] Bus inclusion requires a separate explicit rider choice and never rewrites the subway-only result.
-- [ ] Ranking applies only to fully eligible candidates and uses the exact five-level lexicographic order.
-- [ ] No weighted score, average, later-criterion override, or hidden relaxation exists.
+- [ ] Ranking applies only to fully eligible candidates, uses the exact five rider-relevant levels, and then uses stable canonical alternative identity only as a neutral final tie-break.
+- [ ] No weighted score, average, later-criterion override, hidden relaxation, source-order tie-break, or superiority claim from canonical identity exists.
+- [ ] ARO-15 repeats a full tie with shuffled source and retrieval order and preserves the same first choice and bounded-list cutoff membership.
 - [ ] All 16 fixtures keep fixed-version, input, expected, prohibited, actual, reviewer, date, evidence, correction, rerun, and status fields separate.
 - [ ] All 16 fixtures remain **Not run — Pending** until fixed evidence is recorded.
 - [ ] Task 4 and Task 5 owners receive only the defined boundaries; no later copy is invented here.

@@ -70,7 +70,7 @@ Every required physical path connection has one edge record. Each record carries
 
 Each edge record also requires:
 
-- a stable path-record identity;
+- one unique stable canonical path identity with a fixed normalized comparison form, separate from its mutable display label and evidence-package version;
 - a stable edge-record identity;
 - its ordered position in the chain;
 - a source or evidence reference;
@@ -78,6 +78,8 @@ Each edge record also requires:
 - the exact path scope needed to prevent evidence from being inherited by another entrance, constituent station, route, direction, platform, or chain.
 
 These traceability fields make the seven evidence fields reviewable. They do not replace any of them and do not authorize an accessible-now claim.
+
+The complete-path evidence owner assigns the canonical path identity before any downstream ranking or alternate-path selection. Its normalized comparison form remains stable across copy edits and evidence refreshes, while the evidence-package version changes whenever the reviewed evidence changes. Two candidate chains cannot share one canonical identity. A missing, duplicated, mutable, or conflicting identity makes path selection **Unknown**; downstream consumers cannot invent, repair, or substitute one.
 
 ## Structural evidence and current availability are separate
 
@@ -135,7 +137,7 @@ One failed or Unknown required edge invalidates that entire chain. A successful 
 
 An alternate chain remains eligible only when:
 
-- it has its own path identity and complete ordered edge inventory;
+- it has its own unique stable canonical path identity and complete ordered edge inventory;
 - every edge has its own seven-field evidence review;
 - every endpoint connects continuously within that alternate chain;
 - its exact entrance, constituent station, route, direction, platform, boarding area, exit, and street scope pass;
