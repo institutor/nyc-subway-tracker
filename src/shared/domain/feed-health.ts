@@ -128,6 +128,7 @@ export class FeedHealthGovernor {
     const snapshot = copySnapshot(suppliedSnapshot);
     const candidateAge = classifyFeedAge(snapshot.feedTimestamp, assessedAt);
     const existingState = this.#groups.get(snapshot.feedGroupId);
+    const existingLastGoodAge = validateFeedDecisionClock(existingState, assessedAt);
     const comparisonSnapshot = existingState?.recovery?.first ?? existingState?.lastGood;
     const anomaly = assessSnapshotAnomaly(snapshot, comparisonSnapshot, context);
 
@@ -137,7 +138,7 @@ export class FeedHealthGovernor {
 
     const state = this.#state(snapshot.feedGroupId);
     if (state.lastGood && !state.recovery) {
-      const priorAge = classifyFeedAge(state.lastGood.feedTimestamp, assessedAt);
+      const priorAge = existingLastGoodAge!;
       if (priorAge.kind !== 'current') {
         state.recovery = {
           triggerReasonCode: priorAge.reasonCode,
@@ -218,7 +219,9 @@ export class FeedHealthGovernor {
     const observedAtMs = validInstant(observation.observedAt, 'rejected observation instant');
     validateRejectedIdentity(observation);
     const existing = this.#groups.get(observation.feedGroupId);
-    if (validateRejectedChronology(existing, observation, observedAtMs) === 'replay') {
+    const chronology = validateRejectedChronology(existing, observation, observedAtMs);
+    validateFeedDecisionClock(existing, observation.observedAt);
+    if (chronology === 'replay') {
       return this.#decision(observation.feedGroupId, observation.observedAt);
     }
     const state = this.#state(observation.feedGroupId);
@@ -248,7 +251,9 @@ export class FeedHealthGovernor {
     const observedAtMs = observedAt.getTime();
     for (const item of prepared) {
       validateRejectedIdentity(item);
-      validateRejectedChronology(this.#groups.get(item.feedGroupId), item, observedAtMs);
+      const state = this.#groups.get(item.feedGroupId);
+      validateRejectedChronology(state, item, observedAtMs);
+      validateFeedDecisionClock(state, observedAt);
     }
     return Object.freeze(prepared.map((item) => this.reject(item)));
   }
@@ -332,6 +337,13 @@ function isStrictlyNewRecovery(snapshot: NormalizedSnapshotEvidence, recovery: R
   if (!recovery.first) return true;
   return snapshot.feedTimestamp.getTime() > recovery.first.feedTimestamp.getTime()
     && snapshot.contentHash !== recovery.first.contentHash;
+}
+
+function validateFeedDecisionClock(
+  state: GroupState | undefined,
+  assessedAt: Date,
+): FeedAgeDecision | undefined {
+  return state?.lastGood ? classifyFeedAge(state.lastGood.feedTimestamp, assessedAt) : undefined;
 }
 
 function isOlderThanControllingRecoveryEvidence(

@@ -302,6 +302,23 @@ describe('per-group preservation, fallback eligibility, and feed recovery', () =
       .toBe(JSON.stringify(control.assess('ace', at(100))));
   });
 
+  test('backward assessment during an incident cannot replace its adverse evidence before throwing', () => {
+    const governor = new FeedHealthGovernor();
+    governor.observe(snapshot('ace', 100, 100), at(100));
+    governor.observe(snapshot('ace', 80, 99), at(100));
+    const before = governor.assess('ace', at(100));
+    expect(before).toMatchObject({
+      reasonCode: 'timestamp-regression',
+      recoveryCount: 0,
+      lastGood: { contentHash: 'ace-100-100' },
+      adverseEvidence: { evidenceId: 'ace-80-99', authoritativeAt: at(80).toISOString() },
+    });
+
+    expect(() => governor.observe(snapshot('ace', 90, 98), at(90)))
+      .toThrow(/negative feed age/i);
+    expect(governor.assess('ace', at(100))).toEqual(before);
+  });
+
   test('a no-prior-context failure still reports recovery update one without restoring evidence', () => {
     const governor = new FeedHealthGovernor();
     governor.reject({
@@ -438,6 +455,33 @@ describe('per-group preservation, fallback eligibility, and feed recovery', () =
       recoveryCount: 0,
       adverseEvidence: { evidenceId: 'newer-at-45', authoritativeAt: at(45).toISOString() },
     });
+  });
+
+  test('fractional rejected-feed evidence fails before incident mutation', () => {
+    const governor = new FeedHealthGovernor();
+    governor.observe(snapshot('ace', 0, 100), at(0));
+    const before = governor.assess('ace', at(30));
+
+    expect(() => governor.reject({
+      feedGroupId: 'ace',
+      evidenceId: 'fractional-rejection',
+      observedAt: at(30.5),
+      reasonCode: 'invalid-decoding',
+    })).toThrow(/whole-second/i);
+    expect(governor.assess('ace', at(30))).toEqual(before);
+  });
+
+  test('fractional simultaneous rejection fails before any group mutation', () => {
+    const governor = new FeedHealthGovernor();
+    governor.observe(snapshot('ace', 0, 100), at(0));
+    governor.observe(snapshot('nqrw', 0, 80), at(0));
+    const before = [governor.assess('ace', at(30)), governor.assess('nqrw', at(30))];
+
+    expect(() => governor.rejectSimultaneousLoss([
+      { feedGroupId: 'ace', evidenceId: 'fractional-ace' },
+      { feedGroupId: 'nqrw', evidenceId: 'fractional-nqrw' },
+    ], at(30.5))).toThrow(/whole-second/i);
+    expect([governor.assess('ace', at(30)), governor.assess('nqrw', at(30))]).toEqual(before);
   });
 
   test('validates an entire simultaneous-loss batch before mutating any group', () => {

@@ -190,6 +190,21 @@ describe('target and stop-order adverse evidence', () => {
     });
   });
 
+  test('exact replay of confirmed stop-order suppression preserves the terminal decision', () => {
+    const engine = governor();
+    engine.observeStopOrderRegression({ provenance: evidence('regression-1', 10), regressionKey: 'A27>A24' });
+    const terminal = engine.observeStopOrderRegression({
+      provenance: evidence('regression-2', 20),
+      regressionKey: 'A27>A24',
+    });
+
+    expect(engine.observeStopOrderRegression({
+      provenance: evidence('regression-2', 20),
+      regressionKey: 'A27>A24',
+    })).toEqual(terminal);
+    expect(engine.assess(at(20))).toEqual(terminal);
+  });
+
   test('a different regression does not confirm the first defect', () => {
     const engine = governor();
     engine.observeStopOrderRegression({ provenance: evidence('regression-1', 10), regressionKey: 'A27>A24' });
@@ -461,5 +476,47 @@ describe('two-update exact-identity Live recovery', () => {
   test('rejects backward assessment chronology instead of preserving exact Live', () => {
     const engine = governor();
     expect(() => engine.assess(at(-1))).toThrow(/assessment.*before latest evidence/i);
+  });
+
+  test('fractional assessment failure is atomic before elapsed absence suppression', () => {
+    const engine = governor();
+    engine.observeHealthySnapshot({ provenance: evidence('absent-1', 10), entity: { kind: 'absent' } });
+    const grace = engine.assess(at(69));
+
+    expect(() => engine.assess(at(70.5))).toThrow(/whole-second/i);
+    expect(engine.assess(at(69))).toEqual(grace);
+  });
+
+  test.each([
+    ['healthy absence', (engine: TrainRecoveryGovernor) => engine.observeHealthySnapshot({
+      provenance: { ...evidence('fractional-absence', 70), observedAt: at(70.5) },
+      entity: { kind: 'absent' },
+    })],
+    ['healthy presence', (engine: TrainRecoveryGovernor) => engine.observeHealthySnapshot({
+      provenance: { ...evidence('fractional-presence', 70), observedAt: at(70.5) },
+      entity: {
+        kind: 'present',
+        trainIdentity: '20260804:shared-trip:0A-0200',
+        conditions: conditions({ movementAt: at(70) }),
+      },
+    })],
+    ['noncountable update', (engine: TrainRecoveryGovernor) => engine.observeNonCountable({
+      provenance: { ...evidence('fractional-anomaly', 70), observedAt: at(70.5) },
+      reasonCode: 'snapshot-anomaly',
+    })],
+    ['target removal', (engine: TrainRecoveryGovernor) => engine.observeTargetRemoved({
+      provenance: { ...evidence('fractional-target', 70), observedAt: at(70.5) },
+    })],
+    ['stop-order regression', (engine: TrainRecoveryGovernor) => engine.observeStopOrderRegression({
+      provenance: { ...evidence('fractional-regression', 70), observedAt: at(70.5) },
+      regressionKey: 'A27>A24',
+    })],
+  ] as const)('rejects fractional %s atomically before transition mutation', (_label, transition) => {
+    const engine = governor();
+    engine.observeHealthySnapshot({ provenance: evidence('absent-1', 10), entity: { kind: 'absent' } });
+    const grace = engine.assess(at(69));
+
+    expect(() => transition(engine)).toThrow(/whole-second/i);
+    expect(engine.assess(at(69))).toEqual(grace);
   });
 });

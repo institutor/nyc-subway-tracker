@@ -179,6 +179,7 @@ export class TrainRecoveryGovernor {
     assertEvidenceNotBackward(evidence, this.#latestEvidence);
     const replay = sameEvidence(evidence, this.#latestEvidence);
     if (replay) {
+      this.#validateDecisionClocks(evidence.observedAtMs);
       if (observation.entity.kind === 'present' && this.#recoveryCount === 1) {
         this.#recoveryCount = 0;
         this.#firstRecovery = null;
@@ -186,6 +187,15 @@ export class TrainRecoveryGovernor {
         this.#reasonCode = 'recovery-replay';
       }
       return this.#decision(evidence.observedAtMs);
+    }
+    this.#validateElapsedSuppressionClock(evidence.sourceTimestampMs);
+    if (observation.entity.kind === 'absent') {
+      this.#validateDecisionClocks(
+        evidence.observedAtMs,
+        this.#absenceStartedAtMs ?? evidence.sourceTimestampMs,
+      );
+    } else {
+      this.#validateDecisionClocks(evidence.observedAtMs, null, validatedConditions!.movementAtMs);
     }
     const elapsedTriggered = this.#applyElapsedSuppression(evidence.sourceTimestampMs);
     this.#latestEvidence = evidence;
@@ -197,6 +207,8 @@ export class TrainRecoveryGovernor {
   observeNonCountable(observation: NonCountableObservation): TrainRecoveryDecision {
     const evidence = storeEvidence(observation.provenance, this.#feedGroupId);
     assertEvidenceNotBackward(evidence, this.#latestEvidence);
+    this.#validateElapsedSuppressionClock(evidence.sourceTimestampMs);
+    this.#validateDecisionClocks(evidence.observedAtMs);
     if (!sameEvidence(evidence, this.#latestEvidence)) this.#latestEvidence = evidence;
     this.#applyElapsedSuppression(evidence.sourceTimestampMs);
     this.#recoveryCount = 0;
@@ -211,6 +223,7 @@ export class TrainRecoveryGovernor {
   observeTargetRemoved(observation: { readonly provenance: TrainEvidenceProvenance }): TrainRecoveryDecision {
     const evidence = storeEvidence(observation.provenance, this.#feedGroupId);
     assertEvidenceNotBackward(evidence, this.#latestEvidence);
+    this.#validateDecisionClocks(evidence.observedAtMs, null);
     this.#latestEvidence = evidence;
     this.#recordAdverse(evidence, 'target-removed', 'suppressed');
     this.#absenceCount = 0;
@@ -222,8 +235,17 @@ export class TrainRecoveryGovernor {
     if (!observation.regressionKey) throw new Error('Stop-order regression key is required');
     const evidence = storeEvidence(observation.provenance, this.#feedGroupId);
     assertEvidenceNotBackward(evidence, this.#latestEvidence);
-    const elapsedTriggered = this.#applyElapsedSuppression(evidence.sourceTimestampMs);
     const prior = this.#regressions.at(-1);
+    if (this.#status === 'suppressed' && prior
+      && observation.regressionKey === this.#regressionKey
+      && sameEvidence(evidence, this.#latestEvidence)
+      && sameEvidence(evidence, prior)) {
+      this.#validateDecisionClocks(evidence.observedAtMs);
+      return this.#decision(evidence.observedAtMs);
+    }
+    this.#validateElapsedSuppressionClock(evidence.sourceTimestampMs);
+    this.#validateDecisionClocks(evidence.observedAtMs);
+    const elapsedTriggered = this.#applyElapsedSuppression(evidence.sourceTimestampMs);
     if (prior && observation.regressionKey === this.#regressionKey
       && (sameEvidence(evidence, prior) || evidence.sourceTimestampMs <= prior.sourceTimestampMs)) {
       this.#latestEvidence = evidence;
@@ -256,6 +278,8 @@ export class TrainRecoveryGovernor {
     if (assessedAtMs < this.#latestEvidence.observedAtMs) {
       throw new Error('Train recovery assessment cannot be before latest evidence');
     }
+    this.#validateDecisionClocks(assessedAtMs);
+    this.#validateElapsedSuppressionClock(assessedAtMs);
     this.#applyElapsedSuppression(assessedAtMs);
     return this.#decision(assessedAtMs);
   }
@@ -345,6 +369,25 @@ export class TrainRecoveryGovernor {
     this.#reasonCode = reasonCode;
     this.#recoveryCount = 0;
     this.#firstRecovery = null;
+  }
+
+  #validateElapsedSuppressionClock(assessedAtMs: number): void {
+    if (this.#absenceStartedAtMs !== null) {
+      wholeElapsedSeconds(this.#absenceStartedAtMs, assessedAtMs, 'entity absence age');
+    }
+  }
+
+  #validateDecisionClocks(
+    assessedAtMs: number,
+    absenceStartedAtMs: number | null = this.#absenceStartedAtMs,
+    movementAtMs: number = this.#movementAtMs,
+  ): void {
+    if (absenceStartedAtMs !== null) {
+      wholeElapsedSeconds(absenceStartedAtMs, assessedAtMs, 'entity absence age');
+    }
+    if (assessedAtMs >= movementAtMs) {
+      wholeElapsedSeconds(movementAtMs, assessedAtMs, 'train movement age');
+    }
   }
 
   #applyElapsedSuppression(assessedAtMs: number): boolean {
