@@ -43,10 +43,10 @@
 - Create: `src/client/App.tsx`
 - Test: `tests/smoke/app.test.tsx`
 
-1. Add a failing component smoke test that expects the product name, **Unofficial**, and a main landmark.
-2. Run `pnpm vitest run tests/smoke/app.test.tsx` and confirm failure because the shell does not exist.
-3. Add the package scripts, dependency manifest, strict TypeScript configuration, client entry, Express entry, Vite proxy, and minimal semantic shell.
-4. Install dependencies with `pnpm install` and retain the generated lockfile.
+1. As a configuration-only bootstrap exception, add the package scripts and dependency manifest, strict TypeScript, Vitest, Playwright, and Vite configuration, then run `pnpm install` and retain the generated lockfile. Do not create the client shell or any behavioral implementation yet.
+2. Add a component smoke test that expects the product name, **Unofficial**, and a main landmark.
+3. Run `pnpm vitest run tests/smoke/app.test.tsx` and confirm the behavioral test fails because the client shell does not exist.
+4. Add the shared, client, and Express entries, Vite proxy, and minimal semantic shell.
 5. Run `pnpm vitest run tests/smoke/app.test.tsx`, `pnpm typecheck`, and `pnpm build`.
 6. Commit with `establish runnable subway app`.
 
@@ -162,12 +162,13 @@
 - Test: `tests/domain/arrival-confidence.test.ts`
 - Test: `tests/domain/schedule-fallback.test.ts`
 
-1. Write failing tests for exact future directional-stop admission, wrong direction/destination, missing stop, ambiguous identity, distinct same-time trains, source-order shuffles, Expected range centers and bounds, direct Live/Expected overlap, non-overlap, maximal contiguous overlap, chain-only overlap, earlier-Live barrier, cap only after the one-pass promotion, separate Holding/Uncertain rows, Due through exactly 60 seconds, movement through exactly 90/180 seconds, and unusual dwell without deletion.
-2. Write failing fallback tests for exact-group Unavailable entry, Scheduled clock-time treatment, current veto preservation, supplemented-mask omission, regular eligibility only outside a usable mask, partial and empty boards, and per-direction three-row caps.
-3. Implement the fixed gate order, canonical train/stop-call identity, confidence transitions, initial total order (estimate, lower bound, upper bound, public route order, destination, stable train identity), the exact narrow Live-overlap pass, and only then the cutoff.
-4. Ensure only Live and Expected consume primary slots; Holding and Uncertain stay secondary and never advance an exact countdown.
-5. Run focused tests and all domain tests.
-6. Commit with `admit trustworthy subway arrivals`.
+1. Write failing tests for exact future directional-stop admission, wrong direction/destination, missing stop, ambiguous identity, distinct same-time trains, source-order shuffles, and Expected admission only for a physical train assigned at its origin, not materially overdue, with coherent identity and range stable across two consecutive accepted updates. Prove one update, an overdue assignment, a changed identity, a changed pattern, or a broken pair admits no Expected row.
+2. Write failing ordering and lifecycle tests for Expected range centers and bounds, direct Live/Expected overlap, non-overlap, maximal contiguous overlap, chain-only overlap, earlier-Live barrier, cap only after the one-pass promotion, separate Holding/Uncertain rows, Due through exactly 60 seconds, just above 60 seconds, exactly and just above 120 seconds, movement through exactly 90/180 seconds, ETA-only changes that do not reset the original Due/no-progress timer, and unusual dwell without deletion.
+3. Write failing fallback tests for exact-group Unavailable entry, Scheduled clock-time treatment, current veto preservation, supplemented-mask omission, regular eligibility only outside a usable mask, partial and empty boards, and per-direction three-row caps. Add catalog-wide carryover cases proving a claim previously hard-suppressed by a resolved veto remains absent after the adverse evidence ends until two consecutive qualifying live recovery updates prove all five conditions; the first update, a broken pair, static data, supplemented data, regular data, and an Unavailable feed restore nothing and cannot create a Scheduled row for that claim.
+4. Implement the fixed gate order, canonical train/stop-call identity, confidence transitions, initial total order (estimate, lower bound, upper bound, public route order, destination, stable train identity), the exact narrow Live-overlap pass, and only then the cutoff.
+5. Ensure only Live and Expected consume primary slots; Holding and Uncertain stay secondary and never advance an exact countdown.
+6. Run focused tests and all domain tests.
+7. Commit with `admit trustworthy subway arrivals`.
 
 ## Task 8: Resolve service changes before display
 
@@ -176,15 +177,18 @@
 - Create: `src/shared/domain/alert-scope.ts`
 - Create: `src/shared/domain/service-impact.ts`
 - Create: `src/shared/domain/reroute.ts`
+- Modify: `src/shared/domain/arrival-admission.ts`
 - Test: `tests/domain/service-impact.test.ts`
 - Test: `tests/domain/reroute.test.ts`
+- Test: `tests/domain/service-change-admission.test.ts`
 
 1. Write failing tests for skipped stops, local-to-express bypass, station closure, partial suspension, route-on-route reroute, generic Affected without inferred bypass, early/future alerts, stale alert context, and exact unaffected scope preservation.
-2. Implement structured scope resolution with preserved official plain text.
-3. Apply hard negative evidence before positive live admission. Treat an unresolved material reroute as a narrow veto and a delay-only alert as context, not stop suppression.
-4. Prove a rerouted train appears at a station only when its current ordered remaining-stop sequence explicitly contains that directional stop and no stronger veto remains.
-5. Run focused tests and the full domain suite.
-6. Commit with `veto bypassed subway stops`.
+2. Write board/admission integration tests that distinguish all three failed service-change outcomes: current evidence resolving ineligibility produces only narrow scoped suppression; independent current high-impact evidence with materially unresolved route, direction, station, segment, exact-stop, train, or path scope produces **arrival claim unavailable** with the governed explanation and official details; all other missing, ambiguous, or contradictory evidence follows its owning quarantine or limitation without being mislabeled. Prove unrelated service remains eligible in every branch.
+3. Implement structured scope resolution with preserved official plain text and feed the typed outcome into the existing admission gate before freshness, identity, movement, or ordering.
+4. Apply resolved hard negative evidence before positive live admission. A delay-only alert is context, not stop suppression; a generic Affected marker alone proves neither normal service nor a bypass.
+5. Prove a rerouted train appears at a station only when its current ordered remaining-stop sequence explicitly contains that directional stop and no stronger veto, arrival-unavailable decision, quarantine, or limitation remains.
+6. Run focused tests and the full domain suite.
+7. Commit with `veto bypassed subway stops`.
 
 ## Task 9: Build station ranking, routing, saved state, and offline graph
 
@@ -203,12 +207,14 @@
 - Test: `tests/domain/saved-ranking.test.ts`
 - Test: `tests/client/browser-store.test.ts`
 
-1. Write failing tests for coordinate validation, exact entrance joins, entry/closure/current-service exclusion, supported practical-walk comparisons and overlapping precision ties, stable neutral entrance/complex identity order, at-most-three membership, approximate-location parity only when evidence supports it, no coordinate retention, and mandatory station-picker output when walk evidence is missing or incomparable. Prove straight-line and centroid values never rank candidates.
-2. Write failing routing tests for direct rides, transfers, exact direction/destination, online current-pattern constraints, future schedule currency, offline **Reference itinerary**, no path, Accessible Route Only failure when a complete verified chain is absent, the exact validity/accessibility/risk/transfers/practical-walk/arrival ranking sequence, and neutral canonical identity only after a full rider-relevant tie.
-3. Write SAVE-O01 tests with shuffled saved-record retrieval that always yield B, C, A and never promote D.
-4. Implement the bounded audited practical-walk adapter, network graph, deterministic journey search and ranking order (validity, accessibility, risk, transfers, practical walking, arrival), nearest-useful ranking, picker fallback, saved promotion cohort, versioned browser storage, and migrations.
-5. Run focused tests and the domain/client suites.
-6. Commit with `rank nearby and offline journeys`.
+1. Write failing tests for coordinate validation, exact entrance joins, entry/closure/current-service exclusion, supported practical-walk comparisons, at-most-three membership, approximate-location parity only when evidence supports it, no coordinate retention, and mandatory station-picker output when walk evidence is missing or incomparable. Prove straight-line and centroid values never rank candidates.
+2. Add exact tie fixtures for the required two-stage comparator: first tied entrances within one constituent and direction by normalized public street/corner description then canonical entrance identity; then eligible complexes by practical-walk value/range, normalized complex name, normalized constituent public identity, selected-entrance description, canonical complex identity, canonical constituent identity, and canonical entrance identity. Assert **About the same walk.** when the tie affects a selected entrance, nearest label, or third-card cutoff; assert **One of the closest confirmed entrances.** when a tied entrance is named; and prove source or render order never changes selection or the three-card cutoff.
+3. Add the all-entrances-unconfirmed branch: retain the station only with **Entrance availability not confirmed** and an honest limited/unavailable arrival state, make no **useful**, **open**, or **nearest** claim, and offer both the bottom-anchored station picker and station detail without guessing or promoting an unverified entrance.
+4. Write failing routing tests for direct rides, transfers, exact direction/destination, online current-pattern constraints, future schedule currency, offline **Reference itinerary**, no path, Accessible Route Only failure when a complete verified chain is absent, the exact validity/accessibility/risk/transfers/practical-walk/arrival ranking sequence, and neutral canonical identity only after a full rider-relevant tie.
+5. Write SAVE-O01 tests with shuffled saved-record retrieval that always yield B, C, A and never promote D.
+6. Implement the bounded audited practical-walk adapter, network graph, deterministic journey search and ranking order (validity, accessibility, risk, transfers, practical walking, arrival), nearest-useful ranking, picker fallback, saved promotion cohort, versioned browser storage, and migrations.
+7. Run focused tests and the domain/client suites.
+8. Commit with `rank nearby and offline journeys`.
 
 ## Task 10: Expose coherent versioned APIs
 
@@ -275,19 +281,23 @@
 - Create: `src/client/components/VectorNetworkMap.tsx`
 - Create: `src/client/components/OfflineBanner.tsx`
 - Create: `src/client/hooks/use-connectivity.ts`
+- Create: `src/shared/domain/reconnection.ts`
 - Create: `public/manifest.webmanifest`
 - Create: `public/sw.js`
 - Create: `public/icons/app-icon.svg`
 - Test: `tests/client/saved-view.test.tsx`
 - Test: `tests/client/map-view.test.tsx`
 - Test: `tests/client/offline-state.test.tsx`
+- Test: `tests/domain/reconnection.test.ts`
 
-1. Write failing tests for the exact saved-intent schema and prohibited operational fields; immediate open without mutation; refresh of every route/direction; filtered-route disruption visibility; explicit edit/save only; pause/reset/delete scope; deterministic preference rendering; station search; direct and transfer journeys; Day/Night reference labels; loss of Actual-now preserving context without automatic reference switch; explicit Typical weekday/Late night selection; offline **Reference itinerary** routing; explicit capture of exactly one active trip before descent; every required core card field; claim-scoped timestamps; conditional-module omission; **I'm at this stop** forward/back correction; no evidence mutation; historical board treatment; preserved context; and ordered reconnection.
-2. Implement Saved and Map surfaces, station/destination search, network SVG rendering, explicit map-mode selection, ranked journey details, explicit active-trip capture, complete offline card, and manual rider-confirmed progress without location inference.
-3. Implement service-worker precache/runtime policies and explicit cache-version migration.
-4. Make the app installable and ensure offline entry never claims current operations or accessibility.
-5. Run client tests, production build, and a browser offline smoke.
-6. Commit with `keep subway journeys useful offline`.
+1. Write failing tests for the exact saved-intent schema and prohibited operational fields; immediate open without mutation; refresh of every route/direction; filtered-route disruption visibility; explicit edit/save only; pause/reset/delete scope; deterministic preference rendering; station search; direct and transfer journeys; Day/Night reference labels; loss of Actual-now preserving context without automatic reference switch; explicit Typical weekday/Late night selection; offline **Reference itinerary** routing; explicit capture of exactly one active trip before descent; every required core card field; claim-scoped timestamps; conditional-module omission; **I'm at this stop** forward/back correction; no evidence mutation; historical board treatment; and preserved context.
+2. Write a failing recovery-coordinator suite for the exact owner-gated five-stage sequence: route-critical equipment and complete accessible paths; active service changes; current arrivals only after owning feed recovery and readmission; positioning and transfer guidance; then background maps and unrelated Saved. Require each applicable stage to await an owner-accepted fresh result or its governed fail-closed result before the next stage can request, commit, or present.
+3. Prove accepted active-trip invalidations at every stage 1–4 render their scoped blocking warning before any lower-priority or unrelated refresh: path/equipment invalidation at stage 1; service-pattern or transfer invalidation at stage 2; a stored train choice becoming unusable or no longer verified at stage 3; and a required platform, transfer, or positioning decision becoming unusable or no longer verified at stage 4. Also prove loss of optional positioning guidance alone removes only that guidance and does not invalidate the trip. Service-change vetoes resolve before arrival evaluation; one fresh arrival snapshot restores nothing; blocking warnings and preserved context persist; manual cursor, focus, reading position, filters, map tuple, and active surface never reset; and stage 5 cannot overtake an unresolved earlier stage.
+4. Implement Saved and Map surfaces, station/destination search, network SVG rendering, explicit map-mode selection, ranked journey details, explicit active-trip capture, complete offline card, and manual rider-confirmed progress without location inference.
+5. Implement the gated reconnection coordinator, service-worker precache/runtime policies, and explicit cache-version migration.
+6. Make the app installable and ensure offline entry never claims current operations or accessibility.
+7. Run client/domain tests, production build, and a browser offline smoke.
+8. Commit with `keep subway journeys useful offline`.
 
 ## Task 13: Add fail-closed accessibility, equipment status, and guidance
 
@@ -297,20 +307,29 @@
 - Create: `src/server/accessibility/path-evidence-loader.ts`
 - Create: `src/shared/domain/accessible-path.ts`
 - Create: `src/shared/domain/equipment-status.ts`
+- Create: `src/shared/domain/path-impact.ts`
+- Create: `src/shared/domain/accessibility-alternatives.ts`
+- Create: `src/shared/domain/underway-warning.ts`
 - Create: `src/shared/domain/platform-guidance.ts`
 - Create: `src/shared/data/platform-guidance.json`
 - Create: `src/client/components/AccessibilityPanel.tsx`
 - Create: `src/client/components/PlatformGuidance.tsx`
 - Test: `tests/domain/accessible-path.test.ts`
+- Test: `tests/domain/path-impact.test.ts`
+- Test: `tests/domain/accessibility-alternatives.test.ts`
+- Test: `tests/domain/underway-warning.test.ts`
 - Test: `tests/domain/platform-guidance.test.ts`
 - Test: `tests/client/accessibility-panel.test.tsx`
 
 1. Write failing tests for station-level versus directional accessibility; the complete 26-field atomic coverage row; every ordered path edge and seven evidence fields; exact endpoints, levels, route/direction/platform, equipment identities, official-path membership, restrictions, verification and review; empty production registry; equipment health at exactly 5 minutes, first instant above 5, exactly 15, and first instant above 15; invalid chronology/join; provisional empty and second zero snapshot at less than/exactly one minute; healthy non-empty target absence; strict greater-than-50% disappearance and greater-than-10% bad-record anomalies plus contextual boundary cases; daily inventory review and exact seven-day cutoff; explicit restoration; one/two omissions at the one-minute boundary; broken restoration sequence; freshness copy; stale/missing outage feed; duplicate canonical path identity; canonical tie ordering; rerouted platform; and independent alternate paths.
-2. Write failing guidance tests for exact immutable coverage row, scope/orientation/objective match, outdated/wrong-platform/rerouted records, and complete visible/assistive omission when unavailable. Keep production guidance empty unless a reviewed record with provenance is supplied.
-3. Implement app-owned immutable path-package ingestion separate from GTFS station notes; optional official equipment/outage ingestion; exact equipment health, population, provisional-empty, inventory, restoration, and freshness decisions; structural reference state; fail-closed Accessible Route Only; exact rider warnings; and separate accessibility/guidance exposure locks.
-4. Add negative schema, API, component, and end-to-end assertions proving no crowding field or surface exists anywhere.
-5. Run focused tests and the full client/domain suites.
-6. Commit with `add honest subway accessibility tools`.
+2. Write failing path-impact tests for the mutually exclusive precedence **Unrelated**, then **Reroutable within station**, then **Blocking**. Require independent complete current evidence for every alternate-chain edge and scope; keep Unknown fail-closed without calling it an outage; preserve destination intent and Accessible Route Only; and prove one unrelated or failed edge cannot widen to whole-station inaccessibility.
+3. Write failing alternative tests for the exact tier order: independently verified same-complex path, governed Nearby accessible station, verified subway detour, then bus-inclusive option requiring separate explicit rider choice. Apply the governed within-tier lexicographic order and canonical identity only after a full rider-relevant tie; show only the first verified alternative initially; never auto-select, borrow failed-path evidence, compare later tiers by convenience, or turn Accessible Route Only Off.
+4. Write failing underway-warning tests for the exact last-accessible-decision-point algorithm, immediate warning when reachability is Unknown or possibly passed, predeparture versus underway states, warning-first visual and assistive order, exact warning content, persistence across acknowledgement, navigation, offline/reconnect, progress changes, and lower-priority recovery, and clearing only after explicit selection of a still-passing verified replacement or owner resolution plus fresh full-path reevaluation. Prove restoration of one machine never silently clears the path warning.
+5. Write failing guidance tests for exact immutable coverage row, scope/orientation/objective match, outdated/wrong-platform/rerouted records, and complete visible/assistive omission when unavailable. Keep production guidance empty unless a reviewed record with provenance is supplied.
+6. Implement app-owned immutable path-package ingestion separate from GTFS station notes; optional official equipment/outage ingestion; exact equipment health, population, provisional-empty, inventory, restoration, and freshness decisions; structural reference state; fail-closed Accessible Route Only; impact classification, alternative selection, underway-warning state; and separate accessibility/guidance exposure locks.
+7. Add negative schema, API, component, and end-to-end assertions proving no crowding field or surface exists anywhere.
+8. Run focused tests and the full client/domain suites.
+9. Commit with `add honest subway accessibility tools`.
 
 ## Task 14: Add commute windows and material notifications
 
@@ -367,7 +386,7 @@
 - Create: `tests/e2e/commute.spec.ts`
 - Create: `tests/e2e/responsive.spec.ts`
 
-1. Write end-to-end tests for exact location allow/deny precedence, practical-walk cards and picker fallback, validation-mode Live and Scheduled boards, bypass suppression, Expected/Live overlap order, first-absence precision loss, Holding behavior, saved controls, map routing, complete active trip and manual progress, offline reload, synthetic-accessibility and empty-live-registry states, locked commute stages, and notification materiality decisions. Prove crowding is absent.
+1. Write end-to-end tests for exact location allow/deny precedence, practical-walk cards and picker fallback, validation-mode Live and Scheduled boards, bypass suppression, Expected/Live overlap order, first-absence precision loss, Holding behavior, saved controls, map routing, complete active trip and manual progress, offline reload, the exact five-stage gated reconnection sequence, stage-1 path/equipment, stage-2 service/transfer, stage-3 train-choice, and stage-4 required-guidance invalidation warnings before lower-priority content, the optional-guidance non-invalidation branch, synthetic-accessibility and empty-live-registry states, last-decision-point and immediate-warning branches, explicit verified-alternative selection, locked commute stages, and notification materiality decisions. Prove crowding is absent.
 2. Add mobile viewports, keyboard-only operation, reduced motion, 200% text zoom, 320-pixel reflow, and no-horizontal-scroll checks.
 3. Run `pnpm test`, `pnpm typecheck`, `pnpm build`, and `pnpm playwright test` from a clean app start.
 4. Start the production app, verify that locked public surfaces remain omitted, inspect representative validation-mode phone and desktop screens, exercise offline mode, and record exact results in `docs/testing.md`.
