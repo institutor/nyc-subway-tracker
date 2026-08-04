@@ -129,24 +129,40 @@ export function normalizeRealtimeFeed(
   const tripUpdates: PreliminaryTripUpdate[] = tripEntities.map(({ entityId, update }) =>
     normalizeTripUpdate(entityId, update, input));
   const identities = new Set<string>();
-  for (const update of tripUpdates) {
+  for (const [index, update] of tripUpdates.entries()) {
     if (identities.has(update.trainInstanceId)) throw new Error(`Duplicate normalized train instance ${update.trainInstanceId}`);
     identities.add(update.trainInstanceId);
+    for (const prior of tripUpdates.slice(0, index)) {
+      if (!coreServiceDateOverlaps(prior.trip, update.trip)) continue;
+      const classification = hasConflictingInstanceEvidence(prior.trip, update.trip) ? 'Conflicting' : 'Overlapping';
+      throw new Error(
+        `${classification} train candidates for core service-date trip identity ${update.trip.tripId}`,
+      );
+    }
   }
 
   const vehiclePositions = vehicleEntities.map(({ entityId, vehicle }) => normalizeVehicle(entityId, vehicle, input));
   for (const vehicle of vehiclePositions) {
-    const sameTripId = tripUpdates.filter((update) => update.trip.tripId === vehicle.trip.tripId);
-    const compatible = sameTripId.filter((update) => descriptorsCompatible(update.trip, vehicle.trip));
-    if (compatible.length > 1) throw new Error(`Vehicle entity ${vehicle.entityId} has ambiguous vehicle trip descriptor`);
-    if (compatible.length === 0) {
-      if (sameTripId.length > 0) throw new Error(`Vehicle entity ${vehicle.entityId} has contradictory vehicle trip descriptor`);
+    const exact = tripUpdates.filter((update) => update.trainInstanceId === vehicle.trainInstanceId);
+    if (exact.length > 1) throw new Error(`Vehicle entity ${vehicle.entityId} has ambiguous vehicle trip descriptor`);
+    if (exact.length === 0) {
+      const sameTripId = tripUpdates.filter((update) => update.trip.tripId === vehicle.trip.tripId);
+      const overlappingCore = sameTripId.filter((update) => coreServiceDateOverlaps(update.trip, vehicle.trip));
+      if (overlappingCore.length > 1) throw new Error(`Vehicle entity ${vehicle.entityId} has ambiguous vehicle trip descriptor`);
+      if (overlappingCore.some((update) => hasConflictingInstanceEvidence(update.trip, vehicle.trip))) {
+        throw new Error(
+          `Vehicle entity ${vehicle.entityId} has contradictory vehicle trip evidence and does not establish an exact train instance`,
+        );
+      }
+      if (sameTripId.length > 0) {
+        throw new Error(`Vehicle entity ${vehicle.entityId} does not establish an exact train instance`);
+      }
       throw new Error(`Vehicle entity ${vehicle.entityId} has no matching trip update`);
     }
-    if (compatible[0].vehicleProgress !== null) {
-      throw new Error(`Train instance ${compatible[0].trainInstanceId} has duplicate vehicle progress`);
+    if (exact[0].vehicleProgress !== null) {
+      throw new Error(`Train instance ${exact[0].trainInstanceId} has duplicate vehicle progress`);
     }
-    compatible[0].vehicleProgress = withoutTrip(vehicle);
+    exact[0].vehicleProgress = withoutTrip(vehicle);
   }
 
   const embeddedTrainAlerts = alertEntities.map(({ entityId, alert }) => normalizeEmbeddedAlert(entityId, alert, input));
@@ -343,14 +359,18 @@ function canonicalTrainInstanceId(trip: NormalizedTripDescriptor): string {
   return `nyct-train:sha256:${createHash('sha256').update(canonical).digest('hex')}`;
 }
 
-function descriptorsCompatible(left: NormalizedTripDescriptor, right: NormalizedTripDescriptor): boolean {
+function coreServiceDateOverlaps(left: NormalizedTripDescriptor, right: NormalizedTripDescriptor): boolean {
+  if (left.tripId !== right.tripId) return false;
+  return left.startDate === null || right.startDate === null || left.startDate === right.startDate;
+}
+
+function hasConflictingInstanceEvidence(left: NormalizedTripDescriptor, right: NormalizedTripDescriptor): boolean {
   const pairs: ReadonlyArray<readonly [unknown, unknown]> = [
-    [left.tripId, right.tripId], [left.routeId, right.routeId], [left.startDate, right.startDate],
-    [left.startTime, right.startTime], [left.directionId, right.directionId],
+    [left.routeId, right.routeId], [left.startTime, right.startTime], [left.directionId, right.directionId],
     [left.nyct.direction, right.nyct.direction], [left.nyct.trainId, right.nyct.trainId],
     [left.nyct.isAssigned, right.nyct.isAssigned],
   ];
-  return pairs.every(([a, b]) => a === null || b === null || a === b);
+  return pairs.some(([a, b]) => a !== null && b !== null && a !== b);
 }
 
 function withoutTrip(position: NormalizedVehiclePosition): NormalizedVehicleProgress {

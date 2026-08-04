@@ -121,7 +121,10 @@ await write('holding.pb', {
     {
       id: 'trip-update-unknown',
       tripUpdate: {
-        trip: { tripId: 'trip-unknown' },
+        trip: {
+          tripId: 'trip-unknown',
+          $unknowns: nyctTripUnknown({ isAssigned: false, direction: 3 }),
+        },
         stopTimeUpdate: [
           {
             stopId: 'A24S',

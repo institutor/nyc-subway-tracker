@@ -87,11 +87,12 @@ describe('official NYCT GTFS-Realtime decoding', () => {
       trainId: '0A 0200 FAR/207', isAssigned: true, direction: 'NORTH',
     });
     expect(unknown.tripUpdates[0].trip.nyct).toEqual({
-      trainId: null, isAssigned: null, direction: null,
+      trainId: null, isAssigned: false, direction: 'SOUTH',
     });
     expect(unknown.vehiclePositions[0].trip.nyct).toEqual({
       trainId: null, isAssigned: false, direction: 'SOUTH',
     });
+    expect(unknown.vehiclePositions[0].trainInstanceId).toBe(unknown.tripUpdates[0].trainInstanceId);
     expect(unknown.vehiclePositions[0]).toMatchObject({ vehicleId: null, currentStopSequence: null });
   });
 
@@ -137,13 +138,70 @@ describe('official NYCT GTFS-Realtime decoding', () => {
 });
 
 describe('canonical NYCT train identity and movement joins', () => {
-  test('joins recurring trip ids by complete coherent service-date and NYCT direction evidence', async () => {
+  test('joins vehicle movement only to an exact coherent normalized train instance', async () => {
+    const bytes = await readFile(fixture('current.pb'));
+    const snapshot = decodeRealtimeSnapshot(bytes, context(bytes));
+
+    expect(snapshot.vehiclePositions[0].trainInstanceId).toBe(snapshot.tripUpdates[0].trainInstanceId);
+    expect(snapshot.tripUpdates[0].vehicleProgress?.movementTimestamp).toEqual(new Date('2026-08-04T05:59:45.000Z'));
+  });
+
+  test('keeps recurring trip ids on genuinely different service dates distinct', async () => {
     const bytes = await readFile(fixture('current.pb'));
     const snapshot = decodeRealtimeSnapshot(bytes, context(bytes));
 
     expect(snapshot.tripUpdates[0].trainInstanceId).not.toBe(snapshot.tripUpdates[1].trainInstanceId);
-    expect(snapshot.tripUpdates[0].vehicleProgress?.movementTimestamp).toEqual(new Date('2026-08-04T05:59:45.000Z'));
+    expect(snapshot.tripUpdates[0].trip.startDate).toBe('20260803');
+    expect(snapshot.tripUpdates[1].trip.startDate).toBe('20260804');
     expect(snapshot.tripUpdates[1].vehicleProgress?.movementTimestamp).toEqual(new Date('2026-08-04T05:59:40.000Z'));
+  });
+
+  test('rejects a partial trip update descriptor paired with a fuller vehicle descriptor', async () => {
+    const feed = decodeFeed(await readFile(fixture('current.pb')));
+    feed.entity[0].tripUpdate!.trip!.$unknowns = undefined;
+    const bytes = encodeNyctFeed(feed);
+
+    expect(() => decodeRealtimeSnapshot(bytes, context(bytes))).toThrow(/vehicle.*exact train instance/i);
+  });
+
+  test('rejects a fuller trip update descriptor paired with a partial vehicle descriptor', async () => {
+    const feed = decodeFeed(await readFile(fixture('current.pb')));
+    feed.entity[1].vehicle!.trip!.$unknowns = undefined;
+    const bytes = encodeNyctFeed(feed);
+
+    expect(() => decodeRealtimeSnapshot(bytes, context(bytes))).toThrow(/vehicle.*exact train instance/i);
+  });
+
+  test('rejects partial and full trip candidates for the same core service-date identity without vehicles', async () => {
+    const feed = decodeFeed(await readFile(fixture('current.pb')));
+    feed.entity = feed.entity.filter((entity) => !entity.vehicle);
+    const partial = cloneEntity(feed.entity[0]);
+    partial.id = 'partial-overlap';
+    partial.tripUpdate!.trip!.$unknowns = undefined;
+    feed.entity.push(partial);
+    const bytes = encodeNyctFeed(feed);
+
+    expect(() => decodeRealtimeSnapshot(bytes, context(bytes))).toThrow(/overlapping train candidates.*core service-date/i);
+  });
+
+  test('rejects conflicting positive NYCT evidence for the same core service-date identity', async () => {
+    const cases = [
+      { id: 'conflicting-train', trainId: '0A 9999 FAR/207', isAssigned: true, direction: 1 },
+      { id: 'conflicting-assignment', trainId: '0A 0200 FAR/207', isAssigned: false, direction: 1 },
+      { id: 'conflicting-direction', trainId: '0A 0200 FAR/207', isAssigned: true, direction: 3 },
+    ] as const;
+    for (const conflict of cases) {
+      const feed = decodeFeed(await readFile(fixture('current.pb')));
+      feed.entity = feed.entity.filter((entity) => !entity.vehicle);
+      const conflicting = cloneEntity(feed.entity[0]);
+      conflicting.id = conflict.id;
+      conflicting.tripUpdate!.trip!.$unknowns = nyctTripUnknown(conflict);
+      feed.entity.push(conflicting);
+      const bytes = encodeNyctFeed(feed);
+
+      expect(() => decodeRealtimeSnapshot(bytes, context(bytes)))
+        .toThrow(/conflicting train candidates.*core service-date/i);
+    }
   });
 
   test('canonical train identity is independent of feed entity id', async () => {
@@ -189,6 +247,32 @@ describe('canonical NYCT train identity and movement joins', () => {
     });
     const contradictoryBytes = encodeNyctFeed(contradictory);
     expect(() => decodeRealtimeSnapshot(contradictoryBytes, context(contradictoryBytes))).toThrow(/contradictory vehicle trip/i);
+  });
+
+  test('a failed exact join cannot donate newer movement evidence to the last coherent snapshot', async () => {
+    const coherentBytes = await readFile(fixture('current.pb'));
+    const mismatched = decodeFeed(coherentBytes);
+    mismatched.entity[1].vehicle!.trip!.$unknowns = undefined;
+    mismatched.entity[1].vehicle!.timestamp = 1_785_823_199;
+    const mismatchedBytes = encodeNyctFeed(mismatched);
+    const group = source('group-a');
+    let call = 0;
+    const coordinator = createSourceCoordinator({
+      realtimeGroups: [group],
+      retrieve: async () => {
+        call += 1;
+        return call === 1 ? retrieved(group, coherentBytes) : retrieved(group, mismatchedBytes);
+      },
+    });
+
+    await coordinator.refreshAll();
+    const coherent = coordinator.getRealtimeSnapshot('group-a');
+    await coordinator.refreshAll();
+
+    expect(coordinator.getRealtimeSnapshot('group-a')).toBe(coherent);
+    expect(coordinator.getRealtimeSnapshot('group-a')?.tripUpdates[0].vehicleProgress?.movementTimestamp)
+      .toEqual(new Date('2026-08-04T05:59:45.000Z'));
+    expect(coordinator.getLastError('group-a')).toMatchObject({ message: expect.stringMatching(/exact train instance/i) });
   });
 });
 
@@ -365,6 +449,10 @@ describe('independent generation-safe source coordination', () => {
 
 function decodeFeed(bytes: Uint8Array) {
   return FeedMessage.decode(bytes);
+}
+
+function cloneEntity(entity: Parameters<typeof FeedEntity.encode>[0]) {
+  return FeedEntity.decode(FeedEntity.encode(entity).finish());
 }
 
 function context(
