@@ -3,6 +3,10 @@ import type { PrimaryOrderRow, PublicRouteOrderKind } from './arrival-order';
 import { canonicalStopCallIdentity } from './train-identity';
 import type { Direction, LiveArrival, ExpectedArrival, Provenance, RouteIdentity } from './types';
 import { compareCanonicalIdentity, normalizeCanonicalIdentity } from './canonical';
+import {
+  validateServiceChangeDecision,
+  type ServiceChangeDecision,
+} from './service-impact';
 
 export type TypedGateDisposition = 'eligible' | 'resolved-ineligible' | 'high-impact-unresolved' | 'quarantined';
 
@@ -37,6 +41,8 @@ export interface ArrivalAdmissionCandidate {
   readonly direction: Direction;
   readonly destination: string;
   readonly remainingStopCalls: readonly ArrivalStopCallEvidence[];
+  /** Structured Task 8 gate. When present it is evaluated before every feed-confidence gate. */
+  readonly serviceChangeGate?: ServiceChangeDecision;
   readonly serviceDisposition: TypedGateDisposition;
   readonly trackDisposition: TypedGateDisposition;
   readonly freshness: 'current' | 'degraded' | 'unavailable' | 'quarantined';
@@ -66,6 +72,8 @@ export type ArrivalAdmissionDecision =
       readonly disposition: string;
       readonly boardTreatment: 'resolved-suppression' | 'arrival-claim-unavailable' | 'quarantine-or-limitation'
         | 'feed-updating' | 'precision-withheld';
+      readonly riderCopy?: string;
+      readonly serviceChange?: ServiceChangeDecision;
     };
 
 export function admitArrivalCandidate(
@@ -96,7 +104,17 @@ export function admitArrivalCandidate(
     || normalizeCanonicalIdentity(candidate.destination) !== normalizeCanonicalIdentity(scope.destination)) {
     return rejected('destination-direction', 'resolved-board-context-mismatch');
   }
-  if (candidate.serviceDisposition !== 'eligible') return rejected('service', candidate.serviceDisposition);
+  const structuredServiceDisposition = candidate.serviceChangeGate?.disposition ?? 'eligible';
+  const serviceDisposition = worseDisposition(structuredServiceDisposition, candidate.serviceDisposition);
+  if (dispositionRank(candidate.trackDisposition) > dispositionRank(serviceDisposition)) {
+    return rejected('track', candidate.trackDisposition);
+  }
+  if (serviceDisposition !== 'eligible') {
+    if (candidate.serviceChangeGate && structuredServiceDisposition === serviceDisposition) {
+      return rejectedServiceChange(candidate.serviceChangeGate);
+    }
+    return rejected('service', serviceDisposition);
+  }
   if (candidate.trackDisposition !== 'eligible') return rejected('track', candidate.trackDisposition);
   if (candidate.freshness !== 'current') return rejected('freshness', candidate.freshness);
   if (candidate.identityDisposition !== 'coherent'
@@ -182,6 +200,7 @@ function validateCandidate(candidate: ArrivalAdmissionCandidate): void {
     || !['eligible', 'resolved-ineligible', 'high-impact-unresolved', 'quarantined'].includes(candidate.trackDisposition)) {
     throw new Error('Typed service and track gate dispositions are required');
   }
+  if (candidate.serviceChangeGate !== undefined) validateServiceChangeDecision(candidate.serviceChangeGate);
   if (!['current', 'degraded', 'unavailable', 'quarantined'].includes(candidate.freshness)
     || !['coherent', 'ambiguous', 'duplicate', 'quarantined'].includes(candidate.identityDisposition)
     || !['live-continuity', 'precision-withheld', 'hard-suppressed', 'live-readmission-eligible'].includes(candidate.recoveryDisposition)
@@ -246,6 +265,30 @@ function rejected(failedGate: AdmissionGate, disposition: string): ArrivalAdmiss
     boardTreatment = 'quarantine-or-limitation';
   }
   return Object.freeze({ kind: 'rejected', failedGate, disposition, boardTreatment });
+}
+
+function rejectedServiceChange(serviceChange: ServiceChangeDecision): ArrivalAdmissionDecision {
+  const boardTreatment = serviceChange.disposition === 'resolved-ineligible'
+    ? 'resolved-suppression' as const
+    : serviceChange.disposition === 'high-impact-unresolved'
+      ? 'arrival-claim-unavailable' as const
+      : 'quarantine-or-limitation' as const;
+  return Object.freeze({
+    kind: 'rejected' as const,
+    failedGate: 'service' as const,
+    disposition: serviceChange.disposition,
+    boardTreatment,
+    ...(serviceChange.riderCopy ? { riderCopy: serviceChange.riderCopy } : {}),
+    serviceChange,
+  });
+}
+
+function worseDisposition(left: TypedGateDisposition, right: TypedGateDisposition): TypedGateDisposition {
+  return dispositionRank(left) >= dispositionRank(right) ? left : right;
+}
+
+function dispositionRank(disposition: TypedGateDisposition): number {
+  return { eligible: 0, quarantined: 1, 'high-impact-unresolved': 2, 'resolved-ineligible': 3 }[disposition];
 }
 
 function freezeRow(candidate: ArrivalAdmissionCandidate, arrival: LiveArrival | ExpectedArrival, range: SupportedArrivalRange): PrimaryOrderRow {
