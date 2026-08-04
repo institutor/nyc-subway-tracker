@@ -16,6 +16,10 @@ export interface ArrivalBoardScope {
   readonly direction: Direction;
   readonly destination: string;
   readonly comparisonAt: Date;
+  /** Exact alert assessment captured once for this board computation. */
+  readonly serviceAssessmentAt?: Date;
+  /** Stable identity of the exact alert snapshot used by this board. */
+  readonly serviceAlertContextIdentity?: string;
 }
 
 export interface ArrivalStopCallEvidence {
@@ -109,7 +113,8 @@ export function admitArrivalCandidate(
   const serviceGateBinding = candidate.serviceChangeGate
     ? bindServiceChangeGate(candidate.serviceChangeGate, candidate, scope)
     : 'absent';
-  const structuredServiceDisposition = serviceGateBinding === 'mismatch' || serviceGateBinding === 'unissued'
+  const structuredServiceDisposition = serviceGateBinding === 'mismatch' || serviceGateBinding === 'epoch-mismatch'
+    || serviceGateBinding === 'unissued'
     ? 'quarantined'
     : serviceGateBinding === 'bound' ? candidate.serviceChangeGate!.disposition : 'eligible';
   const serviceDisposition = worseDisposition(structuredServiceDisposition, candidate.serviceDisposition);
@@ -122,6 +127,9 @@ export function admitArrivalCandidate(
     }
     if (serviceGateBinding === 'mismatch' && serviceDisposition === 'quarantined') {
       return rejected('service', 'claim-scope-mismatch');
+    }
+    if (serviceGateBinding === 'epoch-mismatch' && serviceDisposition === 'quarantined') {
+      return rejected('service', 'service-assessment-mismatch');
     }
     if (candidate.serviceChangeGate && serviceGateBinding === 'bound' && structuredServiceDisposition === serviceDisposition) {
       return rejectedServiceChange(candidate.serviceChangeGate);
@@ -193,6 +201,16 @@ function validateScope(scope: ArrivalBoardScope): void {
     throw new Error('Exact resolved arrival board scope is required');
   }
   validDate(scope.comparisonAt, 'board comparison instant');
+  const hasServiceAssessmentAt = scope.serviceAssessmentAt !== undefined;
+  const hasServiceContextIdentity = scope.serviceAlertContextIdentity !== undefined;
+  if (hasServiceAssessmentAt !== hasServiceContextIdentity) throw new Error('Incomplete board service assessment epoch');
+  if (hasServiceAssessmentAt) {
+    const serviceAssessmentAt = validDate(scope.serviceAssessmentAt!, 'board service assessment instant');
+    if (serviceAssessmentAt !== scope.comparisonAt.getTime()
+      || typeof scope.serviceAlertContextIdentity !== 'string' || !scope.serviceAlertContextIdentity) {
+      throw new Error('Invalid board service assessment epoch');
+    }
+  }
 }
 
 function validateCandidate(candidate: ArrivalAdmissionCandidate): void {
@@ -247,7 +265,7 @@ function bindServiceChangeGate(
   gate: ServiceChangeDecision,
   candidate: ArrivalAdmissionCandidate,
   scope: ArrivalBoardScope,
-): 'bound' | 'mismatch' | 'unissued' {
+): 'bound' | 'mismatch' | 'epoch-mismatch' | 'unissued' {
   try {
     validateServiceChangeDecision(gate);
   } catch {
@@ -255,6 +273,10 @@ function bindServiceChangeGate(
     // validation fails; Proxy traps and forged discriminants are untrusted.
     return 'unissued';
   }
+
+  if (!(scope.serviceAssessmentAt instanceof Date)
+    || scope.serviceAssessmentAt.getTime() !== gate.assessedAt.getTime()
+    || scope.serviceAlertContextIdentity !== gate.alertContextIdentity) return 'epoch-mismatch';
 
   const claim = gate.evaluatedClaim;
   const matches = candidate.serviceClaimId !== undefined

@@ -33,7 +33,7 @@ export interface ScheduleAgeClassification {
 }
 
 /** Shared Task 4 age rule for any accepted schedule-edition provenance. */
-export function classifyScheduleEditionAge(ageAnchor: Date, comparisonAt: Date): ScheduleAgeClassification {
+export function classifyScheduleAge(ageAnchor: Date, comparisonAt: Date): ScheduleAgeClassification {
   const anchorMs = validDate(ageAnchor, 'schedule edition age anchor').getTime();
   const comparisonMs = validDate(comparisonAt, 'authoritative schedule comparison').getTime();
   const ageMs = comparisonMs - anchorMs;
@@ -205,7 +205,7 @@ export class ScheduleEditionRegistry {
     const comparison = validDate(comparisonAt, 'authoritative schedule comparison').getTime();
     validateClaim(claim);
     const anchor = edition.publishedAt ?? edition.firstRetrievedAt;
-    const age = classifyScheduleEditionAge(new Date(anchor), new Date(comparison));
+    const age = classifyScheduleAge(new Date(anchor), new Date(comparison));
     const ageMs = age.ageMs;
     const lastRetrievalAgeMs = comparison - Date.parse(edition.retrievals.at(-1)!);
     const inCoverage = edition.coverage.some((mask) => maskContains(mask, claim));

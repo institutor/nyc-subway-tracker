@@ -86,6 +86,8 @@ export interface ServiceChangeDecision {
   readonly carriedForward: boolean;
   readonly recoveryCount: 0 | 1 | 2;
   readonly contextKind: AlertSnapshotDecision['kind'];
+  readonly assessedAt: Date;
+  readonly alertContextIdentity: string;
 }
 
 export interface ServiceChangeEvaluationInput {
@@ -118,17 +120,23 @@ const DESTRUCTIVE = new Set<ServiceAlertEvidence['declaredConsequence']>([
 // Exact object provenance is intentionally private and cannot survive copying,
 // serialization, descriptor cloning, symbols, or Proxy wrapping.
 const ISSUED_SERVICE_CHANGE_DECISIONS = new WeakSet<object>();
+const ISSUED_SERVICE_RISK_CARRYOVERS = new WeakSet<object>();
 
 export function evaluateServiceChanges(input: ServiceChangeEvaluationInput): ServiceChangeDecision {
   validateEvaluationInput(input);
   const evaluatedClaim = freezeClaim(input.claim);
   const claimIdentity = serviceClaimIdentity(evaluatedClaim);
-  const priorRisk = input.priorRisk && input.priorRisk.claimIdentity === claimIdentity ? input.priorRisk : null;
+  const priorRiskBinding = bindPriorServiceRisk(input.priorRisk, claimIdentity);
+  const priorRisk = priorRiskBinding.kind === 'bound' ? priorRiskBinding.risk : null;
 
   if (input.snapshot.kind !== 'current') {
-    if (priorRisk) return carryForward(priorRisk, evaluatedClaim, input.snapshot.kind, 0);
+    if (priorRiskBinding.kind === 'invalid') {
+      return freezeDecision('quarantine-or-limitation', 'quarantined', evaluatedClaim, SERVICE_CHANGE_LIMITATION_COPY,
+        [], [], [], [], [], null, false, 0, input.snapshot);
+    }
+    if (priorRisk) return carryForward(priorRisk, evaluatedClaim, input.snapshot, 0);
     return freezeDecision('eligible-context', 'eligible', evaluatedClaim, null, [], [], [], [], [], null, false, 0,
-      input.snapshot.kind);
+      input.snapshot);
   }
 
   const alerts = canonicalAlerts(input.snapshot.alerts);
@@ -151,21 +159,31 @@ export function evaluateServiceChanges(input: ServiceChangeEvaluationInput): Ser
   const feedTimestamp = input.snapshot.feedTimestamp;
   if (priorRisk && feedTimestamp && feedTimestamp.getTime() <= priorRisk.adverseAt.getTime()) {
     const reset = resetRiskBoundary(priorRisk, evaluatedClaim, input.snapshot.assessedAt);
-    return carryForward(reset, evaluatedClaim, input.snapshot.kind, 0, contextDetails);
+    return carryForward(reset, evaluatedClaim, input.snapshot, 0, contextDetails);
   }
 
   if (hard.length > 0) {
     const riderCopy = hard.map((item) => item.scope.official.header).filter(Boolean).sort(compareText)[0]
       ?? 'Service change—this train is not serving this stop.';
     return adverseDecision('resolved-suppression', 'resolved-ineligible', evaluatedClaim, riderCopy, officialDetails,
-      contextDetails, rawOfficialAudit, auditEvidence, adverseAt, input.snapshot.kind);
+      contextDetails, rawOfficialAudit, auditEvidence, adverseAt, input.snapshot);
+  }
+
+  if (priorRiskBinding.kind === 'invalid') {
+    if (unavailable.length > 0) {
+      return adverseDecision('arrival-claim-unavailable', 'high-impact-unresolved', evaluatedClaim,
+        SERVICE_CHANGE_UNAVAILABLE_COPY, officialDetails, contextDetails, rawOfficialAudit, auditEvidence, adverseAt,
+        input.snapshot);
+    }
+    return freezeDecision('quarantine-or-limitation', 'quarantined', evaluatedClaim, SERVICE_CHANGE_LIMITATION_COPY,
+      officialDetails, contextDetails, rawOfficialAudit, auditEvidence, [], null, false, 0, input.snapshot);
   }
 
   // A current ambiguity cannot clear a prior hard veto. It starts a new recovery
   // boundary so updates captured before the contradiction cannot be donated later.
   if (priorRisk?.kind === 'resolved-suppression' && (unavailable.length > 0 || quarantined.length > 0)) {
     const reset = resetRiskBoundary(priorRisk, evaluatedClaim, adverseAt);
-    return carryForward(reset, evaluatedClaim, input.snapshot.kind, 0, contextDetails);
+    return carryForward(reset, evaluatedClaim, input.snapshot, 0, contextDetails);
   }
 
   if (priorRisk?.kind === 'resolved-suppression') {
@@ -175,12 +193,12 @@ export function evaluateServiceChanges(input: ServiceChangeEvaluationInput): Ser
   if (unavailable.length > 0) {
     return adverseDecision('arrival-claim-unavailable', 'high-impact-unresolved', evaluatedClaim,
       SERVICE_CHANGE_UNAVAILABLE_COPY, officialDetails, contextDetails, rawOfficialAudit, auditEvidence, adverseAt,
-      input.snapshot.kind);
+      input.snapshot);
   }
 
   if (priorRisk?.kind === 'arrival-claim-unavailable' && quarantined.length > 0) {
     const reset = resetRiskBoundary(priorRisk, evaluatedClaim, adverseAt);
-    return carryForward(reset, evaluatedClaim, input.snapshot.kind, 0, contextDetails);
+    return carryForward(reset, evaluatedClaim, input.snapshot, 0, contextDetails);
   }
 
   if (priorRisk?.kind === 'arrival-claim-unavailable') {
@@ -189,11 +207,11 @@ export function evaluateServiceChanges(input: ServiceChangeEvaluationInput): Ser
 
   if (quarantined.length > 0) {
     return freezeDecision('quarantine-or-limitation', 'quarantined', evaluatedClaim, SERVICE_CHANGE_LIMITATION_COPY,
-      officialDetails, contextDetails, rawOfficialAudit, auditEvidence, [], null, false, 0, input.snapshot.kind);
+      officialDetails, contextDetails, rawOfficialAudit, auditEvidence, [], null, false, 0, input.snapshot);
   }
 
   return freezeDecision('eligible-context', 'eligible', evaluatedClaim, null, officialDetails, contextDetails,
-    rawOfficialAudit, auditEvidence, [], null, false, 0, input.snapshot.kind);
+    rawOfficialAudit, auditEvidence, [], null, false, 0, input.snapshot);
 }
 
 export function serviceChangeClaimDisposition(decision: ServiceChangeDecision): ServiceChangeGateDisposition {
@@ -217,7 +235,9 @@ export function validateServiceChangeDecision(decision: ServiceChangeDecision): 
     || !Array.isArray(decision.auditEvidence) || !Object.isFrozen(decision.auditEvidence)
     || !Array.isArray(decision.suppressedProducts) || !Object.isFrozen(decision.suppressedProducts)
     || typeof decision.carriedForward !== 'boolean' || ![0, 1, 2].includes(decision.recoveryCount)
-    || !['current', 'stale', 'missing', 'failed', 'quarantined'].includes(decision.contextKind)) {
+    || !['current', 'stale', 'missing', 'failed', 'quarantined'].includes(decision.contextKind)
+    || !(decision.assessedAt instanceof Date) || !Number.isFinite(decision.assessedAt.getTime())
+    || typeof decision.alertContextIdentity !== 'string' || !decision.alertContextIdentity) {
     throw new Error('Invalid issued service-change decision');
   }
   const expectedDisposition: Record<ServiceChangeDecisionKind, ServiceChangeGateDisposition> = {
@@ -249,18 +269,14 @@ export function validateServiceChangeDecision(decision: ServiceChangeDecision): 
   }
 
   const risk = decision.carryover;
-  if (!risk || !Object.isFrozen(risk) || risk.kind !== decision.kind
-    || risk.claimIdentity !== decision.claimIdentity || !isExactClaim(risk.evaluatedClaim)
-    || !Object.isFrozen(risk.evaluatedClaim)
-    || serviceClaimIdentity(risk.evaluatedClaim) !== decision.claimIdentity
-    || !(risk.adverseAt instanceof Date) || !Number.isFinite(risk.adverseAt.getTime())
-    || typeof decision.riderCopy !== 'string' || !decision.riderCopy
-    || risk.riderCopy !== decision.riderCopy || !hasExactSuppressedProducts(risk.suppressedProducts)
-    || !Array.isArray(risk.officialDetails) || !Array.isArray(risk.rawOfficialAudit)
-    || !Array.isArray(risk.auditEvidence) || decision.recoveryCount === 2
-    || (!decision.carriedForward && decision.recoveryCount !== 0)) {
+  try {
+    validateServiceRiskCarryover(risk, decision.claimIdentity);
+  } catch {
     throw new Error('Invalid service-change carryover claim');
   }
+  if (!risk || risk.kind !== decision.kind || typeof decision.riderCopy !== 'string' || !decision.riderCopy
+    || risk.riderCopy !== decision.riderCopy || decision.recoveryCount === 2
+    || (!decision.carriedForward && decision.recoveryCount !== 0)) throw new Error('Invalid service-change carryover claim');
 }
 
 function hasExactSuppressedProducts(products: readonly ClaimSuppressedProduct[]): boolean {
@@ -338,12 +354,12 @@ function evaluateAlert(
 }
 
 function destructiveFieldsAgree(alert: ServiceAlertEvidence, official: ResolvedOfficialAlertDetails): boolean {
-  const text = `${official.header} ${official.description}`.toLocaleLowerCase('en-US');
+  const text = normalizeDestructiveText(`${official.header} ${official.description}`);
   if (contradictsDestructiveEffect(text)) return false;
   switch (alert.declaredConsequence) {
     case 'local-running-express':
       return ['MODIFIED_SERVICE', 'NO_SERVICE'].includes(alert.structuredEffect)
-        && /\b(?:trains?\s+)?(?:run|runs|running)\s+express\b|\bnot\s+stopping\b|\bskip(?:s|ping)?\b/.test(text);
+        && /\b(?:trains?\s+)?(?:run|runs|running)\s+express\b|\bnot\s+stopping\b|\bskip(?:s|ped|ping)?\b|\bbypass(?:es|ed|ing)?\b/.test(text);
     case 'reroute':
       return alert.structuredEffect === 'MODIFIED_SERVICE'
         && /\brerout(?:e|ed|ing)\b|\brunn?ing\s+on\b|\brun(?:s|ning)?\s+via\b|\bvia\s+[a-z0-9]/.test(text);
@@ -356,14 +372,30 @@ function destructiveFieldsAgree(alert: ServiceAlertEvidence, official: ResolvedO
         && /\bsuspend(?:ed|ing|s)?\b|\bno\s+[a-z0-9 -]*trains?\b|\bnot\s+running\b/.test(text);
     case 'station-closure':
       return alert.structuredEffect === 'NO_SERVICE'
-        && /\bstation\s+(?:is\s+)?closed\b|\btrains?\s+(?:are\s+)?not\s+stopping\b|\btrains?\s+(?:skip|skips|are\s+skipping)\b|\bskip(?:ping)?\s+(?:this\s+|the\s+)?(?:station|stop)\b/.test(text);
+        && /\bstation\s+(?:is\s+)?closed\b|\btrains?\s+(?:are\s+)?not\s+stopping\b|\btrains?\s+(?:do|does|did|will|would|can|could|shall|should|may|might)\s+not\s+stop\b|\btrains?\s+(?:skip|skips|are\s+skipping)\b|\bskip(?:ping)?\s+(?:this\s+|the\s+)?(?:station|stop)\b/.test(text);
     default:
       return false;
   }
 }
 
 function contradictsDestructiveEffect(text: string): boolean {
-  return /\bnot\s+closed\b|\bremain(?:s|ed|ing)?\s+open\b|\bcontinue(?:s|d|ing)?\s+(?:to\s+)?(?:stop|stopping|serve|serving|make)\b|\ball\s+[a-z0-9 -]*stops?\s+continue\b|\ball\s+(?:scheduled\s+)?stops?\b|\bskip(?:s|ping)?\s+no\s+stops?\b|\b(?:do|does)\s+not\s+(?:skip|terminate|end\s+early|run\s+via|reroute|bypass)\b|\bnot\s+(?:bypass(?:ing|ed)?|rerout(?:ed|ing)?|running\s+via)\b|\bnormal\s+service\s+continue(?:s|d|ing)?\b/.test(text);
+  const destructivePredicate = '(?:skip(?:s|ped|ping)?|bypass(?:es|ed|ing)?|terminat(?:e|es|ed|ing)|end(?:s|ed|ing)? early|rerout(?:e|es|ed|ing)|run(?:s|ning)? via|clos(?:e|es|ed|ing)|suspend(?:s|ed|ing)?)';
+  const auxiliary = '(?:do|does|did|will|would|can|could|shall|should|may|might|is|are|was|were|has|have|had)';
+  const auxiliaryNegation = new RegExp(`\\b${auxiliary}\\s+not\\s+(?:(?:be|being)\\s+)?${destructivePredicate}\\b`);
+  const directNegation = new RegExp(`\\bnot\\s+(?:(?:be|being)\\s+)?${destructivePredicate}\\b`);
+  const neverNegation = new RegExp(`\\bnever\\s+(?:(?:be|being)\\s+)?${destructivePredicate}\\b`);
+  const withoutNegation = /\bwithout\s+(?:(?:any|ever)\s+)?(?:skipping|bypassing|terminating|ending\s+early|running\s+via|rerouting|closing|suspending|a\s+(?:reroute|closure|suspension))\b/;
+  const noPredicate = /\bno\s+(?:(?:scheduled\s+)?stops?\s+(?:(?:are|were|will|would|can|could|shall|should|may|might)\s+(?:be\s+)?)?(?:skipped|bypassed)|bypasses|(?:early\s+)?terminations?|reroutes?|station\s+closures?|closures?|service\s+suspensions?|suspensions?)\b/;
+  return auxiliaryNegation.test(text) || directNegation.test(text) || neverNegation.test(text)
+    || withoutNegation.test(text) || noPredicate.test(text)
+    || /\bnot\s+closed\b|\bremain(?:s|ed|ing)?\s+open\b|\bcontinue(?:s|d|ing)?\s+(?:to\s+)?(?:stop|stopping|serve|serving|make)\b|\ball\s+[a-z0-9 ]*stops?\s+continue\b|\ball\s+(?:scheduled\s+)?stops?\b|\bskip(?:s|ping)?\s+no\s+stops?\b|\bnormal\s+service\s+continue(?:s|d|ing)?\b/.test(text);
+}
+
+function normalizeDestructiveText(text: string): string {
+  return text.normalize('NFKC').toLocaleLowerCase('en-US')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .replace(/\s+/gu, ' ')
+    .trim();
 }
 
 function hasNarrowClaimScope(alert: ServiceAlertEvidence, scope: AlertScopeDecision): boolean {
@@ -498,6 +530,19 @@ function stableAuditFields(fields: Readonly<Record<string, unknown>> | undefined
   return stableValue(fields);
 }
 
+function alertSnapshotIdentity(snapshot: AlertSnapshotDecision): string {
+  const evidence = snapshot.alerts.map((item) => encodeCanonicalStringTuple([
+    normalizeBoundedIdentity(item.alertId, 'alert'),
+    alertSignature(item),
+    stableAuditFields(item.rawAuditFields),
+  ])).sort(compareText);
+  return encodeCanonicalStringTuple([
+    snapshot.kind,
+    snapshot.feedTimestamp?.toISOString() ?? null,
+    ...evidence,
+  ]);
+}
+
 function stableValue(value: unknown): string {
   if (value === null || typeof value !== 'object') return JSON.stringify(value);
   if (Array.isArray(value)) return `[${value.map(stableValue).join(',')}]`;
@@ -538,11 +583,11 @@ function adverseDecision(
   rawOfficialAudit: readonly RawOfficialAlertAudit[],
   auditEvidence: readonly ServiceAuditEvidence[],
   adverseAt: Date,
-  contextKind: AlertSnapshotDecision['kind'],
+  snapshot: AlertSnapshotDecision,
 ): ServiceChangeDecision {
   const carryover = freezeRisk(kind, evaluatedClaim, adverseAt, riderCopy, officialDetails, rawOfficialAudit, auditEvidence);
   return freezeDecision(kind, disposition, evaluatedClaim, riderCopy, officialDetails, contextDetails, rawOfficialAudit,
-    auditEvidence, CLAIM_SUPPRESSED_PRODUCTS, carryover, false, 0, contextKind);
+    auditEvidence, CLAIM_SUPPRESSED_PRODUCTS, carryover, false, 0, snapshot);
 }
 
 function recoverOrCarry(
@@ -555,24 +600,24 @@ function recoverOrCarry(
   auditEvidence: readonly ServiceAuditEvidence[],
 ): ServiceChangeDecision {
   if (input.snapshot.assessedAt.getTime() <= risk.adverseAt.getTime()) {
-    return carryForward(risk, evaluatedClaim, input.snapshot.kind, 0, contextDetails);
+    return carryForward(risk, evaluatedClaim, input.snapshot, 0, contextDetails);
   }
   const recoveryCount = countQualifyingRecovery(input.recoveryUpdates ?? [], risk.adverseAt, input.snapshot.assessedAt);
-  if (recoveryCount < 2) return carryForward(risk, evaluatedClaim, input.snapshot.kind, recoveryCount, contextDetails);
+  if (recoveryCount < 2) return carryForward(risk, evaluatedClaim, input.snapshot, recoveryCount, contextDetails);
   return freezeDecision('eligible-context', 'eligible', evaluatedClaim, null, officialDetails, contextDetails,
-    rawOfficialAudit, auditEvidence, [], null, false, 2, input.snapshot.kind);
+    rawOfficialAudit, auditEvidence, [], null, false, 2, input.snapshot);
 }
 
 function carryForward(
   risk: ServiceRiskCarryover,
   evaluatedClaim: ServiceClaimScope,
-  contextKind: AlertSnapshotDecision['kind'],
+  snapshot: AlertSnapshotDecision,
   recoveryCount: 0 | 1 | 2,
   contextDetails: readonly ServiceContextDetail[] = [],
 ): ServiceChangeDecision {
   const disposition = risk.kind === 'resolved-suppression' ? 'resolved-ineligible' : 'high-impact-unresolved';
   return freezeDecision(risk.kind, disposition, evaluatedClaim, risk.riderCopy, risk.officialDetails, contextDetails,
-    risk.rawOfficialAudit, risk.auditEvidence, risk.suppressedProducts, risk, true, recoveryCount, contextKind);
+    risk.rawOfficialAudit, risk.auditEvidence, risk.suppressedProducts, risk, true, recoveryCount, snapshot);
 }
 
 function resetRiskBoundary(
@@ -596,7 +641,7 @@ function freezeRisk(
 ): ServiceRiskCarryover {
   const claim = freezeClaim(evaluatedClaim);
   const adverseAtMs = validDate(adverseAt, 'adverse service-change instant');
-  const risk = {
+  const risk = Object.freeze({
     kind,
     claimIdentity: serviceClaimIdentity(claim),
     evaluatedClaim: claim,
@@ -606,8 +651,48 @@ function freezeRisk(
     rawOfficialAudit: Object.freeze([...rawOfficialAudit]),
     auditEvidence: Object.freeze([...auditEvidence]),
     suppressedProducts: CLAIM_SUPPRESSED_PRODUCTS,
-  } satisfies ServiceRiskCarryover;
-  return Object.freeze(risk);
+  } satisfies ServiceRiskCarryover);
+  ISSUED_SERVICE_RISK_CARRYOVERS.add(risk);
+  return risk;
+}
+
+type PriorServiceRiskBinding =
+  | { readonly kind: 'absent' }
+  | { readonly kind: 'invalid' }
+  | { readonly kind: 'bound'; readonly risk: ServiceRiskCarryover };
+
+function bindPriorServiceRisk(
+  risk: ServiceRiskCarryover | null | undefined,
+  expectedClaimIdentity: string,
+): PriorServiceRiskBinding {
+  if (risk == null) return { kind: 'absent' };
+  try {
+    validateServiceRiskCarryover(risk, expectedClaimIdentity);
+    return { kind: 'bound', risk };
+  } catch {
+    return { kind: 'invalid' };
+  }
+}
+
+function validateServiceRiskCarryover(
+  risk: ServiceRiskCarryover | null,
+  expectedClaimIdentity: string,
+): asserts risk is ServiceRiskCarryover {
+  if (!risk || typeof risk !== 'object' || !ISSUED_SERVICE_RISK_CARRYOVERS.has(risk)) {
+    throw new Error('Expected an issued service risk carryover');
+  }
+  if (!Object.isFrozen(risk) || !['resolved-suppression', 'arrival-claim-unavailable'].includes(risk.kind)
+    || risk.claimIdentity !== expectedClaimIdentity || !isExactClaim(risk.evaluatedClaim)
+    || !Object.isFrozen(risk.evaluatedClaim) || serviceClaimIdentity(risk.evaluatedClaim) !== expectedClaimIdentity
+    || !(risk.adverseAt instanceof Date) || !Number.isFinite(risk.adverseAt.getTime())
+    || typeof risk.riderCopy !== 'string' || !risk.riderCopy
+    || !Array.isArray(risk.officialDetails) || !Object.isFrozen(risk.officialDetails)
+    || !Array.isArray(risk.rawOfficialAudit) || !Object.isFrozen(risk.rawOfficialAudit)
+    || !Array.isArray(risk.auditEvidence) || !Object.isFrozen(risk.auditEvidence)
+    || !Array.isArray(risk.suppressedProducts) || !Object.isFrozen(risk.suppressedProducts)
+    || !hasExactSuppressedProducts(risk.suppressedProducts)) {
+    throw new Error('Invalid issued service risk carryover');
+  }
 }
 
 function freezeDecision(
@@ -623,9 +708,11 @@ function freezeDecision(
   carryover: ServiceRiskCarryover | null,
   carriedForward: boolean,
   recoveryCount: 0 | 1 | 2,
-  contextKind: AlertSnapshotDecision['kind'],
+  snapshot: AlertSnapshotDecision,
 ): ServiceChangeDecision {
   const claim = freezeClaim(evaluatedClaim);
+  const assessedAtMs = validDate(snapshot.assessedAt, 'service-change assessment instant');
+  const alertContextIdentity = alertSnapshotIdentity(snapshot);
   const decision = Object.freeze({
     kind,
     disposition,
@@ -640,7 +727,9 @@ function freezeDecision(
     carryover,
     carriedForward,
     recoveryCount,
-    contextKind,
+    contextKind: snapshot.kind,
+    get assessedAt(): Date { return new Date(assessedAtMs); },
+    alertContextIdentity,
   });
   ISSUED_SERVICE_CHANGE_DECISIONS.add(decision);
   return decision;

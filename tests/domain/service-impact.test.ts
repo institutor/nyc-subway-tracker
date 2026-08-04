@@ -12,6 +12,7 @@ import {
   countQualifyingRecovery,
   evaluateServiceChanges,
   type ServiceRecoveryUpdate,
+  type ServiceRiskCarryover,
 } from '../../src/shared/domain/service-impact';
 
 const BASE = new Date('2026-08-04T12:00:00.000Z');
@@ -226,6 +227,91 @@ describe('authoritative alert currency and temporal scope', () => {
     expect(evaluateServiceChanges({ snapshot: clean, claim: claim(), priorRisk: carried.carryover,
       recoveryUpdates: [update('new-one', 21), update('new-two', 22)] }))
       .toMatchObject({ kind: 'eligible-context', recoveryCount: 2 });
+  });
+
+  test('rejects cloned, rewritten, proxied, and cross-claim service risk lifecycle state', () => {
+    const hardSnapshot = classifyAlertSnapshot({
+      status: 'accepted', feedTimestamp: at(10), alerts: [alert({
+        declaredConsequence: 'station-closure', structuredEffect: 'NO_SERVICE',
+        selectors: [{ selectorId: 'issued-risk', routeId: 'F', exactDirectionalStopId: 'A24N' }],
+        official: { headerRaw: 'Station closed', descriptionRaw: 'F trains are not stopping here.' },
+      })],
+    }, at(10));
+    const hard = evaluateServiceChanges({ snapshot: hardSnapshot, claim: claim() });
+    if (!hard.carryover) throw new Error('hard fixture must carry risk');
+    expect(Object.isFrozen(hard.carryover)).toBe(true);
+    expect(Object.isFrozen(hard.carryover.evaluatedClaim)).toBe(true);
+
+    const descriptorCopy = Object.freeze(Object.create(
+      Object.getPrototypeOf(hard.carryover),
+      Object.getOwnPropertyDescriptors(hard.carryover),
+    )) as ServiceRiskCarryover;
+    const rewritten = Object.freeze({ ...hard.carryover, adverseAt: BASE }) as ServiceRiskCarryover;
+    const forgedRisks = [
+      { ...hard.carryover },
+      Object.freeze({ ...hard.carryover }),
+      structuredClone(hard.carryover),
+      JSON.parse(JSON.stringify(hard.carryover)) as ServiceRiskCarryover,
+      descriptorCopy,
+      new Proxy(hard.carryover, {}),
+      rewritten,
+    ] as readonly ServiceRiskCarryover[];
+    const update = (evidenceId: string, seconds: number): ServiceRecoveryUpdate => ({
+      evidenceId, sourceTimestamp: at(seconds), currentFeed: true, coherentIdentity: true,
+      exactDirectionalStop: true, coherentPath: true, noCurrentVeto: true,
+    });
+    const clear = classifyAlertSnapshot({ status: 'accepted', feedTimestamp: at(20), alerts: [] }, at(20));
+    for (const priorRisk of forgedRisks) {
+      expect(() => evaluateServiceChanges({
+        snapshot: clear, claim: claim(), priorRisk,
+        recoveryUpdates: [update('forged-one', 1), update('forged-two', 2)],
+      })).not.toThrow();
+      expect(evaluateServiceChanges({
+        snapshot: clear, claim: claim(), priorRisk,
+        recoveryUpdates: [update('forged-one', 1), update('forged-two', 2)],
+      })).toMatchObject({
+        kind: 'quarantine-or-limitation', disposition: 'quarantined', recoveryCount: 0, carryover: null,
+      });
+    }
+
+    const otherClaimRisk = evaluateServiceChanges({
+      snapshot: hardSnapshot,
+      claim: claim({ claimId: 'other-claim' }),
+    }).carryover;
+    if (!otherClaimRisk) throw new Error('cross-claim fixture must carry risk');
+    expect(evaluateServiceChanges({ snapshot: clear, claim: claim(), priorRisk: otherClaimRisk })).toMatchObject({
+      kind: 'quarantine-or-limitation', disposition: 'quarantined', carryover: null,
+    });
+  });
+
+  test('allows only an issued same-claim service lifecycle to release after a valid consecutive pair', () => {
+    const hard = evaluateServiceChanges({
+      snapshot: classifyAlertSnapshot({
+        status: 'accepted', feedTimestamp: at(10), alerts: [alert({
+          declaredConsequence: 'full-suspension', structuredEffect: 'NO_SERVICE',
+          official: { headerRaw: 'F service suspended', descriptionRaw: 'No F trains.' },
+        })],
+      }, at(10)),
+      claim: claim(),
+    });
+    if (!hard.carryover) throw new Error('hard fixture must carry risk');
+    const update = (evidenceId: string, seconds: number, currentFeed = true): ServiceRecoveryUpdate => ({
+      evidenceId, sourceTimestamp: at(seconds), currentFeed, coherentIdentity: true,
+      exactDirectionalStop: true, coherentPath: true, noCurrentVeto: true,
+    });
+    const clear = classifyAlertSnapshot({ status: 'accepted', feedTimestamp: at(20), alerts: [] }, at(20));
+    expect(evaluateServiceChanges({ snapshot: clear, claim: claim(), priorRisk: hard.carryover,
+      recoveryUpdates: [update('equal', 10), update('one', 11)] })).toMatchObject({
+      kind: 'resolved-suppression', recoveryCount: 1,
+    });
+    expect(evaluateServiceChanges({ snapshot: clear, claim: claim(), priorRisk: hard.carryover,
+      recoveryUpdates: [update('one', 11), update('broken', 12, false), update('two', 13)] })).toMatchObject({
+      kind: 'resolved-suppression', recoveryCount: 1,
+    });
+    expect(evaluateServiceChanges({ snapshot: clear, claim: claim(), priorRisk: hard.carryover,
+      recoveryUpdates: [update('one', 11), update('two', 12)] })).toMatchObject({
+      kind: 'eligible-context', recoveryCount: 2,
+    });
   });
 });
 
@@ -579,6 +665,74 @@ describe('service consequence and deterministic disposition', () => {
     });
     expect(evaluateServiceChanges({ snapshot: snapshot([positiveBypass]), claim: claim() }).kind).toBe('resolved-suppression');
     expect(evaluateServiceChanges({ snapshot: snapshot([positiveClosure]), claim: claim() }).kind).toBe('resolved-suppression');
+  });
+
+  test('rejects modal, progressive, never, no-stop, and without destructive negations while preserving real vetoes', () => {
+    const exactSelector = [{ selectorId: 'exact', routeId: 'F', exactDirectionalStopId: 'A24N' }];
+    const segmentSelector = [{ selectorId: 'segment', routeId: 'F', exactDirectionalSegmentStopIds: ['A24N'] }];
+    const destructive = (
+      alertId: string,
+      declaredConsequence: ServiceAlertEvidence['declaredConsequence'],
+      structuredEffect: ServiceAlertEvidence['structuredEffect'],
+      descriptionRaw: string,
+      useSegment = false,
+    ): ServiceAlertEvidence => alert({
+      alertId,
+      declaredConsequence,
+      structuredEffect,
+      selectors: useSegment ? segmentSelector : exactSelector,
+      official: { headerRaw: 'Service change', descriptionRaw },
+    });
+
+    const negated: ServiceAlertEvidence[] = [];
+    for (const modal of ['will', 'would', 'can', 'could', 'shall', 'should', 'may', 'might']) {
+      negated.push(destructive(`skip-${modal}`, 'local-running-express', 'MODIFIED_SERVICE',
+        `F trains ${modal.toUpperCase()}\u00a0NOT—SKIP 14 St.`, true));
+    }
+    negated.push(
+      destructive('skip-progressive', 'local-running-express', 'MODIFIED_SERVICE', 'F trains are not skipping 14 St.', true),
+      destructive('skip-never', 'local-running-express', 'MODIFIED_SERVICE', 'F trains never skip 14 St.', true),
+      destructive('skip-no-stops-passive', 'local-running-express', 'MODIFIED_SERVICE', 'No stops are skipped.', true),
+      destructive('skip-without', 'local-running-express', 'MODIFIED_SERVICE', 'F trains continue without skipping 14 St.', true),
+      destructive('bypass-modal', 'local-running-express', 'MODIFIED_SERVICE', 'F trains will not bypass 14 St.', true),
+      destructive('terminate-modal', 'short-turn', 'MODIFIED_SERVICE', 'F trains would not terminate at 14 St.', true),
+      destructive('terminate-progressive', 'short-turn', 'MODIFIED_SERVICE', 'F trains were not terminating at 14 St.', true),
+      destructive('terminate-never', 'short-turn', 'MODIFIED_SERVICE', 'F trains never terminate at 14 St.', true),
+      destructive('terminate-without', 'short-turn', 'MODIFIED_SERVICE', 'F trains continue without terminating at 14 St.', true),
+      destructive('via-modal', 'reroute', 'MODIFIED_SERVICE', 'F trains might not run via E.'),
+      destructive('via-progressive', 'reroute', 'MODIFIED_SERVICE', 'F trains are not running via E.'),
+      destructive('via-never', 'reroute', 'MODIFIED_SERVICE', 'F trains never run via E.'),
+      destructive('via-without', 'reroute', 'MODIFIED_SERVICE', 'F trains continue without running via E.'),
+      destructive('closure-modal', 'station-closure', 'NO_SERVICE', 'The station will not be closed.'),
+      destructive('closure-progressive', 'station-closure', 'NO_SERVICE', 'The station is not closing.'),
+      destructive('closure-never', 'station-closure', 'NO_SERVICE', 'The station never closes.'),
+      destructive('closure-without', 'station-closure', 'NO_SERVICE', 'Work continues without closing the station.'),
+      destructive('suspension-modal', 'full-suspension', 'NO_SERVICE', 'F service should not be suspended.'),
+      destructive('suspension-progressive', 'full-suspension', 'NO_SERVICE', 'F service is not being suspended.'),
+      destructive('suspension-never', 'full-suspension', 'NO_SERVICE', 'F service is never suspended.'),
+      destructive('suspension-without', 'full-suspension', 'NO_SERVICE', 'Work continues without suspending F service.'),
+    );
+    for (const item of negated) {
+      expect(evaluateServiceChanges({ snapshot: snapshot([item]), claim: claim() })).toMatchObject({
+        kind: 'quarantine-or-limitation', disposition: 'quarantined',
+      });
+    }
+
+    const positives = [
+      destructive('positive-bypass-verb', 'local-running-express', 'MODIFIED_SERVICE',
+        'F trains bypass 14 St.', true),
+      destructive('positive-does-not-stop', 'station-closure', 'NO_SERVICE',
+        'F trains do not stop at 14 St.'),
+      destructive('positive-will-not-stop', 'station-closure', 'NO_SERVICE',
+        'F trains will not stop at 14 St.'),
+      destructive('positive-closure', 'station-closure', 'NO_SERVICE', 'Station is closed.'),
+      destructive('positive-suspension', 'full-suspension', 'NO_SERVICE', 'F service is suspended.'),
+      destructive('positive-short-turn', 'short-turn', 'MODIFIED_SERVICE', 'F trains terminate at 14 St.', true),
+      destructive('positive-reroute', 'reroute', 'MODIFIED_SERVICE', 'F trains run via E.'),
+    ];
+    for (const item of positives) {
+      expect(evaluateServiceChanges({ snapshot: snapshot([item]), claim: claim() }).kind).toBe('resolved-suppression');
+    }
   });
 
   test('requires exact downstream stop scope for short turns and independent basis for unresolved downstream risk', () => {

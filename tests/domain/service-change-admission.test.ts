@@ -64,6 +64,26 @@ const decision = (alerts: readonly ServiceAlertEvidence[]): ServiceChangeDecisio
   },
 });
 
+type EpochBoundDecision = ServiceChangeDecision & {
+  readonly assessedAt: Date;
+  readonly alertContextIdentity: string;
+};
+
+const scopeFor = (
+  gate: ServiceChangeDecision,
+  overrides: Partial<ArrivalBoardScope> = {},
+): ArrivalBoardScope => {
+  const epoch = gate as EpochBoundDecision;
+  const assessedAt = epoch.assessedAt instanceof Date ? epoch.assessedAt : BASE;
+  return {
+    ...scope,
+    comparisonAt: new Date(assessedAt),
+    serviceAssessmentAt: new Date(assessedAt),
+    serviceAlertContextIdentity: epoch.alertContextIdentity ?? 'legacy-context-without-epoch',
+    ...overrides,
+  } as ArrivalBoardScope;
+};
+
 describe('service-change arrival admission seam', () => {
   test('runs service-change resolution before freshness, identity, movement, track, or confidence ordering', () => {
     const gate = decision([serviceAlert()]);
@@ -74,7 +94,7 @@ describe('service-change arrival admission seam', () => {
       identityDisposition: 'ambiguous',
       movementDisposition: 'implausible',
       confidence: { kind: 'live', supportedRange: { startsAt: at(1_000), endsAt: at(2_000) } },
-    }), scope);
+    }), scopeFor(gate));
     expect(result).toMatchObject({
       kind: 'rejected', failedGate: 'service', disposition: 'resolved-ineligible',
       boardTreatment: 'resolved-suppression',
@@ -84,7 +104,7 @@ describe('service-change arrival admission seam', () => {
 
   test('a resolved veto defeats a fresh Live claim and explicitly blocks every dependent surface including Scheduled', () => {
     const gate = decision([serviceAlert()]);
-    expect(admitArrivalCandidate(candidate({ serviceChangeGate: gate }), scope)).toMatchObject({
+    expect(admitArrivalCandidate(candidate({ serviceChangeGate: gate }), scopeFor(gate))).toMatchObject({
       kind: 'rejected', failedGate: 'service', boardTreatment: 'resolved-suppression',
       serviceChange: {
         suppressedProducts: ['live', 'expected', 'holding', 'uncertain', 'scheduled-fallback', 'countdown', 'dependent-guidance'],
@@ -102,11 +122,11 @@ describe('service-change arrival admission seam', () => {
     const limitation = decision([serviceAlert({
       official: { headerRaw: 'F trains are delayed', descriptionRaw: 'All stops continue to be served.' },
     })]);
-    expect(admitArrivalCandidate(candidate({ serviceChangeGate: unavailable }), scope)).toMatchObject({
+    expect(admitArrivalCandidate(candidate({ serviceChangeGate: unavailable }), scopeFor(unavailable))).toMatchObject({
       kind: 'rejected', boardTreatment: 'arrival-claim-unavailable',
       riderCopy: 'Service change—arrival information is unavailable for this service.',
     });
-    expect(admitArrivalCandidate(candidate({ serviceChangeGate: limitation }), scope)).toMatchObject({
+    expect(admitArrivalCandidate(candidate({ serviceChangeGate: limitation }), scopeFor(limitation))).toMatchObject({
       kind: 'rejected', boardTreatment: 'quarantine-or-limitation',
       riderCopy: 'Service change details are being verified.',
     });
@@ -121,13 +141,13 @@ describe('service-change arrival admission seam', () => {
     expect(admitArrivalCandidate(candidate({
       serviceChangeGate: limitation,
       trackDisposition: 'resolved-ineligible',
-    }), scope)).toMatchObject({
+    }), scopeFor(limitation))).toMatchObject({
       kind: 'rejected', failedGate: 'track', disposition: 'resolved-ineligible', boardTreatment: 'resolved-suppression',
     });
     expect(admitArrivalCandidate(candidate({
       serviceChangeGate: limitation,
       trackDisposition: 'high-impact-unresolved',
-    }), scope)).toMatchObject({
+    }), scopeFor(limitation))).toMatchObject({
       kind: 'rejected', failedGate: 'track', disposition: 'high-impact-unresolved', boardTreatment: 'arrival-claim-unavailable',
     });
   });
@@ -144,7 +164,7 @@ describe('service-change arrival admission seam', () => {
       official: { headerRaw: 'F trains are affected', descriptionRaw: 'Check travel information.' },
     })]);
     for (const gate of [delay, generic]) {
-      expect(admitArrivalCandidate(candidate({ serviceChangeGate: gate }), scope)).toMatchObject({
+      expect(admitArrivalCandidate(candidate({ serviceChangeGate: gate }), scopeFor(gate))).toMatchObject({
         kind: 'admitted', confidence: 'live', row: { arrival: { route: { id: 'F' } } },
       });
     }
@@ -154,9 +174,10 @@ describe('service-change arrival admission seam', () => {
     const unrelated = decision([serviceAlert({
       selectors: [{ selectorId: 'other', routeId: 'E', exactDirectionalStopId: 'A24N' }],
     })]);
-    expect(admitArrivalCandidate(candidate({ serviceChangeGate: unrelated }), scope).kind).toBe('admitted');
+    expect(admitArrivalCandidate(candidate({ serviceChangeGate: unrelated }), scopeFor(unrelated)).kind).toBe('admitted');
 
-    const blocked = admitArrivalCandidate(candidate({ serviceChangeGate: decision([serviceAlert()]) }), scope);
+    const blockedGate = decision([serviceAlert()]);
+    const blocked = admitArrivalCandidate(candidate({ serviceChangeGate: blockedGate }), scopeFor(blockedGate));
     expect(blocked.kind).toBe('rejected');
     expect(blocked).not.toHaveProperty('row');
   });
@@ -177,10 +198,10 @@ describe('service-change arrival admission seam', () => {
       claimId: 'claim-f-a24n', routeId: 'F', exactDirectionalStopId: 'A24N', constituentStopId: 'A24',
       direction: 'northbound', tripId: 'trip-f-1', trainId: 'f-train-1',
     }, priorRisk: adverse.carryover, recoveryUpdates: [update('one', 1), update('two', 2)] });
-    expect(admitArrivalCandidate(candidate({ serviceChangeGate: one }), scope)).toMatchObject({
+    expect(admitArrivalCandidate(candidate({ serviceChangeGate: one }), scopeFor(one))).toMatchObject({
       kind: 'rejected', failedGate: 'service', boardTreatment: 'resolved-suppression',
     });
-    expect(admitArrivalCandidate(candidate({ serviceChangeGate: two, recoveryDisposition: 'live-readmission-eligible' }), scope))
+    expect(admitArrivalCandidate(candidate({ serviceChangeGate: two, recoveryDisposition: 'live-readmission-eligible' }), scopeFor(two)))
       .toMatchObject({ kind: 'admitted', confidence: 'live' });
   });
 
@@ -198,7 +219,7 @@ describe('service-change arrival admission seam', () => {
   test('accepts only resolver-issued decision instances and rejects every public-field reconstruction', () => {
     const issuedEligible = decision([]);
     const issuedClosure = decision([serviceAlert()]);
-    expect(admitArrivalCandidate(candidate({ serviceChangeGate: issuedEligible }), scope).kind).toBe('admitted');
+    expect(admitArrivalCandidate(candidate({ serviceChangeGate: issuedEligible }), scopeFor(issuedEligible)).kind).toBe('admitted');
     expect(Object.isFrozen(issuedEligible)).toBe(true);
     expect(() => ((issuedEligible as { disposition: string }).disposition = 'resolved-ineligible')).toThrow();
 
@@ -245,6 +266,70 @@ describe('service-change arrival admission seam', () => {
     }
   });
 
+  test('binds an issued decision to the board exact assessment instant and alert snapshot identity', () => {
+    const evaluate = (snapshot: ReturnType<typeof classifyAlertSnapshot>) => evaluateServiceChanges({
+      snapshot,
+      claim: {
+        claimId: 'claim-f-a24n', routeId: 'F', exactDirectionalStopId: 'A24N', constituentStopId: 'A24',
+        direction: 'northbound', tripId: 'trip-f-1', trainId: 'f-train-1',
+      },
+    });
+    const oldEligible = evaluate(classifyAlertSnapshot({
+      status: 'accepted', feedTimestamp: BASE, alerts: [],
+    }, BASE));
+    const currentSnapshot = classifyAlertSnapshot({
+      status: 'accepted', feedTimestamp: at(10), alerts: [],
+    }, at(10));
+    const currentEligible = evaluate(currentSnapshot);
+    const sameEpochEligible = evaluate(currentSnapshot);
+    const closure = evaluate(classifyAlertSnapshot({
+      status: 'accepted', feedTimestamp: at(10), alerts: [serviceAlert()],
+    }, at(10)));
+    const missing = evaluate(classifyAlertSnapshot({ status: 'missing' }, at(10)));
+    const future = evaluate(classifyAlertSnapshot({
+      status: 'accepted', feedTimestamp: at(20), alerts: [],
+    }, at(20)));
+    const currentEpoch = currentEligible as EpochBoundDecision;
+    expect(currentEpoch.assessedAt).toBeInstanceOf(Date);
+    expect(currentEpoch.alertContextIdentity).toEqual(expect.any(String));
+    expect(currentEpoch.alertContextIdentity.length).toBeGreaterThan(0);
+    expect((sameEpochEligible as EpochBoundDecision).alertContextIdentity).toBe(currentEpoch.alertContextIdentity);
+    expect((closure as EpochBoundDecision).alertContextIdentity).not.toBe(currentEpoch.alertContextIdentity);
+    expect((missing as EpochBoundDecision).alertContextIdentity).not.toBe(currentEpoch.alertContextIdentity);
+    const exposedAssessment = currentEpoch.assessedAt;
+    exposedAssessment.setTime(BASE.getTime());
+    expect(currentEpoch.assessedAt.toISOString()).toBe(at(10).toISOString());
+    const currentBoard = scopeFor(currentEligible);
+    const closureBoard = scopeFor(closure);
+
+    expect(admitArrivalCandidate(candidate({ serviceChangeGate: sameEpochEligible }), currentBoard)).toMatchObject({
+      kind: 'admitted', confidence: 'live',
+    });
+    expect(admitArrivalCandidate(candidate({ serviceChangeGate: closure }), closureBoard)).toMatchObject({
+      kind: 'rejected', failedGate: 'service', disposition: 'resolved-ineligible',
+    });
+
+    for (const [gate, board] of [
+      [oldEligible, closureBoard],
+      [oldEligible, currentBoard],
+      [future, currentBoard],
+      [closure, currentBoard],
+      [missing, currentBoard],
+    ] as const) {
+      expect(admitArrivalCandidate(candidate({ serviceChangeGate: gate, freshness: 'unavailable' }), board)).toMatchObject({
+        kind: 'rejected', failedGate: 'service', disposition: 'service-assessment-mismatch',
+        boardTreatment: 'quarantine-or-limitation',
+      });
+    }
+    expect(admitArrivalCandidate(candidate({ serviceChangeGate: currentEligible, freshness: 'unavailable' }), {
+      ...scope,
+      comparisonAt: at(10),
+    })).toMatchObject({
+      kind: 'rejected', failedGate: 'service', disposition: 'service-assessment-mismatch',
+      boardTreatment: 'quarantine-or-limitation',
+    });
+  });
+
   test('binds a service decision to the exact candidate claim before freshness or identity', () => {
     const eDecision = evaluateServiceChanges({
       snapshot: classifyAlertSnapshot({ status: 'accepted', feedTimestamp: BASE, alerts: [] }, BASE),
@@ -256,20 +341,20 @@ describe('service-change arrival admission seam', () => {
     expect(admitArrivalCandidate(candidate({
       serviceChangeGate: eDecision,
       freshness: 'unavailable', identityDisposition: 'ambiguous', serviceClaimId: 'claim-e-a24n',
-    }), scope)).toMatchObject({
+    }), scopeFor(eDecision))).toMatchObject({
       kind: 'rejected', failedGate: 'service', disposition: 'claim-scope-mismatch',
       boardTreatment: 'quarantine-or-limitation',
     });
     expect(admitArrivalCandidate(candidate({
       serviceChangeGate: eDecision, serviceClaimId: 'claim-e-a24n', serviceDisposition: 'resolved-ineligible',
-    }), scope)).toMatchObject({
+    }), scopeFor(eDecision))).toMatchObject({
       kind: 'rejected', failedGate: 'service', disposition: 'resolved-ineligible',
       boardTreatment: 'resolved-suppression',
     });
 
     const valid = decision([]);
-    expect(admitArrivalCandidate(candidate({ serviceChangeGate: valid }), scope).kind).toBe('admitted');
-    expect(admitArrivalCandidate(candidate({ serviceChangeGate: valid, serviceClaimId: 'wrong-claim' }), scope)).toMatchObject({
+    expect(admitArrivalCandidate(candidate({ serviceChangeGate: valid }), scopeFor(valid)).kind).toBe('admitted');
+    expect(admitArrivalCandidate(candidate({ serviceChangeGate: valid, serviceClaimId: 'wrong-claim' }), scopeFor(valid))).toMatchObject({
       kind: 'rejected', failedGate: 'service', disposition: 'claim-scope-mismatch',
     });
   });
@@ -304,7 +389,7 @@ describe('service-change arrival admission seam', () => {
         snapshot: classifyAlertSnapshot({ status: 'accepted', feedTimestamp: BASE, alerts: [] }, BASE),
         claim: evaluatedClaim,
       });
-      expect(admitArrivalCandidate(candidate({ serviceChangeGate: gate }), scope)).toMatchObject({
+      expect(admitArrivalCandidate(candidate({ serviceChangeGate: gate }), scopeFor(gate))).toMatchObject({
         kind: 'rejected', failedGate: 'service', disposition: 'claim-scope-mismatch',
       });
     }

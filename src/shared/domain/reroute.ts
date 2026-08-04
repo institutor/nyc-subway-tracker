@@ -5,7 +5,7 @@ import {
 } from './canonical';
 import type { RouteIdentity } from './types';
 import { sanitizeOfficialText, type AlertScopeKind, type ResolvedServiceDirection } from './alert-scope';
-import { classifyScheduleEditionAge } from './schedule-owner';
+import { classifyScheduleAge } from './schedule-owner';
 import {
   CLAIM_SUPPRESSED_PRODUCTS,
   countQualifyingRecovery,
@@ -21,7 +21,8 @@ export interface SupplementedPatternProvenance {
   readonly currency: 'current' | 'stale';
   readonly editionId: string;
   readonly canonicalContentId: string;
-  readonly publishedAt: Date;
+  readonly publishedAt?: Date;
+  readonly firstAcceptedRetrievedAt: Date;
   readonly observedAt: Date;
   readonly acceptedAt: Date;
   readonly sourceOrder: number;
@@ -31,7 +32,8 @@ export interface SupplementedPatternProvenance {
 export interface AcceptedSupplementedPatternEdition {
   readonly editionId: string;
   readonly canonicalContentId: string;
-  readonly publishedAt: Date;
+  readonly publishedAt?: Date;
+  readonly firstAcceptedRetrievedAt: Date;
   readonly observedAt: Date;
   readonly acceptedAt: Date;
   readonly sourceOrder: number;
@@ -208,17 +210,25 @@ export interface TrackConflictInput {
   readonly recoveryUpdates?: readonly ServiceRecoveryUpdate[];
 }
 
+export interface TrackClaimScope {
+  readonly routeId: string;
+  readonly direction: ResolvedServiceDirection;
+  readonly conflictStopId: string;
+  readonly targetExactDirectionalStopId: string;
+}
+
 export interface TrackRiskCarryover {
   readonly kind: 'resolved-suppression';
   readonly claimIdentity: string;
+  readonly evaluatedClaim: TrackClaimScope;
   readonly adverseAt: Date;
   readonly riderCopy: string;
   readonly suppressedProducts: readonly ClaimSuppressedProduct[];
 }
 
 export interface TrackConflictDecision {
-  readonly kind: 'eligible-context' | 'resolved-suppression';
-  readonly disposition: 'eligible' | 'resolved-ineligible';
+  readonly kind: 'eligible-context' | 'resolved-suppression' | 'quarantine-or-limitation';
+  readonly disposition: 'eligible' | 'resolved-ineligible' | 'quarantined';
   readonly riderCopy: string | null;
   readonly suppressedProducts: readonly ClaimSuppressedProduct[];
   readonly carryover: TrackRiskCarryover | null;
@@ -226,10 +236,18 @@ export interface TrackConflictDecision {
   readonly recoveryCount: 0 | 1 | 2;
 }
 
+const ISSUED_TRACK_RISK_CARRYOVERS = new WeakSet<object>();
+const TRACK_LIMITATION_COPY = 'Track information could not be verified; downstream arrivals are withheld.';
+
 export function evaluateTrackConflict(input: TrackConflictInput): TrackConflictDecision {
   validateTrackInput(input);
-  const claimIdentity = trackClaimIdentity(input);
-  const priorRisk = input.priorRisk?.claimIdentity === claimIdentity ? input.priorRisk : null;
+  const evaluatedClaim = freezeTrackClaim(input);
+  const claimIdentity = trackClaimIdentity(evaluatedClaim);
+  const priorRiskBinding = bindPriorTrackRisk(input.priorRisk, claimIdentity);
+  if (priorRiskBinding.kind === 'invalid') {
+    return freezeTrack('quarantine-or-limitation', 'quarantined', TRACK_LIMITATION_COPY, [], null, false, 0);
+  }
+  const priorRisk = priorRiskBinding.kind === 'bound' ? priorRiskBinding.risk : null;
   const actualTrack = normalizeTrackId(input.actualTrack);
   const scheduledTrack = normalizeTrackId(input.scheduledTrack);
   const resolvedConflict = !input.terminal && actualTrack !== null && scheduledTrack !== null
@@ -237,10 +255,18 @@ export function evaluateTrackConflict(input: TrackConflictInput): TrackConflictD
     && includesIdentity(input.downstreamExactDirectionalStopIds, input.targetExactDirectionalStopId);
   if (resolvedConflict) {
     const riderCopy = 'Track change—downstream arrival information is withheld.';
-    const carryover = freezeTrackRisk(claimIdentity, input.observedAt, riderCopy);
+    if (priorRisk && input.observedAt.getTime() <= priorRisk.adverseAt.getTime()) {
+      return freezeTrack('resolved-suppression', 'resolved-ineligible', priorRisk.riderCopy,
+        priorRisk.suppressedProducts, priorRisk, true, 0);
+    }
+    const carryover = freezeTrackRisk(evaluatedClaim, input.observedAt, riderCopy);
     return freezeTrack('resolved-suppression', 'resolved-ineligible', riderCopy, CLAIM_SUPPRESSED_PRODUCTS, carryover, false, 0);
   }
   if (priorRisk) {
+    if (input.observedAt.getTime() <= priorRisk.adverseAt.getTime()) {
+      return freezeTrack('resolved-suppression', 'resolved-ineligible', priorRisk.riderCopy,
+        priorRisk.suppressedProducts, priorRisk, true, 0);
+    }
     const recoveryCount = countQualifyingRecovery(input.recoveryUpdates ?? [], priorRisk.adverseAt, input.observedAt);
     if (recoveryCount < 2) return freezeTrack('resolved-suppression', 'resolved-ineligible', priorRisk.riderCopy,
       priorRisk.suppressedProducts, priorRisk, true, recoveryCount);
@@ -311,11 +337,14 @@ function usableSupplementedPattern(pattern: EffectiveSupplementedPattern, assess
     const editionId = normalizeBoundedIdentity(provenance.editionId, 'supplemented edition');
     if (editionId !== `supplemented-gtfs:${contentId}`) return false;
     const assessed = validInstant(assessedAt);
-    const published = validInstant(provenance.publishedAt);
+    const published = provenance.publishedAt === undefined ? null : validInstant(provenance.publishedAt);
+    const firstAcceptedRetrieved = validInstant(provenance.firstAcceptedRetrievedAt);
     const observed = validInstant(provenance.observedAt);
     const accepted = validInstant(provenance.acceptedAt);
-    if (!(published <= observed && observed <= accepted && accepted <= assessed)) return false;
-    const age = classifyScheduleEditionAge(provenance.publishedAt, assessedAt);
+    if ((published !== null && published > firstAcceptedRetrieved)
+      || !(firstAcceptedRetrieved <= observed && observed <= accepted && accepted <= assessed)) return false;
+    const ageAnchor = published ?? firstAcceptedRetrieved;
+    const age = classifyScheduleAge(new Date(ageAnchor), assessedAt);
     if ((age.state !== 'current' && age.state !== 'stale') || age.state !== provenance.currency) return false;
 
     const prior = provenance.priorAcceptedEdition;
@@ -324,11 +353,15 @@ function usableSupplementedPattern(pattern: EffectiveSupplementedPattern, assess
       const priorContentId = normalizeBoundedIdentity(prior.canonicalContentId, 'prior supplemented content');
       const priorEditionId = normalizeBoundedIdentity(prior.editionId, 'prior supplemented edition');
       if (priorEditionId !== `supplemented-gtfs:${priorContentId}` || priorContentId === contentId) return false;
-      const priorPublished = validInstant(prior.publishedAt);
+      const priorPublished = prior.publishedAt === undefined ? null : validInstant(prior.publishedAt);
+      const priorFirstAcceptedRetrieved = validInstant(prior.firstAcceptedRetrievedAt);
       const priorObserved = validInstant(prior.observedAt);
       const priorAccepted = validInstant(prior.acceptedAt);
-      if (!(priorPublished <= priorObserved && priorObserved <= priorAccepted && priorAccepted <= assessed)
-        || published <= priorPublished || observed <= priorObserved || accepted <= priorAccepted
+      const priorAgeAnchor = priorPublished ?? priorFirstAcceptedRetrieved;
+      if ((priorPublished !== null && priorPublished > priorFirstAcceptedRetrieved)
+        || !(priorFirstAcceptedRetrieved <= priorObserved && priorObserved <= priorAccepted && priorAccepted <= assessed)
+        || ageAnchor <= priorAgeAnchor || firstAcceptedRetrieved <= priorFirstAcceptedRetrieved
+        || observed <= priorObserved || accepted <= priorAccepted
         || provenance.sourceOrder <= prior.sourceOrder) return false;
     }
     return true;
@@ -382,11 +415,59 @@ function isResolvedDirection(value: string): value is ResolvedServiceDirection {
   return ['northbound', 'southbound', 'eastbound', 'westbound', 'inbound', 'outbound'].includes(value);
 }
 
-function trackClaimIdentity(input: TrackConflictInput): string {
+function trackClaimIdentity(input: TrackClaimScope): string {
   return encodeCanonicalIdentityTuple(
     [input.routeId, input.direction, input.conflictStopId, input.targetExactDirectionalStopId],
     'track claim',
   );
+}
+
+function freezeTrackClaim(input: TrackClaimScope): TrackClaimScope {
+  return Object.freeze({
+    routeId: normalizeBoundedIdentity(input.routeId, 'track route'),
+    direction: input.direction,
+    conflictStopId: normalizeBoundedIdentity(input.conflictStopId, 'track conflict stop'),
+    targetExactDirectionalStopId: normalizeBoundedIdentity(input.targetExactDirectionalStopId, 'track target stop'),
+  });
+}
+
+type PriorTrackRiskBinding =
+  | { readonly kind: 'absent' }
+  | { readonly kind: 'invalid' }
+  | { readonly kind: 'bound'; readonly risk: TrackRiskCarryover };
+
+function bindPriorTrackRisk(
+  risk: TrackRiskCarryover | null | undefined,
+  expectedClaimIdentity: string,
+): PriorTrackRiskBinding {
+  if (risk == null) return { kind: 'absent' };
+  try {
+    validateTrackRiskCarryover(risk, expectedClaimIdentity);
+    return { kind: 'bound', risk };
+  } catch {
+    return { kind: 'invalid' };
+  }
+}
+
+function validateTrackRiskCarryover(
+  risk: TrackRiskCarryover | null,
+  expectedClaimIdentity: string,
+): asserts risk is TrackRiskCarryover {
+  if (!risk || typeof risk !== 'object' || !ISSUED_TRACK_RISK_CARRYOVERS.has(risk)) {
+    throw new Error('Expected an issued track risk carryover');
+  }
+  const adverseAt = risk.adverseAt;
+  if (!Object.isFrozen(risk) || risk.kind !== 'resolved-suppression'
+    || risk.claimIdentity !== expectedClaimIdentity || !Object.isFrozen(risk.evaluatedClaim)
+    || !isResolvedDirection(risk.evaluatedClaim.direction)
+    || trackClaimIdentity(risk.evaluatedClaim) !== expectedClaimIdentity
+    || !(adverseAt instanceof Date) || !Number.isFinite(adverseAt.getTime())
+    || typeof risk.riderCopy !== 'string' || !risk.riderCopy
+    || !Array.isArray(risk.suppressedProducts) || !Object.isFrozen(risk.suppressedProducts)
+    || risk.suppressedProducts.length !== CLAIM_SUPPRESSED_PRODUCTS.length
+    || risk.suppressedProducts.some((product, index) => product !== CLAIM_SUPPRESSED_PRODUCTS[index])) {
+    throw new Error('Invalid issued track risk carryover');
+  }
 }
 
 function normalizeTrackId(value: string | null): string | null {
@@ -420,14 +501,18 @@ function freezeTrack(
     carryover, carriedForward, recoveryCount });
 }
 
-function freezeTrackRisk(claimIdentity: string, adverseAt: Date, riderCopy: string): TrackRiskCarryover {
+function freezeTrackRisk(evaluatedClaim: TrackClaimScope, adverseAt: Date, riderCopy: string): TrackRiskCarryover {
+  const claim = freezeTrackClaim(evaluatedClaim);
   const adverseAtMs = adverseAt.getTime();
   if (!Number.isFinite(adverseAtMs)) throw new Error('Invalid track conflict observation instant');
-  return Object.freeze({
+  const risk = Object.freeze({
     kind: 'resolved-suppression' as const,
-    claimIdentity,
+    claimIdentity: trackClaimIdentity(claim),
+    evaluatedClaim: claim,
     get adverseAt(): Date { return new Date(adverseAtMs); },
     riderCopy,
     suppressedProducts: CLAIM_SUPPRESSED_PRODUCTS,
   });
+  ISSUED_TRACK_RISK_CARRYOVERS.add(risk);
+  return risk;
 }
