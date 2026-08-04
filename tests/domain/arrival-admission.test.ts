@@ -29,6 +29,7 @@ function candidate(overrides: Partial<ArrivalAdmissionCandidate> = {}): ArrivalA
   return {
     stableTrainIdentity: 'train-a',
     publishedTripId: 'trip-a',
+    patternIdentity: 'A23N:12>A24N:13>A25N:14',
     feedGroupId: 'ace',
     route: { id: 'A', label: 'A' },
     routeOrderKind: 'lettered',
@@ -108,19 +109,50 @@ describe('canonical exact-stop and train identity admission', () => {
   test('admits Expected only through the exact coherent two-update origin pair and never through recovery', () => {
     const expectedUpdate = (seconds: number) => ({
       evidenceId: `expected-${seconds}`, sourceTimestamp: at(seconds), stableTrainIdentity: 'train-a',
-      patternIdentity: 'A23N:12>A24N:13', direction: 'northbound' as const, destination: 'Inwood-207 St',
+      patternIdentity: 'A23N:12>A24N:13>A25N:14', direction: 'northbound' as const, destination: 'Inwood-207 St',
       exactTargetStopCallIdentity: 'A24N\u0000sequence:13', assignedPhysicalTrain: true, atOrigin: true,
       movementObserved: false, overdueVerdict: 'not-overdue' as const,
       supportedRange: { startsAt: at(360), endsAt: at(480) }, accepted: true,
+      feedGroupId: 'ace', sourceId: 'ace-feed', observedAt: at(seconds),
     });
     const expected = candidate({ confidence: { kind: 'expected', updates: [expectedUpdate(-10), expectedUpdate(0)] } });
-    expect(admitArrivalCandidate(expected, scope)).toMatchObject({
-      kind: 'admitted', confidence: 'expected', row: { arrival: { kind: 'expected', estimateAt: at(420) } },
+    const admitted = admitArrivalCandidate(expected, scope);
+    expect(admitted).toMatchObject({
+      kind: 'admitted', confidence: 'expected', row: { arrival: {
+        kind: 'expected', estimateAt: at(420), provenance: { sourceId: 'ace-feed', observedAt: BASE, retrievedAt: BASE },
+      } },
     });
+    expect(admitted.kind === 'admitted' && [admitted, admitted.row, admitted.row.arrival,
+      admitted.row.arrival.route, admitted.row.arrival.provenance, admitted.row.supportedRange]
+      .every(Object.isFrozen)).toBe(true);
     expect(admitArrivalCandidate({ ...expected, recoveryDisposition: 'live-readmission-eligible' }, scope))
       .toMatchObject({ kind: 'rejected', failedGate: 'identity-recovery' });
     expect(admitArrivalCandidate(candidate({ recoveryDisposition: 'live-readmission-eligible' }), scope))
       .toMatchObject({ kind: 'admitted', confidence: 'live' });
+  });
+
+  test('rejects an internally stable Expected pair that contradicts candidate, board, source, or chronology', () => {
+    const baseUpdate = (seconds: number) => ({
+      evidenceId: `scope-${seconds}`, sourceTimestamp: at(seconds), observedAt: at(seconds),
+      stableTrainIdentity: 'train-a', patternIdentity: 'A23N:12>A24N:13>A25N:14',
+      direction: 'northbound' as const, destination: 'Inwood-207 St', exactTargetStopCallIdentity: 'A24N\u0000sequence:13',
+      feedGroupId: 'ace', sourceId: 'ace-feed', assignedPhysicalTrain: true, atOrigin: true,
+      movementObserved: false, overdueVerdict: 'not-overdue' as const,
+      supportedRange: { startsAt: at(360), endsAt: at(480) }, accepted: true,
+    });
+    const cases = [
+      [{ ...baseUpdate(-10), direction: 'southbound' as const }, { ...baseUpdate(0), direction: 'southbound' as const }],
+      [{ ...baseUpdate(-10), destination: 'Euclid Av' }, { ...baseUpdate(0), destination: 'Euclid Av' }],
+      [{ ...baseUpdate(-10), patternIdentity: 'wrong-pattern' }, { ...baseUpdate(0), patternIdentity: 'wrong-pattern' }],
+      [{ ...baseUpdate(-10), exactTargetStopCallIdentity: 'A25N\u0000sequence:14' }, { ...baseUpdate(0), exactTargetStopCallIdentity: 'A25N\u0000sequence:14' }],
+      [{ ...baseUpdate(-10), feedGroupId: 'nqrw' }, { ...baseUpdate(0), feedGroupId: 'nqrw' }],
+      [{ ...baseUpdate(-10), sourceId: 'other-feed' }, { ...baseUpdate(0), sourceId: 'other-feed' }],
+      [baseUpdate(-10), { ...baseUpdate(1), sourceTimestamp: at(1), observedAt: at(1) }],
+    ];
+    for (const updates of cases) {
+      expect(admitArrivalCandidate(candidate({ confidence: { kind: 'expected', updates } } as never), scope))
+        .toMatchObject({ kind: 'rejected' });
+    }
   });
 
   test('requires deterministic exclusive one-to-one continuity across changed published IDs', () => {
@@ -141,6 +173,85 @@ describe('canonical exact-stop and train identity admission', () => {
     expect(resolveTrainContinuity(before, [{ ...replacement[0], appearedAt: at(-1) }], governed)).toMatchObject({ joins: [] });
     expect(() => resolveTrainContinuity(before, [{ ...replacement[0], appearedAt: new Date(Number.NaN) }], governed))
       .toThrow(/invalid current appearance/i);
+  });
+
+  test('requires coherent track on both sides and returns role-qualified unmatched/quarantined continuity evidence', () => {
+    const prior = [{
+      publishedTripId: 'old', stableTrainIdentity: 'old-instance', internalTrainMarker: '0421', routeId: 'A',
+      direction: 'northbound' as const, serviceDate: '20260804', orderedStopCallIdentities: ['A23N:12', 'A24N:13'],
+      track: '1', destination: 'Cafe\u0301', predictedAt: at(300), disappearedAt: at(0),
+    }];
+    const current = [{
+      publishedTripId: 'new', stableTrainIdentity: 'new-instance', internalTrainMarker: '0421', routeId: 'A',
+      direction: 'northbound' as const, serviceDate: '20260804', orderedStopCallIdentities: ['A23N:12', 'A24N:13'],
+      track: null, destination: 'Café', predictedAt: at(305), appearedAt: at(1),
+    }];
+    const governed = { similarTime: () => true, immediateReplacement: () => true };
+    expect(resolveTrainContinuity(prior, current, governed)).toMatchObject({
+      joins: [],
+      unmatched: { prior: ['old-instance'], current: ['new-instance'] },
+      quarantinedEvidence: [
+        { role: 'current', identity: 'new-instance', reason: 'track-path-unresolved' },
+        { role: 'prior', identity: 'old-instance', reason: 'track-path-unresolved' },
+      ],
+    });
+    const coherent = resolveTrainContinuity(prior, [{ ...current[0], track: '1' }], governed);
+    expect(coherent).toMatchObject({ joins: [{ priorIdentity: 'old-instance', currentIdentity: 'new-instance' }] });
+    expect(() => resolveTrainContinuity(prior, [{ ...current[0], track: '1' }], {
+      similarTime: () => 'yes' as never, immediateReplacement: () => true,
+    })).toThrow(/invalid governed similar-time result/i);
+  });
+
+  test('returns deterministic role-qualified unmatched outcomes instead of silently dropping no-edge evidence', () => {
+    const prior = [{
+      publishedTripId: 'old', stableTrainIdentity: 'prior-z', routeId: 'A', direction: 'northbound' as const,
+      serviceDate: '20260804', orderedStopCallIdentities: ['A23N:12'], track: '1', destination: 'Inwood',
+      predictedAt: at(100), disappearedAt: at(0),
+    }];
+    const current = [{
+      publishedTripId: 'new', stableTrainIdentity: 'current-a', routeId: 'C', direction: 'northbound' as const,
+      serviceDate: '20260804', orderedStopCallIdentities: ['A23N:12'], track: '1', destination: 'Inwood',
+      predictedAt: at(100), appearedAt: at(1),
+    }];
+    const governed = { similarTime: () => true, immediateReplacement: () => true };
+    expect(resolveTrainContinuity(prior, current, governed)).toMatchObject({
+      unmatched: { prior: ['prior-z'], current: ['current-a'] },
+      quarantinedEvidence: [
+        { role: 'current', identity: 'current-a', reason: 'no-exclusive-continuity' },
+        { role: 'prior', identity: 'prior-z', reason: 'no-exclusive-continuity' },
+      ],
+    });
+  });
+
+  test('canonicalizes stable identities before duplicate detection', () => {
+    expect(() => orderPrimaryArrivals([
+      row('é', 'live', 100, 90, 110),
+      row('e\u0301', 'live', 100, 90, 110),
+    ], 3)).toThrow(/duplicate primary train identity/i);
+  });
+
+  test('canonical duplicate exact-stop occurrences quarantine the claim instead of throwing', () => {
+    const result = admitArrivalCandidate(candidate({ remainingStopCalls: [
+      { stopId: 'A24N', occurrenceId: 'Café', arrivalAt: at(100), departureAt: at(110) },
+      { stopId: 'A24N', occurrenceId: 'Cafe\u0301', arrivalAt: at(100), departureAt: at(110) },
+    ] }), scope);
+    expect(result).toMatchObject({ kind: 'rejected', failedGate: 'exact-stop', boardTreatment: 'quarantine-or-limitation' });
+  });
+
+  test('rejects forged runtime discriminants atomically and never treats Scheduled as Live primary', () => {
+    const valid = admitArrivalCandidate(candidate(), scope);
+    for (const forged of [
+      candidate({ confidence: { kind: 'scheduled' } as never }),
+      candidate({ direction: 'sideways' as never }),
+      candidate({ recoveryDisposition: 'restored' as never }),
+      candidate({ identityDisposition: 'maybe' as never }),
+      candidate({ movementDisposition: 'moving-ish' as never }),
+      candidate({ routeOrderKind: 'popular' as never }),
+      candidate({ provenance: { ...candidate().provenance, source: 'regular-gtfs' } }),
+      candidate({ provenance: { ...candidate().provenance, retrievedAt: at(1) } }),
+    ]) expect(() => admitArrivalCandidate(forged, scope)).toThrow(/invalid|resolved direction|confidence/i);
+    expect(() => admitArrivalCandidate(candidate(), { ...scope, direction: 'sideways' as never })).toThrow(/scope|direction/i);
+    expect(admitArrivalCandidate(candidate(), scope)).toEqual(valid);
   });
 
   test('maps every non-primary seam to a typed secondary, suppression, unavailable, or limitation treatment', () => {

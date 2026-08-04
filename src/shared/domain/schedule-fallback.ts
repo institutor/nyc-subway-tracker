@@ -7,7 +7,6 @@ import {
   isServiceActive,
   serviceTimeToInstant,
   type NormalizedStaticGtfs,
-  type StaticGtfsEditionCandidate,
   type StaticScheduleSource,
   type StopTimeRecord,
   type TripRecord,
@@ -28,6 +27,7 @@ export interface ScheduleFallbackScope {
   readonly comparisonAt: Date;
   readonly serviceDates: readonly string[];
   readonly routeIds: readonly string[];
+  readonly routeServiceDates?: readonly Readonly<{ readonly routeId: string; readonly serviceDate: string }>[];
 }
 
 export interface ScheduledClaimContext {
@@ -60,7 +60,8 @@ export interface ScheduledFallbackRow {
 
 export interface ScheduledFallbackExclusion {
   readonly occurrenceId: string;
-  readonly disposition: Exclude<ScheduledClaimDisposition, 'eligible'> | Exclude<FallbackRecoveryDisposition, 'none'> | 'conflict';
+  readonly disposition: Exclude<ScheduledClaimDisposition, 'eligible'> | Exclude<FallbackRecoveryDisposition, 'none'> | 'conflict'
+    | 'ambiguous-service-time' | 'nonexistent-service-time';
 }
 
 export interface ScheduleFallbackDecision {
@@ -88,13 +89,6 @@ interface EnumeratedOccurrence extends EnumeratedOccurrenceBase {
   readonly sourceRetrievedAt: Date;
 }
 
-interface ResolvedScopeOwner {
-  readonly selection: NonNullable<ReturnType<ScheduleEditionRegistry['resolveOwner']>>['selection'];
-  readonly candidate: StaticGtfsEditionCandidate;
-  readonly routeIds: readonly string[];
-  readonly serviceDates: readonly string[];
-}
-
 export function buildScheduleFallback(input: ScheduleFallbackInput): ScheduleFallbackDecision {
   validateInput(input);
   if (input.feedDecision.feedGroupId !== input.scope.feedGroupId
@@ -104,30 +98,52 @@ export function buildScheduleFallback(input: ScheduleFallbackInput): ScheduleFal
     return frozenDecision('not-eligible', 'none', [], [], null);
   }
 
-  const owners = resolveScopeOwners(input);
-  if (owners.length === 0) return frozenDecision('scheduled-fallback', 'none', [], [], 'No scheduled departures available.');
+  const editions = input.registry.enumerationEditions();
+  if (editions.length === 0) return frozenDecision('scheduled-fallback', 'none', [], [], 'No scheduled departures available.');
   const exclusions: ScheduledFallbackExclusion[] = [];
   const occurrences: EnumeratedOccurrence[] = [];
-  for (const owner of owners) {
-    if (owner.selection.source === 'none' || !owner.selection.currency
-      || owner.selection.currency === 'topology' || owner.selection.currency === 'quarantined') continue;
-    const source: StaticScheduleSource = owner.selection.source;
-    const enumerated = enumerate(owner.candidate.data, owner.candidate.coverage, {
-      ...input.scope,
-      routeIds: owner.routeIds,
-      serviceDates: owner.serviceDates,
-    });
+  const selectedOwners = new Map<string, NonNullable<ReturnType<ScheduleEditionRegistry['resolveOwner']>>['selection']>();
+  for (const edition of editions) {
+    const enumerated = enumerate(edition.candidate.data, edition.candidate.coverage, input.scope);
     exclusions.push(...enumerated.exclusions);
-    const observedAt = new Date(owner.candidate.publishedAt ?? owner.candidate.retrievedAt);
-    const retrievedAt = new Date(owner.candidate.retrievedAt);
-    occurrences.push(...enumerated.occurrences.map((occurrence) => Object.freeze({
-      ...occurrence,
-      source,
-      currency: owner.selection.currency!,
-      sourceId: owner.selection.editionId!,
-      sourceObservedAt: observedAt,
-      sourceRetrievedAt: retrievedAt,
-    })));
+    for (const occurrence of enumerated.occurrences) {
+      const owner = input.registry.resolveOwner({
+        routeId: occurrence.claim.routeId,
+        serviceDate: occurrence.claim.serviceDate,
+        at: occurrence.claim.at.toISOString(),
+        direction: occurrence.claim.direction,
+        operationalAxis: input.scope.operationalAxis,
+        occurrenceId: occurrence.claim.tripId,
+        stopId: occurrence.claim.stopId,
+        stopTimeOccurrenceId: occurrence.rowIdentity,
+      }, input.scope.comparisonAt);
+      if (!owner?.selection.editionId || !owner.selection.currency) continue;
+      selectedOwners.set(owner.selection.editionId, owner.selection);
+      if (owner.selection.editionId !== edition.editionId
+        || owner.selection.currency === 'topology' || owner.selection.currency === 'quarantined') continue;
+      const source: StaticScheduleSource = owner.selection.source as StaticScheduleSource;
+      const observedAt = new Date(edition.candidate.publishedAt ?? edition.candidate.retrievedAt);
+      const retrievedAt = new Date(edition.candidate.retrievedAt);
+      occurrences.push(Object.freeze({
+        ...occurrence,
+        source,
+        currency: owner.selection.currency,
+        sourceId: owner.selection.editionId,
+        sourceObservedAt: observedAt,
+        sourceRetrievedAt: retrievedAt,
+      }));
+    }
+  }
+  if (selectedOwners.size === 0) {
+    for (const pair of requestedRouteServiceDates(input.scope)) {
+      const owner = input.registry.resolveOwner({
+        ...pair,
+        at: input.scope.comparisonAt.toISOString(),
+        direction: input.scope.direction,
+        operationalAxis: input.scope.operationalAxis,
+      }, input.scope.comparisonAt);
+      if (owner?.selection.editionId) selectedOwners.set(owner.selection.editionId, owner.selection);
+    }
   }
   const eligible: EnumeratedOccurrence[] = [];
   for (const occurrence of occurrences) {
@@ -153,34 +169,15 @@ export function buildScheduleFallback(input: ScheduleFallbackInput): ScheduleFal
   const explanation = rows.length < 3 && !hasScopedConsequence
     ? rows.length === 0 ? 'No scheduled departures available.' as const : 'No additional scheduled departures available.' as const
     : null;
-  exclusions.sort((left, right) => compareCanonicalIdentity(left.occurrenceId, right.occurrenceId)
+  const distinctExclusions = [...new Map(exclusions.map((item) => [`${item.occurrenceId}\0${item.disposition}`, item])).values()];
+  distinctExclusions.sort((left, right) => compareCanonicalIdentity(left.occurrenceId, right.occurrenceId)
     || compareCanonicalIdentity(left.disposition, right.disposition));
-  const sources = [...new Set(owners.map((owner) => owner.selection.source).filter((source) => source !== 'none'))];
-  const currencies = [...new Set(owners.map((owner) => owner.selection.currency).filter((value) => value !== undefined))];
-  const source = sources.length === 1 ? sources[0] : 'mixed';
-  return frozenDecision('scheduled-fallback', source, rows, exclusions, explanation,
+  const ownerSelections = [...selectedOwners.values()];
+  const sources = [...new Set(ownerSelections.map((owner) => owner.source).filter((source) => source !== 'none'))];
+  const currencies = [...new Set(ownerSelections.map((owner) => owner.currency).filter((value) => value !== undefined))];
+  const source = sources.length === 0 ? 'none' : sources.length === 1 ? sources[0] : 'mixed';
+  return frozenDecision('scheduled-fallback', source, rows, distinctExclusions, explanation,
     currencies.length === 1 ? currencies[0] : undefined);
-}
-
-function resolveScopeOwners(input: ScheduleFallbackInput): readonly ResolvedScopeOwner[] {
-  const grouped = new Map<string, { owner: NonNullable<ReturnType<ScheduleEditionRegistry['resolveOwner']>>; routes: Set<string>; dates: Set<string> }>();
-  for (const routeId of input.scope.routeIds) {
-    for (const serviceDate of input.scope.serviceDates) {
-      const owner = input.registry.resolveOwner({ routeId, serviceDate, at: input.scope.comparisonAt.toISOString(),
-        direction: input.scope.direction, operationalAxis: input.scope.operationalAxis }, input.scope.comparisonAt);
-      if (!owner?.selection.editionId) continue;
-      const existing = grouped.get(owner.selection.editionId) ?? { owner, routes: new Set<string>(), dates: new Set<string>() };
-      existing.routes.add(routeId);
-      existing.dates.add(serviceDate);
-      grouped.set(owner.selection.editionId, existing);
-    }
-  }
-  return Object.freeze([...grouped.entries()].sort(([left], [right]) => compareCanonicalIdentity(left, right)).map(([, item]) => Object.freeze({
-    selection: item.owner.selection,
-    candidate: item.owner.candidate,
-    routeIds: Object.freeze([...item.routes].sort(compareCanonicalIdentity)),
-    serviceDates: Object.freeze([...item.dates].sort(compareCanonicalIdentity)),
-  })));
 }
 
 function enumerate(data: NormalizedStaticGtfs, coverage: readonly import('./schedule-owner').ScheduleCoverageMask[], scope: ScheduleFallbackScope): {
@@ -203,10 +200,10 @@ function enumerate(data: NormalizedStaticGtfs, coverage: readonly import('./sche
   }
   const occurrences: EnumeratedOccurrenceBase[] = [];
   const exclusions: ScheduledFallbackExclusion[] = [];
-  for (const serviceDate of scope.serviceDates) {
+  for (const { routeId, serviceDate } of requestedRouteServiceDates(scope)) {
     for (const [key, records] of grouped) {
       const trip = tripById.get(records[0].tripId);
-      if (!trip || !scope.routeIds.includes(trip.routeId) || !isServiceActive(data, trip.serviceId, serviceDate)) continue;
+      if (!trip || trip.routeId !== routeId || !isServiceActive(data, trip.serviceId, serviceDate)) continue;
       const occurrenceId = `${serviceDate}:${trip.tripId}:${records[0].stopSequence}`;
       const semantic = new Map(records.map((record) => [JSON.stringify({ arrivalTime: record.arrivalTime,
         departureTime: record.departureTime, stopId: record.stopId, stopSequence: record.stopSequence }), record]));
@@ -219,7 +216,17 @@ function enumerate(data: NormalizedStaticGtfs, coverage: readonly import('./sche
       const pattern = patternByTrip.get(trip.tripId);
       if (!pattern || pattern.direction !== scope.direction || !pattern.stopIds.includes(scope.exactStopId)
         || !pattern.headsign.trim()) continue;
-      const at = serviceTimeToInstant(serviceDate, record.departureTime);
+      let at: Date;
+      try {
+        at = serviceTimeToInstant(serviceDate, record.departureTime);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : '';
+        const disposition = message.includes('ambiguous') ? 'ambiguous-service-time' as const
+          : message.includes('does not map to a real') ? 'nonexistent-service-time' as const : null;
+        if (!disposition) throw error;
+        exclusions.push(Object.freeze({ occurrenceId, disposition }));
+        continue;
+      }
       if (at.getTime() <= scope.comparisonAt.getTime()) continue;
       if (!coverage.some((item) => item.routeIds.includes(trip.routeId)
         && item.serviceDates.includes(serviceDate)
@@ -240,6 +247,11 @@ function enumerate(data: NormalizedStaticGtfs, coverage: readonly import('./sche
     }
   }
   return { occurrences, exclusions };
+}
+
+function requestedRouteServiceDates(scope: ScheduleFallbackScope): readonly Readonly<{ routeId: string; serviceDate: string }>[] {
+  if (scope.routeServiceDates) return scope.routeServiceDates;
+  return scope.routeIds.flatMap((routeId) => scope.serviceDates.map((serviceDate) => ({ routeId, serviceDate })));
 }
 
 function toRow(item: EnumeratedOccurrence): ScheduledFallbackRow {
@@ -289,13 +301,37 @@ function validateInput(input: ScheduleFallbackInput): void {
     throw new Error('Schedule fallback input is required');
   }
   const scope = input.scope;
-  if (!scope.feedGroupId || !scope.exactStopId || !scope.operationalAxis || scope.direction === 'unknown'
-    || scope.routeIds.length === 0 || scope.serviceDates.length === 0) throw new Error('Exact schedule fallback scope is required');
+  if (!scope.feedGroupId || !scope.exactStopId || !scope.operationalAxis || !isResolvedDirection(scope.direction)
+    || !Array.isArray(scope.routeIds) || scope.routeIds.length === 0 || scope.routeIds.some((routeId) => !routeId)
+    || !Array.isArray(scope.serviceDates) || scope.serviceDates.length === 0) throw new Error('Exact schedule fallback scope is required');
   validDate(scope.comparisonAt, 'fallback comparison instant');
   for (const date of scope.serviceDates) if (!/^\d{8}$/.test(date)) throw new Error('Invalid fallback service date');
+  if (scope.routeServiceDates === undefined && scope.routeIds.length > 1 && scope.serviceDates.length > 1) {
+    throw new Error('Explicit route/service-date tuples are required for an ambiguous fallback scope');
+  }
+  if (!['current', 'degraded', 'unavailable'].includes(input.feedDecision.kind)
+    || !['blocked', 'eligible'].includes(input.feedDecision.fallbackEligibility)
+    || !['live', 'frozen-last-good', 'none'].includes(input.feedDecision.presentation)
+    || !input.feedDecision.feedGroupId) throw new Error('Invalid fallback feed decision');
+  if (input.claimDisposition !== undefined && typeof input.claimDisposition !== 'function') throw new Error('Invalid fallback claim callback');
+  if (input.recoveryDisposition !== undefined && typeof input.recoveryDisposition !== 'function') throw new Error('Invalid fallback recovery callback');
+  if (scope.routeServiceDates !== undefined) {
+    if (!Array.isArray(scope.routeServiceDates) || scope.routeServiceDates.length === 0) throw new Error('Invalid route/service-date scope');
+    const seen = new Set<string>();
+    for (const pair of scope.routeServiceDates) {
+      const key = `${pair?.routeId}\0${pair?.serviceDate}`;
+      if (!pair?.routeId || !/^\d{8}$/.test(pair.serviceDate) || !scope.routeIds.includes(pair.routeId)
+        || !scope.serviceDates.includes(pair.serviceDate) || seen.has(key)) throw new Error('Invalid route/service-date scope');
+      seen.add(key);
+    }
+  }
   if (input.feedDecision.presentation === 'frozen-last-good' && input.feedDecision.fallbackEligibility === 'eligible') {
     throw new Error('Preserved rows cannot mix with Scheduled fallback');
   }
+}
+
+function isResolvedDirection(value: Direction): boolean {
+  return ['northbound', 'southbound', 'eastbound', 'westbound', 'inbound', 'outbound'].includes(value);
 }
 
 function validateStaticData(data: NormalizedStaticGtfs): void {

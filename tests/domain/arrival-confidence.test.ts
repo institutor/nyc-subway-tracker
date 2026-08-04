@@ -25,6 +25,9 @@ function update(seconds: number, overrides: Partial<ExpectedEvidenceUpdate> = {}
     overdueVerdict: 'not-overdue',
     supportedRange: { startsAt: at(360), endsAt: at(480) },
     accepted: true,
+    feedGroupId: 'ace',
+    sourceId: 'ace-feed',
+    observedAt: at(seconds),
     ...overrides,
   };
 }
@@ -127,6 +130,20 @@ describe('independent movement and Due clocks', () => {
   test('invalid clock input throws without changing a repeated valid decision', () => {
     const before = assessArrivalConfidence(confidence());
     expect(() => assessArrivalConfidence(confidence({ assessedAt: new Date(Number.NaN) }))).toThrow(/invalid/i);
+    expect(assessArrivalConfidence(confidence())).toEqual(before);
+  });
+
+  test('rejects every forged confidence discriminant and direction atomically', () => {
+    const before = assessArrivalConfidence(confidence());
+    for (const forged of [
+      confidence({ feedState: 'fresh-ish' as never }),
+      confidence({ recoveryDisposition: 'restored' as never }),
+      confidence({ trainPhase: 'terminal-ish' as never }),
+    ]) expect(() => assessArrivalConfidence(forged)).toThrow(/invalid|state|phase|recovery/i);
+    expect(() => evaluateExpectedEvidencePair([update(-10, { direction: 'sideways' as never }), update(0, { direction: 'sideways' as never })]))
+      .toThrow(/direction/i);
+    expect(() => evaluateExpectedEvidencePair([update(-10), update(0)], { rangeStable: () => 'yes' as never }))
+      .toThrow(/range-stability/i);
     expect(assessArrivalConfidence(confidence())).toEqual(before);
   });
 });

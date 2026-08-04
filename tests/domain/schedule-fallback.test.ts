@@ -108,6 +108,32 @@ describe('fallback entry and static ownership', () => {
     expect(buildScheduleFallback(input(registry))).toMatchObject({ source: 'regular-gtfs', rows: [{ occurrenceId: '20260804:regular-trip:13' }] });
   });
 
+  test('selects the owner at each departure instant instead of at board comparison time', () => {
+    const regularMask = { ...mask, routeIds: ['A'], effectiveFrom: '2026-08-05T02:55:00.000Z', effectiveUntil: '2026-08-05T05:55:00.000Z' };
+    const supplementMask = { ...mask, routeIds: ['A'], effectiveFrom: '2026-08-05T04:00:00.000Z', effectiveUntil: '2026-08-05T04:15:00.000Z' };
+    const registry = new ScheduleEditionRegistry();
+    registry.observe(edition('regular-gtfs', 'regular-claim-owner', data([['regular-trip', '24:05:00']]), [regularMask]));
+    registry.observe(edition('supplemented-gtfs', 'supplement-claim-owner', data([['supp-trip', '24:05:00']]), [supplementMask]));
+
+    expect(buildScheduleFallback(input(registry, { scope: { ...input(registry).scope, routeIds: ['A'] } }))).toMatchObject({
+      source: 'supplemented-gtfs',
+      rows: [{ occurrenceId: '20260804:supp-trip:13' }],
+    });
+  });
+
+  test('does not let a supplement that ended before departure mask the regular occurrence', () => {
+    const regularMask = { ...mask, routeIds: ['A'], effectiveFrom: '2026-08-05T02:55:00.000Z', effectiveUntil: '2026-08-05T05:55:00.000Z' };
+    const endedSupplementMask = { ...mask, routeIds: ['A'], effectiveFrom: '2026-08-05T03:30:00.000Z', effectiveUntil: '2026-08-05T04:00:00.000Z' };
+    const registry = new ScheduleEditionRegistry();
+    registry.observe(edition('regular-gtfs', 'regular-after-mask', data([['regular-trip', '24:05:00']]), [regularMask]));
+    registry.observe(edition('supplemented-gtfs', 'ended-supplement', data([]), [endedSupplementMask]));
+
+    expect(buildScheduleFallback(input(registry, { scope: { ...input(registry).scope, routeIds: ['A'] } }))).toMatchObject({
+      source: 'regular-gtfs',
+      rows: [{ occurrenceId: '20260804:regular-trip:13' }],
+    });
+  });
+
   test('combines independently selected route owners without per-occurrence source competition', () => {
     const aSchedule = data([['a-trip', '24:05:00']]);
     const cBase = data([['c-trip', '24:06:00']]);
@@ -128,6 +154,44 @@ describe('fallback entry and static ownership', () => {
     ] });
   });
 
+  test('preserves requested route/service-date tuples instead of inventing their Cartesian product', () => {
+    const base = data([['a-trip', '24:05:00'], ['c-trip', '24:06:00']]);
+    const schedule: NormalizedStaticGtfs = {
+      ...base,
+      routes: [...base.routes, { routeId: 'C', agencyId: '', shortName: 'C', longName: '', rowIdentity: 'route:C' }],
+      trips: base.trips.map((trip) => trip.tripId === 'c-trip' ? { ...trip, routeId: 'C' } : trip),
+      servicePatterns: base.servicePatterns.map((pattern) => pattern.tripId === 'c-trip' ? { ...pattern, routeId: 'C' } : pattern),
+      calendars: [{ ...base.calendars[0], startDate: '20260804', endDate: '20260805' }],
+    };
+    const registry = new ScheduleEditionRegistry();
+    registry.observe(edition('regular-gtfs', 'paired-scope', schedule, [{
+      ...mask,
+      routeIds: ['A', 'C'],
+      serviceDates: ['20260804', '20260805'],
+      effectiveUntil: '2026-08-06T05:55:00.000Z',
+    }]));
+
+    const scoped = input(registry).scope;
+    expect(() => buildScheduleFallback(input(registry, { scope: {
+      ...scoped,
+      routeIds: ['A', 'C'],
+      serviceDates: ['20260804', '20260805'],
+    } }))).toThrow(/explicit route\/service-date tuples/i);
+    const result = buildScheduleFallback(input(registry, { scope: {
+      ...scoped,
+      routeIds: ['A', 'C'],
+      serviceDates: ['20260804', '20260805'],
+      routeServiceDates: [
+        { routeId: 'A', serviceDate: '20260804' },
+        { routeId: 'C', serviceDate: '20260805' },
+      ],
+    } }));
+    expect(result.rows.map((row) => row.occurrenceId)).toEqual([
+      '20260804:a-trip:13',
+      '20260805:c-trip:13',
+    ]);
+  });
+
   test('uses current and stale owners for departures but never a topology-only supplement', () => {
     for (const [ageSeconds, source, currency] of [
       [120, 'supplemented-gtfs', 'current'],
@@ -139,6 +203,17 @@ describe('fallback entry and static ownership', () => {
         retrievedAt: iso(-ageSeconds), publishedAt: iso(-ageSeconds) });
       expect(buildScheduleFallback(input(registry))).toMatchObject({ source, ...(currency ? { currency } : {}), rows: currency ? [{}] : [] });
     }
+  });
+
+  test('preserves scope ownership metadata for an empty but covered board', () => {
+    const registry = new ScheduleEditionRegistry();
+    registry.observe(edition('supplemented-gtfs', 'empty-covered-owner', data([]), [{ ...mask, routeIds: ['A'] }]));
+    expect(buildScheduleFallback(input(registry, { scope: { ...input(registry).scope, routeIds: ['A'] } }))).toMatchObject({
+      source: 'supplemented-gtfs',
+      currency: 'current',
+      rows: [],
+      explanation: 'No scheduled departures available.',
+    });
   });
 
   test('enumerates only trips active on the exact operating service date, including calendar exceptions', () => {
@@ -170,6 +245,51 @@ describe('explicit future departures and deterministic fallback boards', () => {
     });
     expect(buildScheduleFallback(input(registry)).rows[0].arrival.provenance).toMatchObject({
       sourceId: 'supplemented-gtfs:times', observedAt: new Date(iso(-120)), retrievedAt: new Date(iso(-60)),
+    });
+  });
+
+  test.each([
+    {
+      label: 'fall-back ambiguity', serviceDate: '20261101', comparisonAt: new Date('2026-11-01T04:00:00.000Z'),
+      invalidTime: '01:30:00', validTime: '03:00:00', validAt: new Date('2026-11-01T08:00:00.000Z'),
+      disposition: 'ambiguous-service-time',
+    },
+    {
+      label: 'spring-forward gap', serviceDate: '20260308', comparisonAt: new Date('2026-03-08T05:00:00.000Z'),
+      invalidTime: '02:30:00', validTime: '03:30:00', validAt: new Date('2026-03-08T07:30:00.000Z'),
+      disposition: 'nonexistent-service-time',
+    },
+  ])('isolates a $label to its occurrence and retains valid departures', ({
+    serviceDate, comparisonAt, invalidTime, validTime, validAt, disposition,
+  }) => {
+    const schedule = data([['invalid-dst', invalidTime], ['valid-dst', validTime]], {
+      calendars: [{ serviceId: 'WKND', weekdays: [true, true, true, true, true, true, true], startDate: serviceDate, endDate: serviceDate, rowIdentity: 'dst-cal' }],
+    });
+    const coverage = [{
+      ...mask,
+      routeIds: ['A'],
+      serviceDates: [serviceDate],
+      effectiveFrom: comparisonAt.toISOString(),
+      effectiveUntil: new Date(comparisonAt.getTime() + 12 * 3600_000).toISOString(),
+    }];
+    const candidate = edition('regular-gtfs', `dst-${serviceDate}`, schedule, coverage);
+    const registry = new ScheduleEditionRegistry();
+    registry.observe({
+      ...candidate,
+      retrievedAt: new Date(comparisonAt.getTime() - 60_000).toISOString(),
+      publishedAt: new Date(comparisonAt.getTime() - 120_000).toISOString(),
+    });
+
+    const result = buildScheduleFallback(input(registry, { scope: {
+      ...input(registry).scope,
+      comparisonAt,
+      routeIds: ['A'],
+      serviceDates: [serviceDate],
+    } }));
+    expect(result.rows).toMatchObject([{ occurrenceId: `${serviceDate}:valid-dst:13`, arrival: { at: validAt } }]);
+    expect(result.exclusions).toContainEqual({
+      occurrenceId: `${serviceDate}:invalid-dst:13`,
+      disposition,
     });
   });
 
@@ -232,6 +352,8 @@ describe('vetoes and hard-suppression carryover', () => {
     const registry = new ScheduleEditionRegistry();
     registry.observe(edition('supplemented-gtfs', 'atomic', data([['one', '24:05:00']])));
     const before = buildScheduleFallback(input(registry));
+    expect([before, before.rows, before.exclusions, before.rows[0], before.rows[0].arrival,
+      before.rows[0].arrival.route, before.rows[0].arrival.provenance].every(Object.isFrozen)).toBe(true);
     expect(() => buildScheduleFallback(input(registry, { scope: { ...input(registry).scope, comparisonAt: new Date(Number.NaN) } })))
       .toThrow(/invalid/i);
     expect(buildScheduleFallback(input(registry))).toEqual(before);
@@ -239,6 +361,16 @@ describe('vetoes and hard-suppression carryover', () => {
       claimDisposition: () => 'eligible',
       recoveryDisposition: () => 'forged-live' as never,
     }))).toThrow(/invalid fallback recovery disposition/i);
+    expect(() => buildScheduleFallback(input(registry, {
+      claimDisposition: () => 'maybe' as never,
+    }))).toThrow(/invalid scheduled claim disposition/i);
+    for (const forged of [
+      input(registry, { feedDecision: { ...input(registry).feedDecision, kind: 'offline' as never } }),
+      input(registry, { feedDecision: { ...input(registry).feedDecision, fallbackEligibility: 'maybe' as never } }),
+      input(registry, { feedDecision: { ...input(registry).feedDecision, presentation: 'ghost' as never } }),
+      input(registry, { scope: { ...input(registry).scope, direction: 'sideways' as never } }),
+      input(registry, { claimDisposition: 'callback' as never }),
+    ]) expect(() => buildScheduleFallback(forged)).toThrow(/invalid|exact schedule fallback scope/i);
     expect(buildScheduleFallback(input(registry))).toEqual(before);
   });
 });

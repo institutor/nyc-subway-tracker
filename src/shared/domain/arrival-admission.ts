@@ -30,6 +30,7 @@ export type ArrivalCandidateConfidence =
 export interface ArrivalAdmissionCandidate {
   readonly stableTrainIdentity: string;
   readonly publishedTripId: string;
+  readonly patternIdentity: string;
   readonly feedGroupId: string;
   readonly route: RouteIdentity;
   readonly routeOrderKind: PublicRouteOrderKind;
@@ -73,6 +74,10 @@ export function admitArrivalCandidate(
 ): ArrivalAdmissionDecision {
   validateScope(scope);
   validateCandidate(candidate);
+  if (candidate.provenance.observedAt.getTime() > candidate.provenance.retrievedAt.getTime()
+    || candidate.provenance.retrievedAt.getTime() > scope.comparisonAt.getTime()) {
+    throw new Error('Invalid future or regressed primary arrival provenance');
+  }
   if (candidate.feedGroupId !== scope.feedGroupId) return rejected('candidate', 'different-feed-group');
 
   const exactCalls = candidate.remainingStopCalls.filter((call) => call.stopId === scope.exactStopId
@@ -82,7 +87,7 @@ export function admitArrivalCandidate(
   if (exactCalls.length === 0) return rejected('exact-stop', 'exact-future-stop-not-confirmed');
   const identified = exactCalls.map((call) => ({ call, identity: canonicalStopCallIdentity(call) }));
   const uniqueIdentities = new Set(identified.map((item) => item.identity));
-  if (uniqueIdentities.size !== identified.length) throw new Error('Ambiguous repeated exact stop-call occurrence');
+  if (uniqueIdentities.size !== identified.length) return rejected('exact-stop', 'duplicate-exact-stop-occurrence');
   identified.sort((left, right) => eventAt(left.call, scope.comparisonAt.getTime()) - eventAt(right.call, scope.comparisonAt.getTime())
     || compareCanonicalIdentity(left.identity, right.identity));
   const target = identified[0];
@@ -114,9 +119,24 @@ export function admitArrivalCandidate(
   if (candidate.confidence.kind === 'expected') {
     if (candidate.recoveryDisposition !== 'live-continuity') return rejected('identity-recovery', 'recovery-cannot-restore-expected');
     const expected = evaluateExpectedEvidencePair(candidate.confidence.updates, candidate.confidence.policy);
-    if (!expected.eligible || expected.stableTrainIdentity !== candidate.stableTrainIdentity
-      || candidate.confidence.updates.at(-1)?.exactTargetStopCallIdentity !== target.identity) {
-      return rejected('movement-time', expected.eligible ? 'expected-target-mismatch' : expected.reason);
+    const updates = candidate.confidence.updates;
+    const provenanceObservedAt = candidate.provenance.observedAt.getTime();
+    const expectedMatchesClaim = updates.every((update) =>
+      sameIdentity(update.stableTrainIdentity, candidate.stableTrainIdentity)
+      && sameIdentity(update.patternIdentity, candidate.patternIdentity)
+      && update.direction === candidate.direction
+      && update.direction === scope.direction
+      && sameIdentity(update.destination, candidate.destination)
+      && sameIdentity(update.destination, scope.destination)
+      && sameIdentity(update.exactTargetStopCallIdentity, target.identity)
+      && sameIdentity(update.feedGroupId, candidate.feedGroupId)
+      && sameIdentity(update.feedGroupId, scope.feedGroupId)
+      && sameIdentity(update.sourceId, candidate.provenance.sourceId)
+      && update.sourceTimestamp.getTime() <= update.observedAt.getTime()
+      && update.observedAt.getTime() <= provenanceObservedAt
+      && update.observedAt.getTime() <= scope.comparisonAt.getTime());
+    if (!expected.eligible || !sameIdentity(expected.stableTrainIdentity, candidate.stableTrainIdentity) || !expectedMatchesClaim) {
+      return rejected('movement-time', expected.eligible ? 'expected-claim-or-provenance-mismatch' : expected.reason);
     }
     const estimateAt = rangeCenter(expected.supportedRange);
     const arrival: ExpectedArrival = Object.freeze({ ...common, kind: 'expected', estimateAt, range: expected.supportedRange });
@@ -133,7 +153,7 @@ export function admitArrivalCandidate(
 }
 
 function validateScope(scope: ArrivalBoardScope): void {
-  if (!scope || typeof scope !== 'object' || !scope.feedGroupId || !scope.exactStopId || !scope.destination || scope.direction === 'unknown') {
+  if (!scope || typeof scope !== 'object' || !scope.feedGroupId || !scope.exactStopId || !scope.destination || !isResolvedDirection(scope.direction)) {
     throw new Error('Exact resolved arrival board scope is required');
   }
   validDate(scope.comparisonAt, 'board comparison instant');
@@ -141,10 +161,11 @@ function validateScope(scope: ArrivalBoardScope): void {
 
 function validateCandidate(candidate: ArrivalAdmissionCandidate): void {
   if (!candidate || typeof candidate !== 'object' || !candidate.stableTrainIdentity || !candidate.publishedTripId
-    || !candidate.feedGroupId || !candidate.route?.id || !candidate.route.label || !candidate.destination) {
+    || !candidate.patternIdentity || !candidate.feedGroupId || !candidate.route?.id || !candidate.route.label || !candidate.destination
+    || !candidate.provenance || typeof candidate.provenance !== 'object') {
     throw new Error('Complete arrival candidate identity is required');
   }
-  if (candidate.direction === 'unknown') throw new Error('A resolved direction is required');
+  if (!isResolvedDirection(candidate.direction)) throw new Error('A resolved direction is required');
   if (!Array.isArray(candidate.remainingStopCalls)) throw new Error('Ordered remaining stop calls are required');
   for (const call of candidate.remainingStopCalls) {
     if (!call.stopId || (call.arrivalAt === null && call.departureAt === null)) throw new Error('Complete remaining stop call is required');
@@ -171,6 +192,31 @@ function validateCandidate(candidate: ArrivalAdmissionCandidate): void {
   }
   validDate(candidate.provenance.observedAt, 'candidate observation instant');
   validDate(candidate.provenance.retrievedAt, 'candidate retrieval instant');
+  if (!candidate.provenance.sourceId || !['regular-gtfs', 'supplemented-gtfs', 'gtfs-rt', 'alerts', 'entrances', 'equipment'].includes(candidate.provenance.source)) {
+    throw new Error('Invalid candidate provenance');
+  }
+  if (candidate.provenance.source !== 'gtfs-rt') throw new Error('Invalid primary arrival provenance; GTFS-RT is required');
+  if (!candidate.confidence || !['live', 'expected'].includes(candidate.confidence.kind)) throw new Error('Invalid arrival confidence kind');
+  if (candidate.confidence.kind === 'live') {
+    validateSupportedRange(candidate.confidence.supportedRange);
+  } else if (!Array.isArray(candidate.confidence.updates)) {
+    throw new Error('Expected confidence updates are required');
+  }
+}
+
+function validateSupportedRange(range: SupportedArrivalRange): void {
+  if (!range || typeof range !== 'object') throw new Error('Invalid confidence supported range');
+  if (validDate(range.endsAt, 'supported range end') < validDate(range.startsAt, 'supported range start')) {
+    throw new Error('Supported range ends before start');
+  }
+}
+
+function isResolvedDirection(value: Direction): boolean {
+  return ['northbound', 'southbound', 'eastbound', 'westbound', 'inbound', 'outbound'].includes(value);
+}
+
+function sameIdentity(left: string, right: string): boolean {
+  return normalizeCanonicalIdentity(left) === normalizeCanonicalIdentity(right);
 }
 
 function eventAt(call: ArrivalStopCallEvidence, comparisonAt: number): number {

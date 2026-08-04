@@ -1,4 +1,5 @@
 import type { Direction } from './types';
+import { normalizeCanonicalIdentity } from './canonical';
 
 export interface SupportedArrivalRange {
   readonly startsAt: Date;
@@ -8,6 +9,9 @@ export interface SupportedArrivalRange {
 export interface ExpectedEvidenceUpdate {
   readonly evidenceId: string;
   readonly sourceTimestamp: Date;
+  readonly observedAt: Date;
+  readonly feedGroupId: string;
+  readonly sourceId: string;
   readonly stableTrainIdentity: string;
   readonly patternIdentity: string;
   readonly direction: Direction;
@@ -34,6 +38,10 @@ export function evaluateExpectedEvidencePair(
   policy: ExpectedEvidencePolicy = {},
 ): ExpectedEvidenceDecision {
   if (!Array.isArray(updates)) throw new Error('Expected evidence updates are required');
+  if (!policy || typeof policy !== 'object'
+    || (policy.rangeStable !== undefined && typeof policy.rangeStable !== 'function')) {
+    throw new Error('Invalid Expected evidence policy');
+  }
   for (const update of updates) validateExpectedUpdate(update);
   if (updates.length !== 2) return frozenIneligible('Expected requires exactly two consecutive accepted updates');
   const [prior, current] = updates;
@@ -41,20 +49,30 @@ export function evaluateExpectedEvidencePair(
   if (current.sourceTimestamp.getTime() <= prior.sourceTimestamp.getTime() || current.evidenceId === prior.evidenceId) {
     return frozenIneligible('Expected confirmation requires distinct advancing evidence');
   }
+  if (current.observedAt.getTime() < prior.observedAt.getTime()) {
+    return frozenIneligible('Expected observation chronology regressed');
+  }
   for (const update of updates) {
     if (!update.assignedPhysicalTrain || !update.atOrigin || update.movementObserved || update.overdueVerdict !== 'not-overdue') {
       return frozenIneligible('Expected origin assignment conditions are not proven');
     }
   }
-  const stable = prior.stableTrainIdentity === current.stableTrainIdentity
-    && prior.patternIdentity === current.patternIdentity
+  const stable = sameIdentity(prior.stableTrainIdentity, current.stableTrainIdentity)
+    && sameIdentity(prior.patternIdentity, current.patternIdentity)
     && prior.direction === current.direction
-    && prior.destination === current.destination
-    && prior.exactTargetStopCallIdentity === current.exactTargetStopCallIdentity;
+    && sameIdentity(prior.destination, current.destination)
+    && sameIdentity(prior.exactTargetStopCallIdentity, current.exactTargetStopCallIdentity)
+    && sameIdentity(prior.feedGroupId, current.feedGroupId)
+    && sameIdentity(prior.sourceId, current.sourceId);
   if (!stable) return frozenIneligible('Expected identity, pattern, direction, destination, or target changed');
-  const rangeStable = policy.rangeStable
-    ? policy.rangeStable(prior.supportedRange, current.supportedRange)
-    : sameRange(prior.supportedRange, current.supportedRange);
+  let rangeStable: boolean;
+  if (policy.rangeStable) {
+    const governedRangeStable = policy.rangeStable(prior.supportedRange, current.supportedRange);
+    if (typeof governedRangeStable !== 'boolean') throw new Error('Invalid governed Expected range-stability result');
+    rangeStable = governedRangeStable;
+  } else {
+    rangeStable = sameRange(prior.supportedRange, current.supportedRange);
+  }
   if (!rangeStable) return frozenIneligible('Expected supported range changed');
   return Object.freeze({
     eligible: true,
@@ -145,10 +163,13 @@ export function assessArrivalConfidence(input: ArrivalConfidenceInput): ArrivalC
 
 function validateExpectedUpdate(update: ExpectedEvidenceUpdate): void {
   if (!update || typeof update !== 'object' || !update.evidenceId || !update.stableTrainIdentity || !update.patternIdentity
-    || !update.destination || !update.exactTargetStopCallIdentity || update.direction === 'unknown') {
+    || !update.destination || !update.exactTargetStopCallIdentity || !update.feedGroupId || !update.sourceId) {
     throw new Error('Incomplete Expected evidence update');
   }
+  if (!isResolvedDirection(update.direction)) throw new Error('Invalid Expected direction');
   validDate(update.sourceTimestamp, 'Expected source timestamp');
+  const observedAt = validDate(update.observedAt, 'Expected observation timestamp');
+  if (update.sourceTimestamp.getTime() > observedAt) throw new Error('Expected source timestamp cannot follow observation');
   validateRange(update.supportedRange);
   for (const [name, value] of [['assignedPhysicalTrain', update.assignedPhysicalTrain], ['atOrigin', update.atOrigin],
     ['movementObserved', update.movementObserved], ['accepted', update.accepted]] as const) {
@@ -167,9 +188,22 @@ function validateConfidenceInput(input: ArrivalConfidenceInput): void {
   if (typeof input.exactStopConfirmed !== 'boolean' || typeof input.trackPathConfirmed !== 'boolean') {
     throw new Error('Stop and path confirmation must be boolean');
   }
+  if (!['current', 'degraded', 'unavailable', 'quarantined'].includes(input.feedState)) throw new Error('Invalid feed state');
+  if (!['live-continuity', 'precision-withheld', 'hard-suppressed', 'live-readmission-eligible'].includes(input.recoveryDisposition)) {
+    throw new Error('Invalid recovery disposition');
+  }
+  if (!['running', 'origin-awaiting-departure'].includes(input.trainPhase)) throw new Error('Invalid train phase');
   if (!['unusual', 'not-unusual', 'not-evaluated'].includes(input.unusualDwellVerdict)) {
     throw new Error('Governed unusual-dwell verdict is required');
   }
+}
+
+function isResolvedDirection(value: Direction): boolean {
+  return ['northbound', 'southbound', 'eastbound', 'westbound', 'inbound', 'outbound'].includes(value);
+}
+
+function sameIdentity(left: string, right: string): boolean {
+  return normalizeCanonicalIdentity(left) === normalizeCanonicalIdentity(right);
 }
 
 function decision(

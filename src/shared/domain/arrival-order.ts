@@ -1,4 +1,4 @@
-import { compareCanonicalIdentity } from './canonical';
+import { compareCanonicalIdentity, normalizeCanonicalIdentity } from './canonical';
 import type { SupportedArrivalRange } from './arrival-confidence';
 import type { PrimaryArrival } from './types';
 
@@ -17,8 +17,9 @@ export function orderPrimaryArrivals(rows: readonly PrimaryOrderRow[], cap = 3):
   const identities = new Set<string>();
   for (const row of rows) {
     validateRow(row);
-    if (identities.has(row.stableTrainIdentity)) throw new Error('Ambiguous duplicate primary train identity');
-    identities.add(row.stableTrainIdentity);
+    const identity = normalizeCanonicalIdentity(row.stableTrainIdentity);
+    if (identities.has(identity)) throw new Error('Ambiguous duplicate primary train identity');
+    identities.add(identity);
   }
   const initial = [...rows].sort(compareRows);
   const liveVisitOrder = initial.filter((row) => row.arrival.kind === 'live');

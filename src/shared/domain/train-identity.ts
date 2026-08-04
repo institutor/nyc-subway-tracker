@@ -52,6 +52,12 @@ export interface ContinuityPredicates {
 export interface TrainContinuityDecision {
   readonly joins: readonly { readonly priorIdentity: string; readonly currentIdentity: string }[];
   readonly quarantined: readonly string[];
+  readonly unmatched: Readonly<{ readonly prior: readonly string[]; readonly current: readonly string[] }>;
+  readonly quarantinedEvidence: readonly Readonly<{
+    readonly role: 'prior' | 'current';
+    readonly identity: string;
+    readonly reason: 'track-path-unresolved' | 'ambiguous-continuity' | 'no-exclusive-continuity';
+  }>[];
 }
 
 export function resolveTrainContinuity(
@@ -88,7 +94,42 @@ export function resolveTrainContinuity(
     .filter((edge) => priorDegree.get(edge.prior.stableTrainIdentity)! > 1 || currentDegree.get(edge.current.stableTrainIdentity)! > 1)
     .flatMap((edge) => [edge.prior.stableTrainIdentity, edge.current.stableTrainIdentity]))]
     .sort(compareCanonicalIdentity);
-  return Object.freeze({ joins: Object.freeze(joins), quarantined: Object.freeze(quarantined) });
+  const joinedPriors = new Set(joins.map((join) => join.priorIdentity));
+  const joinedCurrents = new Set(joins.map((join) => join.currentIdentity));
+  const unmatchedPrior = priors.map((item) => item.stableTrainIdentity).filter((id) => !joinedPriors.has(id)).sort(compareCanonicalIdentity);
+  const unmatchedCurrent = currents.map((item) => item.stableTrainIdentity).filter((id) => !joinedCurrents.has(id)).sort(compareCanonicalIdentity);
+  const ambiguous = new Set(quarantined.map(normalizeCanonicalIdentity));
+  const unresolvedTracks = new Set<string>();
+  for (const prior of priors) {
+    if (!hasTrack(prior.track) && unmatchedPrior.includes(prior.stableTrainIdentity)) unresolvedTracks.add(`prior\0${normalizeCanonicalIdentity(prior.stableTrainIdentity)}`);
+    for (const current of currents) {
+      if ((!hasTrack(prior.track) || !hasTrack(current.track)) && couldMatchExceptTrack(prior, current, predicates)) {
+        unresolvedTracks.add(`prior\0${normalizeCanonicalIdentity(prior.stableTrainIdentity)}`);
+        unresolvedTracks.add(`current\0${normalizeCanonicalIdentity(current.stableTrainIdentity)}`);
+      }
+    }
+  }
+  for (const current of currents) {
+    if (!hasTrack(current.track) && unmatchedCurrent.includes(current.stableTrainIdentity)) unresolvedTracks.add(`current\0${normalizeCanonicalIdentity(current.stableTrainIdentity)}`);
+  }
+  const quarantinedEvidence = [
+    ...unmatchedCurrent.map((identity) => diagnostic('current', identity)),
+    ...unmatchedPrior.map((identity) => diagnostic('prior', identity)),
+  ];
+  return Object.freeze({
+    joins: Object.freeze(joins),
+    quarantined: Object.freeze(quarantined),
+    unmatched: Object.freeze({ prior: Object.freeze(unmatchedPrior), current: Object.freeze(unmatchedCurrent) }),
+    quarantinedEvidence: Object.freeze(quarantinedEvidence),
+  });
+
+  function diagnostic(role: 'prior' | 'current', identity: string) {
+    const normalized = normalizeCanonicalIdentity(identity);
+    const reason = unresolvedTracks.has(`${role}\0${normalized}`)
+      ? 'track-path-unresolved' as const
+      : ambiguous.has(normalized) ? 'ambiguous-continuity' as const : 'no-exclusive-continuity' as const;
+    return Object.freeze({ role, identity, reason });
+  }
 }
 
 function isContinuityMatch(
@@ -97,17 +138,37 @@ function isContinuityMatch(
   predicates: ContinuityPredicates,
 ): boolean {
   const markerMatches = prior.internalTrainMarker == null || current.internalTrainMarker == null
-    || prior.internalTrainMarker === current.internalTrainMarker;
+    || sameIdentity(prior.internalTrainMarker, current.internalTrainMarker);
   return markerMatches
     && current.appearedAt.getTime() >= prior.disappearedAt.getTime()
-    && prior.routeId === current.routeId
+    && sameIdentity(prior.routeId, current.routeId)
     && prior.direction === current.direction
-    && prior.serviceDate === current.serviceDate
+    && sameIdentity(prior.serviceDate, current.serviceDate)
     && sameStrings(prior.orderedStopCallIdentities, current.orderedStopCallIdentities)
-    && compatibleOptional(prior.track, current.track)
-    && prior.destination === current.destination
-    && predicates.similarTime(prior, current)
-    && predicates.immediateReplacement(prior, current);
+    && hasTrack(prior.track)
+    && hasTrack(current.track)
+    && sameIdentity(prior.track, current.track)
+    && sameIdentity(prior.destination, current.destination)
+    && governedPredicate(predicates.similarTime, prior, current, 'similar-time')
+    && governedPredicate(predicates.immediateReplacement, prior, current, 'immediate-replacement');
+}
+
+function couldMatchExceptTrack(
+  prior: PriorTrainContinuityEvidence,
+  current: CurrentTrainContinuityEvidence,
+  predicates: ContinuityPredicates,
+): boolean {
+  const markerMatches = prior.internalTrainMarker == null || current.internalTrainMarker == null
+    || sameIdentity(prior.internalTrainMarker, current.internalTrainMarker);
+  return markerMatches
+    && current.appearedAt.getTime() >= prior.disappearedAt.getTime()
+    && sameIdentity(prior.routeId, current.routeId)
+    && prior.direction === current.direction
+    && sameIdentity(prior.serviceDate, current.serviceDate)
+    && sameStrings(prior.orderedStopCallIdentities, current.orderedStopCallIdentities)
+    && sameIdentity(prior.destination, current.destination)
+    && governedPredicate(predicates.similarTime, prior, current, 'similar-time')
+    && governedPredicate(predicates.immediateReplacement, prior, current, 'immediate-replacement');
 }
 
 function validateContinuityPopulation(values: readonly (PriorTrainContinuityEvidence | CurrentTrainContinuityEvidence)[], label: string): void {
@@ -117,7 +178,7 @@ function validateContinuityPopulation(values: readonly (PriorTrainContinuityEvid
     if (!value.stableTrainIdentity || !value.publishedTripId || !value.routeId || !value.serviceDate || !value.destination) {
       throw new Error(`Incomplete ${label} train continuity evidence`);
     }
-    if (value.direction === 'unknown' || !Array.isArray(value.orderedStopCallIdentities)) {
+    if (!isResolvedDirection(value.direction) || !Array.isArray(value.orderedStopCallIdentities)) {
       throw new Error(`Incomplete ${label} train continuity evidence`);
     }
     if (label === 'prior' && !('disappearedAt' in value)) throw new Error('Prior disappearance time is required');
@@ -128,17 +189,37 @@ function validateContinuityPopulation(values: readonly (PriorTrainContinuityEvid
     validDate(value.predictedAt, `${label} prediction`);
     if ('disappearedAt' in value && value.disappearedAt !== undefined) validDate(value.disappearedAt, `${label} disappearance`);
     if ('appearedAt' in value) validDate(value.appearedAt, `${label} appearance`);
-    if (identities.has(value.stableTrainIdentity)) throw new Error(`Duplicate ${label} stable train identity`);
-    identities.add(value.stableTrainIdentity);
+    const identity = normalizeCanonicalIdentity(value.stableTrainIdentity);
+    if (identities.has(identity)) throw new Error(`Duplicate ${label} stable train identity`);
+    identities.add(identity);
   }
 }
 
-function compatibleOptional(left: string | null | undefined, right: string | null | undefined): boolean {
-  return left == null || right == null || left === right;
+function hasTrack(value: string | null | undefined): value is string {
+  return typeof value === 'string' && value.trim().length > 0;
 }
 
 function sameStrings(left: readonly string[], right: readonly string[]): boolean {
-  return left.length === right.length && left.every((value, index) => value === right[index]);
+  return left.length === right.length && left.every((value, index) => sameIdentity(value, right[index]));
+}
+
+function sameIdentity(left: string, right: string): boolean {
+  return normalizeCanonicalIdentity(left) === normalizeCanonicalIdentity(right);
+}
+
+function governedPredicate(
+  predicate: (prior: PriorTrainContinuityEvidence, current: CurrentTrainContinuityEvidence) => boolean,
+  prior: PriorTrainContinuityEvidence,
+  current: CurrentTrainContinuityEvidence,
+  label: string,
+): boolean {
+  const result = predicate(prior, current);
+  if (typeof result !== 'boolean') throw new Error(`Invalid governed ${label} result`);
+  return result;
+}
+
+function isResolvedDirection(value: Direction): boolean {
+  return ['northbound', 'southbound', 'eastbound', 'westbound', 'inbound', 'outbound'].includes(value);
 }
 
 function validDate(value: Date, label: string): number {

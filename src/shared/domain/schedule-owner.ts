@@ -173,6 +173,12 @@ export class ScheduleEditionRegistry {
     );
   }
 
+  enumerationEditions(): readonly Readonly<{ editionId: string; candidate: StaticGtfsEditionCandidate }>[] {
+    return Object.freeze(this.#editions
+      .map((edition) => Object.freeze({ editionId: edition.editionId, candidate: edition.candidate }))
+      .sort((left, right) => left.editionId.localeCompare(right.editionId)));
+  }
+
   classify(editionId: string, claim: ScheduleClaim, comparisonAt: Date): ScheduleCurrencyDecision {
     const edition = this.#editions.find((candidate) => candidate.editionId === editionId);
     if (!edition) throw new Error(`Unknown schedule edition: ${editionId}`);
@@ -275,7 +281,9 @@ function maskContains(mask: ScheduleCoverageMask, claim: ScheduleClaim): boolean
 }
 
 function validateClaim(claim: ScheduleClaim): void {
-  if (!claim.routeId || !/^\d{8}$/.test(claim.serviceDate)) throw new Error('Invalid schedule claim scope');
+  if (!claim.routeId || !/^\d{8}$/.test(claim.serviceDate) || !isResolvedDirection(claim.direction)) {
+    throw new Error('Invalid schedule claim scope');
+  }
   if (claim.occurrenceId === '' || claim.stopId === '' || claim.stopTimeOccurrenceId === '') {
     throw new Error('Invalid empty schedule occurrence scope');
   }
@@ -388,7 +396,7 @@ function validateCoverage(coverage: readonly ScheduleCoverageMask[]): string | u
     if (!mask?.id || ids.has(mask.id) || !Array.isArray(mask.routeIds) || mask.routeIds.length === 0
       || mask.routeIds.some((routeId: string) => !routeId) || !Array.isArray(mask.serviceDates) || mask.serviceDates.length === 0
       || mask.serviceDates.some((serviceDate: string) => !/^\d{8}$/.test(serviceDate)) || !Array.isArray(mask.directions)
-      || mask.directions.includes('unknown')) return 'Invalid schedule coverage mask';
+      || mask.directions.some((direction: Direction) => !isResolvedDirection(direction))) return 'Invalid schedule coverage mask';
     ids.add(mask.id);
     let effectiveFrom: string;
     let effectiveUntil: string;
@@ -404,4 +412,8 @@ function validateCoverage(coverage: readonly ScheduleCoverageMask[]): string | u
     }
   }
   return undefined;
+}
+
+function isResolvedDirection(value: Direction): boolean {
+  return ['northbound', 'southbound', 'eastbound', 'westbound', 'inbound', 'outbound'].includes(value);
 }
