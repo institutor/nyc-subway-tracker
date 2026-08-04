@@ -1,6 +1,10 @@
 export const NEW_YORK_TIME_ZONE = 'America/New_York';
 
-export type ServiceDate = `${number}-${number}-${number}`;
+declare const serviceDateBrand: unique symbol;
+
+/** A validated operating date supplied by the source, never inferred from a display instant. */
+export type ServiceDate = string & { readonly [serviceDateBrand]: 'ServiceDate' };
+export type CalendarDate = `${number}-${number}-${number}`;
 
 export interface Clock {
   now(): Date;
@@ -39,9 +43,15 @@ export function compareInstants(left: Date, right: Date): number {
   return left.getTime() - right.getTime();
 }
 
-export function newYorkServiceDate(instant: Date): ServiceDate {
+export function newYorkCalendarDate(instant: Date): CalendarDate {
   const parts = newYorkParts(instant);
-  return `${parts.year}-${pad(parts.month)}-${pad(parts.day)}` as ServiceDate;
+  return `${parts.year}-${pad(parts.month)}-${pad(parts.day)}` as CalendarDate;
+}
+
+export function parseServiceDate(value: string): ServiceDate {
+  const date = parseGregorianDate(value);
+  if (!date) throw new Error(`Invalid service date: ${value}`);
+  return value as ServiceDate;
 }
 
 export function parseGtfsTime(value: string): GtfsTime {
@@ -63,17 +73,18 @@ export function parseGtfsTime(value: string): GtfsTime {
 
 /** Converts a service-date GTFS clock value to an absolute New York instant. */
 export function serviceDateTimeToInstant(
-  serviceDate: ServiceDate,
+  sourceServiceDate: ServiceDate | string,
   gtfsTime: string,
   disambiguation: LocalTimeDisambiguation = 'earlier',
 ): Date {
-  const date = /^(\d{4})-(\d{2})-(\d{2})$/.exec(serviceDate);
-  if (!date) throw new Error(`Invalid service date: ${serviceDate}`);
+  const serviceDate = parseServiceDate(sourceServiceDate);
+  const date = parseGregorianDate(serviceDate);
+  if (!date) throw new Error(`Invalid service date: ${sourceServiceDate}`);
 
   const parsed = parseGtfsTime(gtfsTime);
-  const year = Number(date[1]);
-  const month = Number(date[2]);
-  const day = Number(date[3]) + parsed.dayOffset;
+  const year = date.year;
+  const month = date.month;
+  const day = date.day + parsed.dayOffset;
   const wallTimeAsUtc = Date.UTC(year, month - 1, day, parsed.hour, parsed.minute, parsed.second);
   const matches = [-5, -4]
     .map((offsetHours) => new Date(wallTimeAsUtc - offsetHours * 60 * 60 * 1000))
@@ -86,7 +97,22 @@ export function serviceDateTimeToInstant(
     throw new Error(`Ambiguous New York local time: ${serviceDate} ${gtfsTime}`);
   }
 
+  matches.sort(compareInstants);
   return matches[disambiguation === 'later' ? matches.length - 1 : 0];
+}
+
+function parseGregorianDate(value: string): { year: number; month: number; day: number } | undefined {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return undefined;
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const candidate = new Date(Date.UTC(year, month - 1, day));
+  if (candidate.getUTCFullYear() !== year || candidate.getUTCMonth() !== month - 1 || candidate.getUTCDate() !== day) {
+    return undefined;
+  }
+  return { year, month, day };
 }
 
 function newYorkParts(instant: Date) {

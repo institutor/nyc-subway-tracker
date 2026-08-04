@@ -3,10 +3,11 @@ import type { ServiceDate } from './clock';
 export type Instant = Date;
 export type SourceKind = 'regular-gtfs' | 'supplemented-gtfs' | 'gtfs-rt' | 'alerts' | 'entrances' | 'equipment';
 export type FeedHealthState = 'current' | 'degraded' | 'unavailable' | 'quarantined';
-export type ArrivalState = 'live' | 'expected' | 'scheduled' | 'holding' | 'uncertain';
 export type Direction = 'northbound' | 'southbound' | 'eastbound' | 'westbound' | 'inbound' | 'outbound' | 'unknown';
-export type AccessibilityState = 'eligible' | 'ineligible' | 'unknown';
-export type ExposureStage = 'locked' | 'shadow' | 'validation' | 'pilot' | 'enabled';
+export type BoardMode = 'live' | 'scheduled-fallback' | 'demonstration' | 'unavailable';
+export type ExposureStage = 'locked' | 'shadow' | 'validation' | 'enabled';
+export type CommuteStage = 'disabled' | 'deterministic-test' | 'silent-evaluation' | 'pilot' | 'delivery';
+export type CapabilityState = 'locked' | 'available' | 'unavailable';
 
 export interface Provenance {
   source: SourceKind;
@@ -65,36 +66,134 @@ export interface Alert {
   provenance: Provenance;
 }
 
-export interface Arrival {
+interface ArrivalBase {
   id: string;
   route: RouteIdentity;
   direction: Direction;
   destination: string;
-  state: ArrivalState;
-  at: Instant;
-  serviceDate?: ServiceDate;
   provenance: Provenance;
 }
 
-export interface BoardDirection {
-  direction: Direction;
-  arrivals: readonly Arrival[];
+export interface LiveArrival extends ArrivalBase {
+  kind: 'live';
+  at: Instant;
+  estimateAt?: never;
+  range?: never;
+  serviceDate?: never;
+  lastSupportedAt?: never;
+  reason?: never;
 }
 
-export interface Board {
+export interface ExpectedArrival extends ArrivalBase {
+  kind: 'expected';
+  estimateAt: Instant;
+  range: { startsAt: Instant; endsAt: Instant };
+  at?: never;
+  serviceDate?: never;
+  lastSupportedAt?: never;
+  reason?: never;
+}
+
+export interface ScheduledArrival extends ArrivalBase {
+  kind: 'scheduled';
+  at: Instant;
+  serviceDate: ServiceDate;
+  estimateAt?: never;
+  range?: never;
+  lastSupportedAt?: never;
+  reason?: never;
+}
+
+export interface HoldingArrival extends ArrivalBase {
+  kind: 'holding';
+  lastSupportedAt: Instant;
+  at?: never;
+  estimateAt?: never;
+  range?: never;
+  serviceDate?: never;
+  reason?: never;
+}
+
+export interface UncertainArrival extends ArrivalBase {
+  kind: 'uncertain';
+  reason: string;
+  at?: never;
+  estimateAt?: never;
+  range?: never;
+  serviceDate?: never;
+  lastSupportedAt?: never;
+}
+
+export type Arrival = LiveArrival | ExpectedArrival | ScheduledArrival | HoldingArrival | UncertainArrival;
+export type PrimaryArrival = LiveArrival | ExpectedArrival | ScheduledArrival;
+export type SecondaryArrival = HoldingArrival | UncertainArrival;
+
+export interface BoardDirection<Primary extends PrimaryArrival = PrimaryArrival> {
+  direction: Direction;
+  primary: readonly Primary[];
+  secondary: readonly SecondaryArrival[];
+  explanations: readonly BoardExplanation[];
+}
+
+export interface BoardExplanation {
+  code: string;
+  message: string;
+  provenance?: Provenance;
+}
+
+export interface BoardCapabilities {
+  arrivals: CapabilityState;
+  accessibility: CapabilityState;
+  guidance: CapabilityState;
+  commute: CapabilityState;
+}
+
+interface BoardDecisionBase<Mode extends BoardMode, Primary extends PrimaryArrival> {
+  responseIdentity: string;
+  mode: Mode;
   station: Station;
-  directions: readonly BoardDirection[];
+  directions: readonly BoardDirection<Primary>[];
   feedHealth: readonly FeedHealth[];
   alerts: readonly Alert[];
   decidedAt: Instant;
+  explanations: readonly BoardExplanation[];
+  capabilities: BoardCapabilities;
 }
 
-export interface Accessibility {
-  state: AccessibilityState;
-  entranceId?: string;
-  pathId?: string;
-  provenance?: Provenance;
+export type LiveBoardDecision = BoardDecisionBase<'live', LiveArrival | ExpectedArrival>;
+export type ScheduledFallbackBoardDecision = BoardDecisionBase<'scheduled-fallback', ScheduledArrival>;
+export type DemonstrationBoardDecision = BoardDecisionBase<'demonstration', PrimaryArrival>;
+export type UnavailableBoardDecision = BoardDecisionBase<'unavailable', never>;
+export type BoardDecision = LiveBoardDecision | ScheduledFallbackBoardDecision | DemonstrationBoardDecision | UnavailableBoardDecision;
+
+export type Board = BoardDecision;
+
+export interface EligibleAccessibility {
+  kind: 'eligible';
+  entranceId: string;
+  pathId: string;
+  provenance: Provenance;
+  reason?: never;
 }
+
+export interface IneligibleAccessibility {
+  kind: 'ineligible';
+  reason: string;
+  provenance?: Provenance;
+  entranceId?: never;
+  pathId?: never;
+}
+
+export interface UnknownAccessibility {
+  kind: 'unknown';
+  reason: string;
+  entranceId?: never;
+  pathId?: never;
+  provenance?: never;
+}
+
+export type Accessibility = EligibleAccessibility | IneligibleAccessibility | UnknownAccessibility;
+export type AccessibilityState = Accessibility['kind'];
 
 export interface Guidance {
   stationId: string;
@@ -116,7 +215,7 @@ export interface Journey {
   originStationId: string;
   destinationStationId: string;
   legs: readonly JourneyLeg[];
-  accessibility: AccessibilityState;
+  accessibility: Accessibility;
   provenance: readonly Provenance[];
 }
 
@@ -146,6 +245,7 @@ export interface CommuteWindow {
   endsAt: string;
   route?: RouteIdentity;
   direction?: Direction;
+  stage: CommuteStage;
   notificationEnabled: boolean;
 }
 

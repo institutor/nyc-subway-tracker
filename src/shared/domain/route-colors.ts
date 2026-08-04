@@ -7,20 +7,20 @@ export interface RouteColorMetadata {
 }
 
 const routeColors: Readonly<Record<string, Omit<RouteColorMetadata, 'routeLabel'>>> = {
-  '1': { background: '#EE352E', foreground: '#FFFFFF' },
-  '2': { background: '#EE352E', foreground: '#FFFFFF' },
-  '3': { background: '#EE352E', foreground: '#FFFFFF' },
-  '4': { background: '#00933C', foreground: '#FFFFFF' },
-  '5': { background: '#00933C', foreground: '#FFFFFF' },
-  '6': { background: '#00933C', foreground: '#FFFFFF' },
+  '1': { background: '#EE352E', foreground: '#000000' },
+  '2': { background: '#EE352E', foreground: '#000000' },
+  '3': { background: '#EE352E', foreground: '#000000' },
+  '4': { background: '#00933C', foreground: '#000000' },
+  '5': { background: '#00933C', foreground: '#000000' },
+  '6': { background: '#00933C', foreground: '#000000' },
   '7': { background: '#B933AD', foreground: '#FFFFFF' },
   A: { background: '#0039A6', foreground: '#FFFFFF' },
   C: { background: '#0039A6', foreground: '#FFFFFF' },
   E: { background: '#0039A6', foreground: '#FFFFFF' },
-  B: { background: '#FF6319', foreground: '#FFFFFF' },
-  D: { background: '#FF6319', foreground: '#FFFFFF' },
-  F: { background: '#FF6319', foreground: '#FFFFFF' },
-  M: { background: '#FF6319', foreground: '#FFFFFF' },
+  B: { background: '#FF6319', foreground: '#000000' },
+  D: { background: '#FF6319', foreground: '#000000' },
+  F: { background: '#FF6319', foreground: '#000000' },
+  M: { background: '#FF6319', foreground: '#000000' },
   G: { background: '#6CBE45', foreground: '#08120B' },
   J: { background: '#996633', foreground: '#FFFFFF' },
   Z: { background: '#996633', foreground: '#FFFFFF' },
@@ -29,7 +29,7 @@ const routeColors: Readonly<Record<string, Omit<RouteColorMetadata, 'routeLabel'
   Q: { background: '#FCCC0A', foreground: '#111111' },
   R: { background: '#FCCC0A', foreground: '#111111' },
   W: { background: '#FCCC0A', foreground: '#111111' },
-  S: { background: '#808183', foreground: '#FFFFFF' },
+  S: { background: '#808183', foreground: '#000000' },
 };
 
 const fallbackColor = { background: '#667085', foreground: '#FFFFFF' };

@@ -2,6 +2,7 @@ const encoder = new TextEncoder();
 
 /** The identity representation used only as a neutral final tie-breaker. */
 export function normalizeCanonicalIdentity(value: string): string {
+  assertUnicodeScalars(value);
   return value.normalize('NFC');
 }
 
@@ -20,5 +21,26 @@ export function compareCanonicalIdentity(left: string, right: string): number {
 }
 
 export function sortByCanonicalIdentity<T>(values: readonly T[], identity: (value: T) => string): T[] {
+  const normalizedIdentities = new Set<string>();
+  for (const value of values) {
+    const normalizedIdentity = normalizeCanonicalIdentity(identity(value));
+    if (normalizedIdentities.has(normalizedIdentity)) {
+      throw new Error('Incomplete canonical selection: duplicate canonical identity');
+    }
+    normalizedIdentities.add(normalizedIdentity);
+  }
   return [...values].sort((left, right) => compareCanonicalIdentity(identity(left), identity(right)));
+}
+
+function assertUnicodeScalars(value: string): void {
+  for (let index = 0; index < value.length; index += 1) {
+    const codeUnit = value.charCodeAt(index);
+    if (codeUnit >= 0xd800 && codeUnit <= 0xdbff) {
+      const next = value.charCodeAt(index + 1);
+      if (!(next >= 0xdc00 && next <= 0xdfff)) throw new Error('Invalid Unicode scalar value');
+      index += 1;
+    } else if (codeUnit >= 0xdc00 && codeUnit <= 0xdfff) {
+      throw new Error('Invalid Unicode scalar value');
+    }
+  }
 }

@@ -30,4 +30,23 @@ describe('canonical identity', () => {
       expected,
     );
   });
+
+  test('fails closed when distinct records normalize to the same identity', () => {
+    const sourceOrder = [
+      { id: 'Caf\u00e9', record: 'first' },
+      { id: 'Cafe\u0301', record: 'second' },
+    ];
+    const reversedOrder = [...sourceOrder].reverse();
+
+    expect(() => sortByCanonicalIdentity(sourceOrder, (value) => value.id)).toThrow(
+      'Incomplete canonical selection: duplicate canonical identity',
+    );
+    expect(() => sortByCanonicalIdentity(reversedOrder, (value) => value.id)).toThrow(
+      'Incomplete canonical selection: duplicate canonical identity',
+    );
+  });
+
+  test('rejects invalid Unicode scalar input instead of replacement-encoding it', () => {
+    expect(() => normalizeCanonicalIdentity('\ud800')).toThrow('Invalid Unicode scalar value');
+  });
 });
