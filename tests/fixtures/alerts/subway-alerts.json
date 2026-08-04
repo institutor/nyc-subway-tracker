@@ -1,0 +1,72 @@
+{
+  "header": {
+    "gtfsRealtimeVersion": "2.0",
+    "incrementality": "FULL_DATASET",
+    "timestamp": 1785823200
+  },
+  "entity": [
+    {
+      "id": "delay-trip-a",
+      "alert": {
+        "activePeriod": [
+          { "start": 1785822900, "end": 1785826800 }
+        ],
+        "informedEntity": [
+          {
+            "routeId": "A",
+            "stopId": "A24N",
+            "trip": {
+              "tripId": "trip-a",
+              "routeId": "A",
+              "directionId": 0,
+              "startDate": "20260804",
+              "startTime": "02:00:00"
+            }
+          }
+        ],
+        "cause": "TECHNICAL_PROBLEM",
+        "effect": "SIGNIFICANT_DELAYS",
+        "headerText": {
+          "translation": [
+            {
+              "text": "<b>A trains</b> are delayed &amp; moving slowly.",
+              "language": "en"
+            }
+          ]
+        },
+        "descriptionText": {
+          "translation": [
+            {
+              "text": "Allow additional travel time.",
+              "language": "en"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "system-weekend",
+      "alert": {
+        "activePeriod": [
+          { "start": 1785909600 }
+        ],
+        "informedEntity": [
+          { "routeId": "C", "stopId": "A32S", "directionId": 1 },
+          { "routeId": "E" }
+        ],
+        "cause": "CONSTRUCTION",
+        "effect": "MODIFIED_SERVICE",
+        "headerText": {
+          "translation": [
+            { "text": "Weekend service changes", "language": "en" }
+          ]
+        },
+        "descriptionText": {
+          "translation": [
+            { "text": "Check station signs for service information.", "language": "en" }
+          ]
+        }
+      }
+    }
+  ]
+}
