@@ -334,7 +334,7 @@ Applying artifacts: [offline, degraded, and reconnection contract](offline-degra
 
 ### Saved family
 
-Applying artifacts: [saved-station and personalization contract](saved-station-and-personalization-contract.md), [ranking rules](station-ranking-and-entrance-rules.md), [station board contract](station-board-and-controls-contract.md), [recovery contract](offline-degraded-and-reconnection-states.md), and [privacy rules](location-and-personal-data-rules.md). Outcome owner: Experience Product Lead; Privacy Lead owns lifecycle assurance.
+Applying artifacts: [saved-station and personalization contract](saved-station-and-personalization-contract.md), [ranking rules](station-ranking-and-entrance-rules.md), [Nearby card and direction contract](nearby-card-and-direction-contract.md), [station board contract](station-board-and-controls-contract.md), [recovery contract](offline-degraded-and-reconnection-states.md), and [privacy rules](location-and-personal-data-rules.md). Outcome owner: Experience Product Lead; Privacy Lead owns lifecycle assurance.
 
 | Case ID and source | Precondition, starting tuple, and action | Expected visible and assistive result | Prohibited result |
 |---|---|---|---|
@@ -496,8 +496,8 @@ Every Task 1–13 product artifact named by the plan is mapped as a **Draft/Pend
 |---|---|---|---|
 | 1 | [Experience contract](experience-contract.md) | CTX-DEST01, CTX-RETURN01, START-WARM01, NEAR-Z01, MAP-AX01 | Persistent information architecture, state tuple, destination/context ownership, and return restoration |
 | 2 | [Zero-tap startup and permission flow](zero-tap-startup-and-permission-flow.md) | START-WARM01, START-COLD01, START-FIRST01, PERM-P01, PERM-P02, PERM-S22A–PERM-S22C, PERM-TEMP01 | Startup shell, one purpose screen, one controlled prompt, denial precedence, and temporary-use lifecycle |
-| 3 | [Station ranking and entrance rules](station-ranking-and-entrance-rules.md) | NEAR-S21, CARD-UR01–CARD-UR07, SAVE-UR05 | Eligibility-first useful-entrance ranking, deterministic neutral tie handling and cutoff, useful-card target, and explicit preference boundary |
-| 4 | [Nearby card and direction contract](nearby-card-and-direction-contract.md) | CARD-RC01–CARD-RC04, BOARD-H01, HON-S50 | Card anatomy, all passenger-serving directions, honest next-three, label/action separation, and state meanings |
+| 3 | [Station ranking and entrance rules](station-ranking-and-entrance-rules.md) | NEAR-S21, CARD-UR01–CARD-UR07, SAVE-UR05, SAVE-O01 | Eligibility-first useful-entrance ranking, deterministic neutral tie handling and cutoff, useful-card target, explicit preference boundary, and deterministic multi-preference handoff |
+| 4 | [Nearby card and direction contract](nearby-card-and-direction-contract.md) | CARD-RC01–CARD-RC04, BOARD-H01, HON-S50, SAVE-O01 | Card anatomy, all passenger-serving directions, honest next-three, label/action separation, state meanings, and preserved three-card preference cohort |
 | 5 | [Station board and controls contract](station-board-and-controls-contract.md) | REFRESH-BG01, REFRESH-FL01, FALLBACK-001–FALLBACK-005, BOARD-H01, BOARD-OH01–BOARD-OH07 | One-tap controls, exact fallback matrix, refresh preservation, headings, actual destination, and disclosure |
 | 6 | [Underground visual and reachability standard](underground-visual-and-reachability-standard.md) | UG-A01–UG-A06, UG-RM01, RIGHTS-01 | Dark-first visual hierarchy, non-color identity, large text, assistive order, motion, reach, targets, and protected-asset inventory |
 | 7 | [Map modes and journey behavior](map-modes-and-journey-behavior.md) | MAP-AX01, MAP-NOW01, MAP-R01, MAP-S25, MAP-COV01, MAP-GEO01, OFF-MAP01–OFF-MAP02 | Independent axes, Actual-now failure, reroute geometry, pattern boundary, supplemented coverage ownership, spatial evidence, and stored map modes |

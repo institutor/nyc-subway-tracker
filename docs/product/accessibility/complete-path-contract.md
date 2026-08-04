@@ -81,6 +81,8 @@ These traceability fields make the seven evidence fields reviewable. They do not
 
 The complete-path evidence owner assigns the canonical path identity before any downstream ranking or alternate-path selection. Its normalized comparison form remains stable across copy edits and evidence refreshes, while the evidence-package version changes whenever the reviewed evidence changes. Two candidate chains cannot share one canonical identity. A missing, duplicated, mutable, or conflicting identity makes path selection **Unknown**; downstream consumers cannot invent, repair, or substitute one.
 
+The normalized comparison form is the canonical identity normalized to Unicode NFC and encoded as UTF-8. Compare identities lexicographically by unsigned UTF-8 byte value, case-sensitively, with the shorter byte sequence first when one sequence is an exact prefix of the other. Locale collation, case folding, natural-number sorting, display-label collation, and platform-default string comparison are prohibited. An identity that cannot be normalized and encoded exactly under this rule is unusable.
+
 ## Structural evidence and current availability are separate
 
 Physical presence, structural membership, and current operation are distinct decisions.
