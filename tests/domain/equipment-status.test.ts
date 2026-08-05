@@ -65,6 +65,13 @@ function omission(acceptedInventory: AcceptedEquipmentInventory, id: string, tim
 }
 
 describe('accepted equipment evidence', () => {
+  test('rejects crowding fields from accepted equipment evidence', () => {
+    expect(() => acceptEquipmentInventory({
+      inventoryId: 'inventory-v1', evidenceOwner: 'official-equipment-inventory', sourceScopeId: 'nyc-equipment',
+      sourceVersion: 'inventory-v1', acceptedAt: '2026-07-30T00:00:00.000Z', equipmentIds: ['EL-1'], crowding: 'low',
+    } as never)).toThrow(/exact schema/i);
+  });
+
   test('copies and deeply freezes accepted inventory and snapshot populations', () => {
     const ids = ['EL-1', 'EL-2'];
     const rawRecords: EquipmentOutageRecord[] = [{ recordId: 'out-2', equipmentId: 'EL-2', state: 'out-of-service' }];

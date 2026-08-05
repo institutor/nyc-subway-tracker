@@ -125,6 +125,10 @@ describe('complete accessible path evidence', () => {
     for (const candidate of candidates) expect(() => loadPathEvidence([candidate])).toThrow(/exact schema/i);
   });
 
+  test('rejects crowding fields from the accessibility package schema', () => {
+    expect(() => loadPathEvidence([{ ...packageFixture(), crowding: { carLoad: 'low' } }])).toThrow(/crowding/i);
+  });
+
   test('keeps optional official equipment ingestion unavailable when absent and exact-ID joined when supplied', () => {
     expect(loadOptionalOfficialEquipment(undefined)).toMatchObject({ status: 'unavailable', inventory: [], outages: [] });
     expect(loadOptionalOfficialEquipment({ inventory: [{ equipmentId: 'EL-1' }], outages: [{ equipmentId: 'EL-1', state: 'out-of-service' }], sourceTimestamp: '2026-07-30T12:00:00Z' })).toMatchObject({ status: 'accepted', inventory: [{ equipmentId: 'EL-1' }] });

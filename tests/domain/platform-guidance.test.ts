@@ -37,6 +37,10 @@ describe('immutable platform guidance', () => {
     for (const candidate of candidates) expect(() => validatePlatformGuidanceRegistry([candidate])).toThrow(/exact schema|position|provenance/i);
   });
 
+  test('rejects crowding fields from the guidance schema', () => {
+    expect(() => validatePlatformGuidanceRegistry([{ ...record(), crowding: 'quiet car' }])).toThrow(/crowding/i);
+  });
+
   test('returns guidance only for exact scope, orientation objective and current platform match', () => {
     expect(resolvePlatformGuidance([record()], request)?.position).toBe('middle');
     expect(resolvePlatformGuidance([record()], { ...request, direction: 'southbound' })).toBeUndefined();

@@ -107,3 +107,55 @@ Test coverage:
 ## Concerns
 
 None. Public activation remains intentionally blocked until real reviewed path and guidance packages receive the separate same-version approvals modeled here.
+
+---
+
+## Fix round 1 — accepted review repairs (2026-08-05)
+
+### Outcome
+
+All round-one findings are repaired. Accessibility claims now cross public domain and component boundaries only as app-resolved opaque decisions. Legacy scalar path/platform claims are migrated out of v3 storage without being rendered or converted into recovery ownership. Production accessibility and guidance registries remain empty and public exposure remains locked.
+
+### Repairs
+
+- Removed persisted scalar platform-guidance and accessible-path claims from the active-trip public model, renderer, and App recovery scopes. The v3 reader strips those legacy keys while preserving unrelated trip evidence and the rider's Accessible Route Only preference.
+- Replaced caller-supplied exposure approvals with app-owned immutable registries, exact five-role structured reviews, release decisions, version/owner/chronology validation, duplicate rejection, and opaque resolved exposure tokens. Accessibility and guidance evaluators and components reject copied or forged approval/result objects.
+- Replaced scalar equipment status/restoration inputs with accepted immutable inventory, snapshot, and restoration records. Decisions bind exact equipment ID, owner, scope, version, snapshot, assessment time, and adverse record identity.
+- Restoration now requires an exact outage/machine/scope/version join and valid source/acceptance/assessment chronology, or two coherent consecutive same-version omission snapshots ending at the current snapshot. A current exact adverse record always wins.
+- Enforced the strict greater-than-10% malformed, duplicate, and unmatched population thresholds, exact 5/15-minute freshness boundaries, seven-day inventory expiry, target identity binding, current-adverse priority, mutation isolation, and deep freezing.
+- Replaced path-impact and alternative verification booleans with opaque accessible-path and equipment decisions. Impact results and alternative selections are opaque and immutable; rerouting requires an independently resolved eligible same-scope path and never auto-selects it.
+- Replaced warning lifecycle clearing booleans with opaque eligible path reevaluations. Warning creation requires resolved impact and alternative decisions; copied warnings/selections are omitted by the component; single-machine restoration still cannot clear a path warning.
+- Enforced exact root and nested schemas for path packages, coverage rows, reviews, endpoints, guidance rows, release packages, and provenance. The runtime guidance schema now validates all 40 modeled fields, including `position` and `provenance`.
+- Added explicit domain schema rejection of crowding fields alongside the existing API allowlist, component omission, source scan, and browser public-boundary test.
+
+### RED/GREEN evidence
+
+- Legacy claim boundary: 3 focused failures in 38 tests; then 38/38 passed plus type checking.
+- Exposure ownership: 2 caller-forgery failures in 62 tests, 12 registry-validation failures in 13 added cases, and 1 component-result forgery failure in 5 tests; final combined matrix 80/80 passed plus type checking.
+- Equipment evidence: 12 expected chronology/scope/sequence failures in 76 tests; then 76/76 passed. The scalar equipment component claim added 1 focused failure before the complete equipment/path/component matrix passed 81/81 plus type checking.
+- Exact schemas: 2 focused failures in 54 path/guidance tests; then 54/54 passed plus type checking.
+- Opaque impact/alternative/warning/component matrix: 4 files and 26/26 tests passed after replacing the reviewed scalar APIs.
+
+### Final verification
+
+- Full Vitest regression: **58 files, 881/881 tests passed**.
+- TypeScript: `tsc --noEmit` passed with zero diagnostics.
+- Production build: Vite transformed **66 modules** and completed successfully.
+- Browser acceptance in installed Chrome: **4/4 tests passed**, including the recursive public no-crowding boundary and the existing offline/recovery flows.
+- Focused equipment/path/component matrix: **3 files, 81/81 tests passed**.
+- Focused path-impact/alternative/warning/component matrix: **4 files, 26/26 tests passed**.
+- Diff hygiene: `git diff --check` passed; repository line-ending notices were non-failing.
+
+### Fix commits
+
+| Commit | Lowercase subject | Review area |
+|---|---|---|
+| `c4c6129` | `close legacy accessibility claim leaks` | persisted and rendered scalar claims |
+| `f6e0afc` | `resolve app owned accessibility approvals` | app-owned registries and opaque exposure/results |
+| `aab197f` | `bind equipment evidence to accepted records` | exact equipment identity, chronology, recovery, anomalies, UI boundary |
+| `1f12595` | `enforce exact accessibility schemas` | path and platform exact root/nested schemas |
+| `2f3db8d` | `resolve accessibility impact decisions` | opaque path impact, alternatives, warnings, and component consumption |
+
+### Release posture
+
+This remains a deterministic validation candidate, not public accessibility evidence or a release approval. Real reviewed same-version path, equipment, guidance, five-role review, and release records are still required before either independent public gate can open.
