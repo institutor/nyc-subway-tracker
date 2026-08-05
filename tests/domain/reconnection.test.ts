@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import {
-  acceptReconnectionStage,
+  acceptReconnectionStage as acceptOwnedReconnectionStage,
   commitReconnectionStage,
   createReconnectionState,
   presentReconnectionStage,
@@ -15,6 +15,19 @@ import {
 } from '../../src/shared/domain/reconnection';
 
 const AT = '2026-08-05T12:00:00.000Z';
+const OWNER_SCOPES = {
+  equipment: [{ kind: 'path', id: 'path-a27-a32' }],
+  'accessible-path': [{ kind: 'path', id: 'path-a27-a32' }],
+  'service-change': [{ kind: 'route', id: 'A-southbound' }],
+  'feed-health': [{ kind: 'station', id: 'A27' }],
+  'train-admission': [{ kind: 'train', id: 'trip-a-1200' }],
+  arrivals: [{ kind: 'station', id: 'A27' }],
+  positioning: [{ kind: 'station', id: 'A27' }],
+  'transfer-guidance': [{ kind: 'transfer', id: 'A32-transfer' }],
+  maps: [{ kind: 'map', id: 'a27-to-a32' }],
+  saved: [{ kind: 'saved-record', id: 'saved-a27' }],
+} as const satisfies Record<OwnerAcceptance['domain'], readonly { readonly kind: any; readonly id: string }[]>;
+
 const RECOVERY = {
   epochId: 'recovery-epoch-7',
   requestIdentity: 'recovery-request-7',
@@ -31,7 +44,10 @@ const RECOVERY = {
     { kind: 'path', id: 'path-a27-a32' },
     { kind: 'train', id: 'trip-a-1200' },
     { kind: 'transfer', id: 'A32-transfer' },
+    { kind: 'map', id: 'a27-to-a32' },
+    { kind: 'saved-record', id: 'saved-a27' },
   ],
+  ownerScopes: OWNER_SCOPES,
 } as const;
 
 const CONTEXT: PreservedReconnectionContext = {
@@ -75,7 +91,7 @@ function gate(
     generation: RECOVERY.generation,
     activeTripId: RECOVERY.activeTripId,
     contextKey: RECOVERY.contextKey,
-    scopeMembership: RECOVERY.eligibleScopes,
+    scopeMembership: OWNER_SCOPES[domain],
     evidenceAt: AT,
   } as const;
   return disposition === 'accepted-fresh'
@@ -89,6 +105,14 @@ function gate(
         disposition,
         reason: `${domain} unavailable`,
       };
+}
+
+function acceptReconnectionStage(
+  state: ReconnectionState,
+  result: ReconnectionStageResult,
+  acceptedThrough = AT,
+): ReconnectionState {
+  return acceptOwnedReconnectionStage(state, result, acceptedThrough);
 }
 
 function arrivalSnapshots(): readonly [OwnerAcceptance, OwnerAcceptance] {
@@ -384,6 +408,31 @@ describe('owner-gated reconnection ordering', () => {
 
     expect(() => acceptReconnectionStage(state, result)).toThrow(expected);
     expect(state.stages[0].status).toBe('requested');
+  });
+
+  test('rejects an owner gate widened to unrelated eligible scopes', () => {
+    const state = requestReconnectionStage(createReconnectionState(CONTEXT, {
+      historicalPositioningGuidance: true,
+    }), 1);
+    const result = structuredClone(validResult(1)) as any;
+    result.equipment.gate.scopeMembership.push({ kind: 'route', id: 'A' });
+
+    expect(() => acceptReconnectionStage(state, result)).toThrow(/exact equipment owner scope/i);
+  });
+
+  test('rejects future server evidence and an acceptance beyond the local receipt bound', () => {
+    const state = requestReconnectionStage(createReconnectionState(CONTEXT, {
+      historicalPositioningGuidance: true,
+    }), 1);
+    const futureEvidence = structuredClone(validResult(1)) as any;
+    futureEvidence.equipment.gate.evidenceAt = '2026-08-05T12:00:02.000Z';
+    expect(() => acceptReconnectionStage(state, futureEvidence, '2026-08-05T12:00:01.000Z'))
+      .toThrow(/equipment.*evidence.*acceptance/i);
+
+    const futureAcceptance = structuredClone(validResult(1)) as any;
+    futureAcceptance.equipment.gate.acceptedAt = '2026-08-05T12:00:02.000Z';
+    expect(() => acceptReconnectionStage(state, futureAcceptance, '2026-08-05T12:00:01.000Z'))
+      .toThrow(/equipment.*local receipt/i);
   });
 
   test('never treats an incomplete accessible-path result as a verified complete exact path', () => {

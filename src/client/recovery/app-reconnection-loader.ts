@@ -1,12 +1,16 @@
 import type {
   BoardEnvelopeDto,
+  JourneyEnvelopeDto,
+  JourneyItineraryDto,
   MapOverlayEnvelopeDto,
   TransitApiClient,
 } from '../api/client';
+import type { ActiveTripRecord } from '../storage/active-trip-store';
 import type { Direction } from '../../shared/domain/types';
 import type {
   OwnerAcceptance,
   PreservedReconnectionContext,
+  ReconnectionScopeKind,
   ReconnectionScopeMembership,
   ReconnectionStageResult,
 } from '../../shared/domain/reconnection';
@@ -26,6 +30,8 @@ export interface AppReconnectionLoaderOptions {
   };
   readonly hasUnrelatedSavedRecords: boolean;
   readonly artifacts: AppReconnectionArtifacts;
+  readonly activeTrip: ActiveTripRecord | null;
+  readonly now?: () => Date;
 }
 
 export function createAppReconnectionStageLoader(options: AppReconnectionLoaderOptions) {
@@ -46,16 +52,154 @@ async function loadServiceChanges(
   context: PreservedReconnectionContext,
   signal: AbortSignal,
 ): Promise<ReconnectionStageResult | undefined> {
-  if (!options.stationId || context.activeTripId !== null) return undefined;
+  if (context.activeTripId !== null) return loadActiveTripServiceChanges(options, context, signal);
+  if (!options.stationId) return undefined;
   const board = await options.api.board(options.stationId, options.filters, signal);
   if (!isFreshBoard(board, context, options.stationId)) return undefined;
-  const serviceChanges = acceptedGate(context, 'service-change', board.responseIdentity, board.decidedAt, stationScope(context, options.stationId));
+  const acceptedAt = exactNow(options.now);
+  const serviceChanges = acceptedGate(
+    context, 'service-change', board.responseIdentity, board.decidedAt, acceptedAt, ownerScope(context, 'service-change'),
+  );
   return {
     stage: 2,
     serviceChanges: { gate: serviceChanges, disposition: 'resolved', vetoesApplied: true },
     tripServicePattern: 'not-applicable',
     invalidation: null,
   };
+}
+
+async function loadActiveTripServiceChanges(
+  options: AppReconnectionLoaderOptions,
+  context: PreservedReconnectionContext,
+  signal: AbortSignal,
+): Promise<ReconnectionStageResult | undefined> {
+  const trip = options.activeTrip;
+  if (!trip || trip.id !== context.activeTripId || trip.legs.length === 0) return undefined;
+  const firstLeg = trip.legs[0]!;
+  const response = await options.api.planJourney({
+    mode: 'online-current',
+    originStationId: trip.origin.constituentId,
+    destinationStationId: trip.destination.constituentId,
+    requiredFirstDirection: firstLeg.boundDirection,
+    requiredActualDestination: firstLeg.actualDestination,
+    accessibleRouteOnly: trip.accessibleRouteOnly,
+  }, signal);
+  if (!isFreshJourney(response, context, trip)) return undefined;
+
+  const acceptedAt = exactNow(options.now);
+  const serviceChanges = acceptedGate(
+    context,
+    'service-change',
+    response.responseIdentity,
+    response.decidedAt,
+    acceptedAt,
+    ownerScope(context, 'service-change'),
+  );
+  const candidates = response.data?.kind === 'planned' ? response.data.itineraries : [];
+  const exactCandidate = candidates.find((candidate) => sameActiveTripPattern(candidate, trip));
+  const verified = Boolean(exactCandidate && currentCandidateAdmitsStoredPattern(exactCandidate, trip));
+  const unusable = response.data?.kind === 'no-path'
+    || Boolean(exactCandidate && !verified)
+    || (response.data?.kind === 'planned' && !exactCandidate);
+  return {
+    stage: 2,
+    serviceChanges: { gate: serviceChanges, disposition: 'resolved', vetoesApplied: true },
+    tripServicePattern: verified ? 'verified' : unusable ? 'unusable' : 'unverified',
+    invalidation: verified ? null : serviceInvalidation(context, serviceChanges, unusable),
+  };
+}
+
+function isFreshJourney(
+  response: JourneyEnvelopeDto,
+  context: PreservedReconnectionContext,
+  trip: ActiveTripRecord,
+): boolean {
+  const scope = response.data?.scope;
+  return response.runtime.availability === 'available'
+    && response.data !== null
+    && scope?.mode === 'online-current'
+    && scope.originStationId === trip.origin.constituentId
+    && scope.destinationStationId === trip.destination.constituentId
+    && scope.accessibleRouteOnly === trip.accessibleRouteOnly
+    && hasCurrentServiceOwner(response)
+    && freshInstant(response.decidedAt, context.recovery.startedAt)
+    && freshInstant(response.serverTime, context.recovery.startedAt);
+}
+
+function hasCurrentServiceOwner(response: JourneyEnvelopeDto): boolean {
+  const provenance = response.provenance ?? [];
+  return response.sourceHealth?.some((health) => (
+    (health.source === 'alerts' || health.source === 'supplemented-gtfs')
+    && health.state === 'current'
+    && provenance.some((evidence) => (
+      evidence.source === health.source && evidence.sourceId === health.sourceId
+    ))
+  )) === true;
+}
+
+function sameActiveTripPattern(candidate: JourneyItineraryDto, trip: ActiveTripRecord): boolean {
+  if (candidate.legs.length !== trip.legs.length) return false;
+  return candidate.legs.every((leg, index) => {
+    const stored = trip.legs[index];
+    return stored !== undefined
+      && leg.routeId === stored.route.id
+      && leg.direction === stored.boundDirection
+      && leg.actualDestination === stored.actualDestination
+      && sameStrings(leg.orderedStationIds, stored.points.map(({ constituentId }) => constituentId));
+  });
+}
+
+function currentCandidateAdmitsStoredPattern(
+  candidate: JourneyItineraryDto,
+  trip: ActiveTripRecord,
+): boolean {
+  const capture = candidate.capture;
+  if (!capture
+    || capture.requestMode !== 'online-current'
+    || capture.validity.result !== 'current-itinerary'
+    || capture.validity.pattern !== 'actual-now'
+    || capture.validity.vetoes.length > 0
+    || candidate.validity !== 'valid'
+    || candidate.risk === 'blocked'
+    || candidate.risk === 'uncertain'
+    || (trip.accessibleRouteOnly && candidate.accessibility !== 'eligible')) return false;
+  return !capture.serviceClaims.some(({ state }) => (
+    state === 'unresolved' || state === 'suspended' || state === 'bypassed'
+    || state === 'closed' || state === 'cancelled'
+  ));
+}
+
+function serviceInvalidation(
+  context: PreservedReconnectionContext,
+  ownerGate: OwnerAcceptance,
+  unusable: boolean,
+) {
+  const scope = ownerGate.scopeMembership.find(isTripScope);
+  if (!scope) throw new Error('Active-trip service recovery requires an exact trip scope');
+  return {
+    id: `${context.recovery.requestIdentity}:warning:2:${ownerGate.evidenceId}`,
+    stage: 2 as const,
+    ownerGate,
+    changedFact: unusable
+      ? 'Current service evidence no longer admits the stored trip pattern.'
+      : 'Current service evidence cannot verify the stored trip pattern.',
+    scopes: [{ ...scope, label: `${scope.kind} ${scope.id}` }],
+    consequence: 'Do not continue on the stored service pattern until a current itinerary is verified.',
+    lastVerifiedDecisionPoint: context.manualCursor
+      ? { id: context.manualCursor.stopId, label: `Stored trip point ${context.manualCursor.stopId}` }
+      : null,
+    verifiedAlternative: null,
+  };
+}
+
+function isTripScope(
+  candidate: ReconnectionScopeMembership,
+): candidate is ReconnectionScopeMembership & { readonly kind: ReconnectionScopeKind } {
+  return candidate.kind !== 'context' && candidate.kind !== 'map' && candidate.kind !== 'saved-record';
+}
+
+function sameStrings(left: readonly string[], right: readonly string[]): boolean {
+  return left.length === right.length && left.every((value, index) => value === right[index]);
 }
 
 async function loadArrivals(
@@ -66,23 +210,28 @@ async function loadArrivals(
   if (!options.stationId || context.hasStoredTrainChoice) return undefined;
   const first = await options.api.board(options.stationId, options.filters, signal);
   if (!isFreshBoard(first, context, options.stationId)) return undefined;
+  const firstAcceptedAt = exactNow(options.now);
   const second = await options.api.board(options.stationId, options.filters, signal);
   if (!isFreshBoard(second, context, options.stationId)
     || first.responseIdentity === second.responseIdentity
     || Date.parse(second.decidedAt) < Date.parse(first.decidedAt)) return undefined;
+  const secondAcceptedAt = exactNow(options.now);
 
   const scope = stationScope(context, options.stationId);
-  const firstSnapshot = acceptedGate(context, 'arrivals', first.responseIdentity, first.decidedAt, scope);
-  const secondSnapshot = acceptedGate(context, 'arrivals', second.responseIdentity, second.decidedAt, scope);
+  const firstSnapshot = acceptedGate(context, 'arrivals', first.responseIdentity, first.decidedAt, firstAcceptedAt, scope);
+  const secondSnapshot = acceptedGate(context, 'arrivals', second.responseIdentity, second.decidedAt, secondAcceptedAt, scope);
   options.artifacts.selectedBoard = second;
   return {
     stage: 3,
     feedRecovery: {
-      gate: acceptedGate(context, 'feed-health', second.responseIdentity, second.decidedAt, scope),
+      gate: acceptedGate(context, 'feed-health', second.responseIdentity, second.decidedAt, secondAcceptedAt, scope),
       disposition: 'readmitted',
     },
     trainReadmission: {
-      gate: acceptedGate(context, 'train-admission', second.responseIdentity, second.decidedAt, scope),
+      gate: acceptedGate(
+        context, 'train-admission', second.responseIdentity, second.decidedAt, secondAcceptedAt,
+        ownerScope(context, 'train-admission'),
+      ),
       disposition: 'admitted',
     },
     arrivals: {
@@ -91,6 +240,7 @@ async function loadArrivals(
         'arrivals',
         `${first.responseIdentity}:${second.responseIdentity}`,
         second.decidedAt,
+        secondAcceptedAt,
         scope,
       ),
       disposition: 'current',
@@ -109,12 +259,15 @@ async function loadBackground(
 ): Promise<ReconnectionStageResult | undefined> {
   const overlay = await options.api.mapOverlay(context.mapTuple.theme, signal);
   if (!isFreshOverlay(overlay, context)) return undefined;
+  const acceptedAt = exactNow(options.now);
   const mapScope = exactScope(context, 'map', context.mapTuple.viewportKey);
-  const savedScope = exactScope(context, 'context', context.recovery.contextKey);
-  const mapGate = acceptedGate(context, 'maps', overlay.responseIdentity, overlay.decidedAt, mapScope);
+  const savedScope = ownerScope(context, 'saved');
+  const mapGate = acceptedGate(context, 'maps', overlay.responseIdentity, overlay.decidedAt, acceptedAt, mapScope);
   const savedGate: OwnerAcceptance = options.hasUnrelatedSavedRecords
-    ? failClosedGate(context, 'saved', overlay.decidedAt, savedScope, 'Saved-station owners were not refreshed by this request.')
-    : acceptedGate(context, 'saved', `${overlay.responseIdentity}:empty-saved-scope`, overlay.decidedAt, savedScope);
+    ? failClosedGate(context, 'saved', acceptedAt, savedScope, 'Saved-station owners were not refreshed by this request.')
+    : acceptedGate(
+        context, 'saved', `${overlay.responseIdentity}:empty-saved-scope`, overlay.decidedAt, acceptedAt, savedScope,
+      );
   options.artifacts.mapOverlay = overlay;
   return {
     stage: 5,
@@ -131,6 +284,7 @@ function acceptedGate(
   domain: OwnerAcceptance['domain'],
   evidenceId: string,
   evidenceAt: string,
+  acceptedAt: string,
   scopeMembership: readonly ReconnectionScopeMembership[],
 ): OwnerAcceptance {
   return {
@@ -138,7 +292,7 @@ function acceptedGate(
     ownerId: `${domain}-owner`,
     evidenceId,
     evidenceAt,
-    acceptedAt: evidenceAt,
+    acceptedAt,
     recoveryEpochId: context.recovery.epochId,
     requestIdentity: context.recovery.requestIdentity,
     generation: context.recovery.generation,
@@ -157,7 +311,9 @@ function failClosedGate(
   reason: string,
 ): OwnerAcceptance {
   return {
-    ...acceptedGate(context, domain, `${context.recovery.requestIdentity}:${domain}:unavailable`, acceptedAt, scopeMembership),
+    ...acceptedGate(
+      context, domain, `${context.recovery.requestIdentity}:${domain}:unavailable`, acceptedAt, acceptedAt, scopeMembership,
+    ),
     disposition: 'governed-fail-closed',
     reason,
   };
@@ -175,6 +331,21 @@ function exactScope(
   const scope = context.recovery.eligibleScopes.find((candidate) => candidate.kind === kind && candidate.id === id);
   if (!scope) throw new Error(`Recovery scope ${kind}:${id} is not eligible`);
   return [scope];
+}
+
+function ownerScope(
+  context: PreservedReconnectionContext,
+  domain: OwnerAcceptance['domain'],
+): readonly ReconnectionScopeMembership[] {
+  return context.recovery.ownerScopes[domain];
+}
+
+function exactNow(now: (() => Date) | undefined): string {
+  const value = now?.() ?? new Date();
+  if (!(value instanceof Date) || !Number.isFinite(value.getTime())) {
+    throw new Error('Recovery clock returned an invalid instant');
+  }
+  return new Date(value.getTime()).toISOString();
 }
 
 function isFreshBoard(

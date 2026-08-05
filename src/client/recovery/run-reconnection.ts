@@ -56,24 +56,31 @@ export async function runReconnection(options: RunReconnectionOptions): Promise<
     options.onTransition?.({ phase: 'requested', stage, state });
 
     let result: ReconnectionStageResult;
+    let acceptedThrough: string;
     try {
-      result = await options.loadStage({ stage, state, context: state.context }, signal)
-        ?? createFailClosedReconnectionStage(state, stage, 'Owner endpoint is unavailable.', exactNow(now));
+      const loaded = await options.loadStage({ stage, state, context: state.context }, signal);
       if (signal.aborted) return { kind: 'aborted', state };
+      acceptedThrough = exactNow(now);
+      result = loaded
+        ? bindLocalAcceptance(loaded, acceptedThrough)
+        : createFailClosedReconnectionStage(state, stage, 'Owner endpoint is unavailable.', acceptedThrough);
     } catch (error) {
       if (signal.aborted || isAbort(error)) return { kind: 'aborted', state };
       if (error instanceof TransitApiError && error.category === 'network-unreachable') {
         return { kind: 'network-unreachable', state };
       }
-      result = createFailClosedReconnectionStage(state, stage, 'Owner result is unavailable.', exactNow(now));
+      acceptedThrough = exactNow(now);
+      result = createFailClosedReconnectionStage(state, stage, 'Owner result is unavailable.', acceptedThrough);
     }
 
     try {
-      state = acceptReconnectionStage(state, result);
+      state = acceptReconnectionStage(state, result, acceptedThrough);
     } catch {
+      acceptedThrough = exactNow(now);
       state = acceptReconnectionStage(
         state,
-        createFailClosedReconnectionStage(state, stage, 'Owner evidence was rejected.', exactNow(now)),
+        createFailClosedReconnectionStage(state, stage, 'Owner evidence was rejected.', acceptedThrough),
+        acceptedThrough,
       );
     }
     state = commitReconnectionStage(state, stage);
@@ -101,7 +108,7 @@ export function createFailClosedReconnectionStage(
     generation: state.context.recovery.generation,
     activeTripId: state.context.recovery.activeTripId,
     contextKey: state.context.recovery.contextKey,
-    scopeMembership: state.context.recovery.eligibleScopes,
+    scopeMembership: state.context.recovery.ownerScopes[domain],
     disposition: 'governed-fail-closed',
     reason,
   });
@@ -114,7 +121,7 @@ export function createFailClosedReconnectionStage(
     stage: stage as 1 | 2 | 3 | 4,
     ownerGate,
     changedFact,
-    scopes: [warningScope(state.context.recovery.eligibleScopes)],
+    scopes: [warningScope(ownerGate.scopeMembership)],
     consequence,
     lastVerifiedDecisionPoint: state.context.manualCursor
       ? { id: state.context.manualCursor.stopId, label: `Stored trip point ${state.context.manualCursor.stopId}` }
@@ -196,6 +203,20 @@ export function createFailClosedReconnectionStage(
     maps: { gate: gate('maps'), disposition: 'unchanged-fail-closed' },
     unrelatedSaved: { gate: gate('saved'), disposition: 'unchanged-fail-closed' },
   };
+}
+
+function bindLocalAcceptance<T>(value: T, acceptedAt: string): T {
+  if (Array.isArray(value)) return value.map((entry) => bindLocalAcceptance(entry, acceptedAt)) as T;
+  if (value === null || typeof value !== 'object') return value;
+  const candidate = value as Record<string, unknown>;
+  const bound: Record<string, unknown> = {};
+  for (const [key, entry] of Object.entries(candidate)) {
+    bound[key] = bindLocalAcceptance(entry, acceptedAt);
+  }
+  if ('domain' in candidate && 'ownerId' in candidate && 'evidenceId' in candidate && 'acceptedAt' in candidate) {
+    bound.acceptedAt = acceptedAt;
+  }
+  return bound as T;
 }
 
 function warningScope(scopes: readonly ReconnectionScopeMembership[]) {

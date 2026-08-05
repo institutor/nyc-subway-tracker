@@ -35,6 +35,10 @@ describe('App reconnection flow', () => {
       secondSnapshot.promise,
     ];
     const transitions: string[] = [];
+    let recoveryClockCalls = 0;
+    const recoveryNow = () => new Date(recoveryClockCalls++ === 0
+      ? '2026-08-05T12:00:00.000Z'
+      : '2026-08-05T12:00:10.000Z');
     const api = createClientApi({
       board: vi.fn(async () => {
         const next = boards.shift();
@@ -49,7 +53,7 @@ describe('App reconnection flow', () => {
       geolocation,
       storage,
       connectivityOptions: { navigator: navigatorState, eventTarget: events },
-      recoveryNow: () => new Date('2026-08-05T12:00:00.000Z'),
+      recoveryNow,
       onReconnectionTransition: (transition: ReconnectionTransition) => {
         transitions.push(`${transition.phase}:${transition.stage}`);
       },

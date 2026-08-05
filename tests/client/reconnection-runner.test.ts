@@ -28,9 +28,24 @@ const context: PreservedReconnectionContext = {
     epochId: 'epoch-7', requestIdentity: 'request-7', generation: 7,
     startedAt: '2026-08-05T12:00:00.000Z', activeTripId: 'trip-7', contextKey: 'context-7',
     eligibleScopes: [
+      { kind: 'context', id: 'context-7' },
       { kind: 'station', id: 'A12' }, { kind: 'route', id: 'A' },
       { kind: 'direction', id: 'northbound' }, { kind: 'transfer', id: 'transfer-7' },
+      { kind: 'train', id: 'train-7' }, { kind: 'map', id: 'viewport-7' },
+      { kind: 'saved-record', id: 'saved-7' },
     ],
+    ownerScopes: {
+      equipment: [{ kind: 'station', id: 'A12' }],
+      'accessible-path': [{ kind: 'station', id: 'A12' }],
+      'service-change': [{ kind: 'route', id: 'A' }],
+      'feed-health': [{ kind: 'station', id: 'A12' }],
+      'train-admission': [{ kind: 'train', id: 'train-7' }],
+      arrivals: [{ kind: 'station', id: 'A12' }],
+      positioning: [{ kind: 'station', id: 'A12' }],
+      'transfer-guidance': [{ kind: 'transfer', id: 'transfer-7' }],
+      maps: [{ kind: 'map', id: 'viewport-7' }],
+      saved: [{ kind: 'saved-record', id: 'saved-7' }],
+    },
   },
 };
 
@@ -46,6 +61,7 @@ describe('client reconnection runner', () => {
         loads.push(stage);
         return validResult(stage);
       },
+      now: () => new Date(ACCEPTED_AT),
       onTransition: ({ phase, stage, state }) => {
         transitions.push(`${phase}:${stage}`);
         expect(state.context).toEqual(context);
@@ -72,6 +88,7 @@ describe('client reconnection runner', () => {
         if (stage === 3) throw new TransitApiError('network-unreachable');
         return validResult(stage);
       }),
+      now: () => new Date(ACCEPTED_AT),
     });
 
     expect(result.kind).toBe('network-unreachable');
@@ -114,6 +131,15 @@ describe('client reconnection runner', () => {
     expect(result.kind).toBe('complete');
     expect(result.state.visible.currentArrivalsRestored).toBe(false);
     expect(result.state.visible.activeWarnings.map(({ stage }) => stage)).toEqual([2, 3, 4]);
+    expect(result.state.visible.activeWarnings.map(({ stage, ownerGate, scopes }) => ({
+      stage,
+      ownerScopes: ownerGate.scopeMembership,
+      warningScopes: scopes.map(({ kind, id }) => ({ kind, id })),
+    }))).toEqual([
+      { stage: 2, ownerScopes: [{ kind: 'route', id: 'A' }], warningScopes: [{ kind: 'route', id: 'A' }] },
+      { stage: 3, ownerScopes: [{ kind: 'train', id: 'train-7' }], warningScopes: [{ kind: 'train', id: 'train-7' }] },
+      { stage: 4, ownerScopes: [{ kind: 'transfer', id: 'transfer-7' }], warningScopes: [{ kind: 'transfer', id: 'transfer-7' }] },
+    ]);
     for (const stage of [2, 3, 4] as const) {
       const warning = result.state.audit.findIndex((event) => event.kind === 'warning-presented' && event.stage === stage);
       const presented = result.state.audit.findIndex((event) => event.kind === 'stage-presented' && event.stage === stage);
@@ -142,6 +168,35 @@ describe('client reconnection runner', () => {
     });
     expect(result.state.visible.currentArrivalsRestored).toBe(false);
   });
+
+  test('binds every returned owner result to the local receipt clock after that response', async () => {
+    const ticks = [10, 11, 12, 13, 14].map((second) => `2026-08-05T12:00:${second}.000Z`);
+    const now = vi.fn(() => new Date(ticks.shift()!));
+
+    const result = await runReconnection({
+      context,
+      initial: { historicalPositioningGuidance: true, historicalTransferGuidance: true },
+      loadStage: async ({ stage }) => validResult(stage),
+      now,
+    });
+
+    expect(result.kind).toBe('complete');
+    expect(now).toHaveBeenCalledTimes(5);
+    expect(result.state.stages.map(({ result: stageResult }) => {
+      if (!stageResult) return null;
+      if (stageResult.stage === 1) return stageResult.equipment.gate.acceptedAt;
+      if (stageResult.stage === 2) return stageResult.serviceChanges.gate.acceptedAt;
+      if (stageResult.stage === 3) return stageResult.arrivals.gate.acceptedAt;
+      if (stageResult.stage === 4) return stageResult.positioning.gate.acceptedAt;
+      return stageResult.maps.gate.acceptedAt;
+    })).toEqual([
+      '2026-08-05T12:00:10.000Z',
+      '2026-08-05T12:00:11.000Z',
+      '2026-08-05T12:00:12.000Z',
+      '2026-08-05T12:00:13.000Z',
+      '2026-08-05T12:00:14.000Z',
+    ]);
+  });
 });
 
 function deferred<T>() {
@@ -155,7 +210,7 @@ function gate(domain: OwnerAcceptance['domain'], evidenceId = `${domain}-evidenc
     domain, ownerId: `${domain}-owner`, evidenceId, evidenceAt: ACCEPTED_AT, acceptedAt: ACCEPTED_AT,
     recoveryEpochId: context.recovery.epochId, requestIdentity: context.recovery.requestIdentity,
     generation: context.recovery.generation, activeTripId: context.recovery.activeTripId,
-    contextKey: context.recovery.contextKey, scopeMembership: context.recovery.eligibleScopes,
+    contextKey: context.recovery.contextKey, scopeMembership: context.recovery.ownerScopes[domain],
     disposition: 'accepted-fresh',
   };
 }

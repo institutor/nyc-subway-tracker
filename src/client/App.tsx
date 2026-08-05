@@ -385,6 +385,8 @@ export function App({
       filters: state.filters,
       hasUnrelatedSavedRecords: savedRecords.some(({ constituentId }) => constituentId !== stationId),
       artifacts,
+      activeTrip,
+      now: recoveryNow,
     });
 
     void runReconnection({
@@ -986,9 +988,35 @@ function createAppReconnectionContext(input: {
     selectedRouteId: input.mapContext.selectedRouteId ?? null,
   }))}`;
   const contextKey = `context-${fingerprint(input.recoveryInputKey)}`;
+  const contextScope: ReconnectionScopeMembership = { kind: 'context', id: contextKey };
+  const mapScope: ReconnectionScopeMembership = { kind: 'map', id: viewportKey };
+  const stationOwnerScopes: readonly ReconnectionScopeMembership[] = input.stationId
+    ? [{ kind: 'station', id: input.stationId }]
+    : [contextScope];
+  const legOwnerScopes: readonly ReconnectionScopeMembership[] = cursor
+    ? [{ kind: 'leg', id: cursor.leg.id }]
+    : stationOwnerScopes;
+  const pathOwnerScopes: readonly ReconnectionScopeMembership[] = input.activeTrip?.accessiblePath
+    ? [{ kind: 'path', id: input.activeTrip.accessiblePath.ownerRecordId }]
+    : stationOwnerScopes;
+  const trainOwnerScopes: readonly ReconnectionScopeMembership[] = storedTrainChoice
+    ? [{ kind: 'train', id: storedTrainChoice }]
+    : stationOwnerScopes;
+  const currentTransfer = input.activeTrip?.transfers.find(({ incomingLegId, outgoingLegId }) => (
+    incomingLegId === cursor?.leg.id || outgoingLegId === cursor?.leg.id
+  ));
+  const transferOwnerScopes: readonly ReconnectionScopeMembership[] = currentTransfer
+    ? [{ kind: 'transfer', id: currentTransfer.id }]
+    : legOwnerScopes;
+  const positioningOwnerScopes: readonly ReconnectionScopeMembership[] = input.activeTrip?.platformGuidance
+    ? [{ kind: 'platform', id: input.activeTrip.platformGuidance.ownerRecordId }]
+    : legOwnerScopes;
+  const savedOwnerScopes: readonly ReconnectionScopeMembership[] = input.savedRecords
+    .filter(({ constituentId }) => constituentId !== input.stationId)
+    .map(({ id }) => ({ kind: 'saved-record' as const, id }));
   const scopes: ReconnectionScopeMembership[] = [
-    { kind: 'context', id: contextKey },
-    { kind: 'map', id: viewportKey },
+    contextScope,
+    mapScope,
     ...(input.stationId ? [{ kind: 'station' as const, id: input.stationId }] : []),
     ...routeFilters.map((id) => ({ kind: 'route' as const, id })),
     { kind: 'direction', id: direction },
@@ -997,6 +1025,9 @@ function createAppReconnectionContext(input: {
     ...(input.activeTrip?.transfers.map(({ id }) => ({ kind: 'transfer' as const, id })) ?? []),
     ...(input.activeTrip?.accessiblePath
       ? [{ kind: 'path' as const, id: input.activeTrip.accessiblePath.ownerRecordId }]
+      : []),
+    ...(input.activeTrip?.platformGuidance
+      ? [{ kind: 'platform' as const, id: input.activeTrip.platformGuidance.ownerRecordId }]
       : []),
     ...(storedTrainChoice ? [{ kind: 'train' as const, id: storedTrainChoice }] : []),
   ];
@@ -1040,6 +1071,18 @@ function createAppReconnectionContext(input: {
       activeTripId: input.activeTrip?.id ?? null,
       contextKey,
       eligibleScopes,
+      ownerScopes: {
+        equipment: pathOwnerScopes,
+        'accessible-path': pathOwnerScopes,
+        'service-change': input.activeTrip ? legOwnerScopes : stationOwnerScopes,
+        'feed-health': stationOwnerScopes,
+        'train-admission': trainOwnerScopes,
+        arrivals: stationOwnerScopes,
+        positioning: positioningOwnerScopes,
+        'transfer-guidance': transferOwnerScopes,
+        maps: [mapScope],
+        saved: savedOwnerScopes.length > 0 ? savedOwnerScopes : [contextScope],
+      },
     },
   };
 }
