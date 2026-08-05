@@ -43,3 +43,4 @@ Task 12: fix round 1/5 (8 addressed, 4 open — service-change dependency and st
 Task 12: fix round 2/5 (3 addressed, 1 open — warning resolution still lacked a mandatory local receipt ceiling and multi-leg/transfer scopes remained cursor-insensitive; commits 75ad8a0..8f051cf)
 Task 12: fix round 3/5 (1 root class addressed, 0 open — warning resolution is locally bounded, remaining legs and upcoming transfers are cursor-derived, and completed-leg evidence cannot contaminate the remaining trip; commits 8f051cf..84af09c)
 Task 12: complete (commits 147849f..84af09c, final review clean; 52 focused and 752 full-project tests; typecheck, production build, and 3 Chrome offline journeys clean)
+Task 13: fix round 1/5 (1 addressed, 8 open — threshold immutability passed; recovery ownership, token expiry/linkage, exact equipment sequence, path/alternative/warning fact ownership, exact schemas, and negative mismatch tests remained; commits c883f3a..b179c47)
