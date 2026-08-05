@@ -7,6 +7,21 @@ test.beforeEach(async ({ request }) => {
   expect(response.ok()).toBe(true);
 });
 
+test('omits every crowding field, proxy, placeholder, and control from the public rider flow', async ({ page }) => {
+  await openAppWithControlledWorker(page);
+  await chooseStation(page, '125 St');
+
+  const publicSurface = `${await page.locator('body').innerText()} ${await page.locator('body').evaluate((element) => element.outerHTML)}`;
+  expect(publicSurface).not.toMatch(/crowding|occupancy|standing room|car.?load|load factor|seats available/i);
+  expect(await page.locator('[data-crowding], [aria-label*="crowd" i]').count()).toBe(0);
+
+  const publicPayloads = await page.evaluate(async () => Promise.all([
+    fetch('/api/v1/bootstrap').then((response) => response.text()),
+    fetch('/api/v1/stations/A12/board').then((response) => response.text()),
+  ]));
+  expect(publicPayloads.join(' ')).not.toMatch(/crowding|occupancy|standing room|car.?load|loadFactor|seatsAvailable/i);
+});
+
 test('warms device-held subway references through the product and plans with them offline', async ({ context, page }) => {
   await openAppWithControlledWorker(page);
 
