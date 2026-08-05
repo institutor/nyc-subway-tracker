@@ -71,6 +71,47 @@ describe('journey response structural ownership', () => {
     expect(untimed).toMatchObject({ kind: 'untimed', label: 'Untimed structural route' });
     expect(JSON.stringify(untimed)).not.toMatch(/Reference itinerary|arrivalSeconds|Scheduled|Live|current reroute|equipment/i);
   });
+
+  test('attaches only an exact itinerary-owned capture package without manufacturing optional claims', () => {
+    const initial = planJourney(graph, query('online-current'));
+    if (initial.kind !== 'planned') throw new Error('Expected planned journey fixture');
+    const itinerary = initial.itineraries[0];
+    const capture = {
+      itineraryId: itinerary.id,
+      requestMode: 'online-current' as const,
+      scope: {
+        mode: 'online-current' as const, originStationId: 'A12', destinationStationId: 'A15', accessibleRouteOnly: false,
+      },
+      serviceDate: '2026-08-05', timing: 'timed' as const,
+      capturedAt: '2026-08-05T12:00:00.000Z', disclosure: 'Demonstration data \u2014 not live' as const,
+      validity: {
+        result: 'current-itinerary' as const, pattern: 'actual-now' as const,
+        schedule: {
+          kind: 'current' as const, editionId: 'supplemented-gtfs:edition-7', anchorKind: 'published' as const,
+          anchorAt: '2026-08-05T11:00:00.000Z', lastRetrievedAt: '2026-08-05T11:58:00.000Z',
+          effectiveFrom: '2026-08-05', effectiveUntil: '2026-08-05', currencyAgeSeconds: 3_600,
+          departures: [
+            { patternId: 'pattern-a', occurrenceId: 'occ-a', clockTime: '08:15', evidence: 'scheduled' as const, timeZone: 'America/New_York' as const },
+            { patternId: 'pattern-c', occurrenceId: 'occ-b-out', clockTime: '08:25', evidence: 'scheduled' as const, timeZone: 'America/New_York' as const },
+          ],
+        },
+        warnings: [], vetoes: [],
+      },
+      serviceClaims: [], equipmentClaims: [],
+    };
+
+    const captured = planJourney(graph, query('online-current'), {
+      capturePackages: [capture],
+      decidedAt: '2026-08-05T12:00:00.000Z',
+      disclosure: 'Demonstration data \u2014 not live',
+    });
+
+    expect(captured).toMatchObject({
+      kind: 'planned',
+      itineraries: [{ capture: { itineraryId: itinerary.id, validity: { schedule: capture.validity.schedule } } }],
+    });
+    expect(JSON.stringify(captured)).not.toMatch(/service-capture|not-supplied|capture-limitation/);
+  });
 });
 
 function query(mode: JourneyQuery['mode']): JourneyQuery {

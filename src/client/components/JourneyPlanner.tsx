@@ -189,7 +189,7 @@ function JourneyResults({
                 );
               })}
             </ol>
-            {canActivate ? (
+            {canActivate && itinerary.capture ? (
               <button type="button" onClick={() => onActivateTrip(itinerary, response)}>
                 Use {transfer ? 'transfer' : 'direct'} itinerary underground
               </button>

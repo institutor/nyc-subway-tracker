@@ -58,7 +58,11 @@ export function journeyHandler(dependencies: AppDependencies) {
     }
     const decidedAt = captureNow(dependencies).toISOString();
     const snapshot = captureDecisionSnapshot(dependencies.snapshotProvider);
-    const data = planJourney(snapshot.journeyGraph, query);
+    const data = planJourney(snapshot.journeyGraph, query, {
+      capturePackages: snapshot.journeyCaptures,
+      decidedAt,
+      disclosure: DEMONSTRATION_LABEL,
+    });
     const sourceHealth = toSourceHealthDtos(snapshot.sourceHealth);
     const provenance = toProvenanceDtos(snapshot.provenance);
     sendNoStoreJson(response, 200, {

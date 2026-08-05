@@ -217,6 +217,7 @@ describe('complete device-held active trip', () => {
     const trip: ActiveTripRecord = {
       id: complete.id,
       capturedAt: complete.capturedAt,
+      captureContext: complete.captureContext,
       origin: complete.origin,
       destination: complete.destination,
       accessibleRouteOnly: false,
@@ -278,6 +279,10 @@ function activeTrip(): ActiveTripRecord {
   return {
     id: 'trip-a-c',
     capturedAt: '2026-08-05T12:00:00.000Z',
+    captureContext: {
+      kind: 'response-owned', itineraryId: 'itinerary-a-c', requestMode: 'offline-reference', timing: 'timed',
+      disclosure: 'Demonstration data \u2014 not live',
+    },
     origin: { name: '125 St', complexId: 'A12', constituentId: 'A12' },
     destination: { name: 'Canal St', complexId: 'A32', constituentId: 'A32' },
     accessibleRouteOnly: true,

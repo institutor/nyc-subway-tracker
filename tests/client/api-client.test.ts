@@ -280,6 +280,55 @@ describe('transit API client boundary', () => {
     expect((result as typeof result & { readonly receivedAtMonotonicMs?: number }).receivedAtMonotonicMs).toBe(4_321);
     clock.mockRestore();
   });
+
+  test('retains an exact response-owned journey capture package', async () => {
+    const client = createTransitApiClient(async () => jsonResponse(journeyEnvelope()));
+
+    const result = await client.planJourney(journeyQuery());
+
+    expect(result.data).toMatchObject({
+      kind: 'planned',
+      itineraries: [{
+        capture: {
+          itineraryId: 'itinerary-a', requestMode: 'online-current', serviceDate: '2026-08-04', timing: 'timed',
+          disclosure: 'Demonstration data \u2014 not live',
+          validity: {
+            schedule: {
+              editionId: 'supplemented-gtfs:edition-7',
+              departures: [{ patternId: 'pattern-a', occurrenceId: 'occ-a12', clockTime: '08:15' }],
+            },
+          },
+          serviceClaims: [], equipmentClaims: [],
+        },
+      }],
+    });
+  });
+
+  test('accepts exact disclosure absence on a public response without inventing demonstration copy', async () => {
+    const response = journeyEnvelope();
+    response.runtime = { mode: 'live', surface: 'public', availability: 'available' };
+    delete response.demonstrationLabel;
+    delete response.data.itineraries[0].capture.disclosure;
+    const client = createTransitApiClient(async () => jsonResponse(response));
+
+    const result = await client.planJourney(journeyQuery());
+
+    expect((result.data as any).itineraries[0].capture).not.toHaveProperty('disclosure');
+  });
+
+  test.each([
+    ['itinerary', (value: any) => { value.data.itineraries[0].capture.itineraryId = 'some-other-itinerary'; }],
+    ['request mode', (value: any) => { value.data.itineraries[0].capture.requestMode = 'online-future'; }],
+    ['timing', (value: any) => { value.data.itineraries[0].capture.timing = 'untimed'; }],
+    ['disclosure', (value: any) => { value.data.itineraries[0].capture.disclosure = 'Live'; }],
+    ['timed schedule', (value: any) => { value.data.itineraries[0].capture.validity.schedule = { kind: 'none' }; }],
+  ])('rejects capture evidence that contradicts its owning %s', async (_label, contradict) => {
+    const response = journeyEnvelope();
+    contradict(response);
+    const client = createTransitApiClient(async () => jsonResponse(response));
+
+    await expect(client.planJourney(journeyQuery())).rejects.toThrow('Transit information is unavailable.');
+  });
 });
 
 function jsonResponse(value: unknown, headers: HeadersInit = {}): Response {
@@ -287,6 +336,55 @@ function jsonResponse(value: unknown, headers: HeadersInit = {}): Response {
     status: 200,
     headers: { 'content-type': 'application/json', ...Object.fromEntries(new Headers(headers)) },
   });
+}
+
+function journeyQuery() {
+  return {
+    mode: 'online-current' as const,
+    originStationId: 'A12', destinationStationId: 'A15', accessibleRouteOnly: false,
+  };
+}
+
+function journeyEnvelope(): any {
+  return {
+    apiVersion: 'v1', schemaVersion: '2026-08-04', responseIdentity: 'response:journey-a',
+    decidedAt: '2026-08-04T12:00:00.000Z', serverTime: '2026-08-04T12:00:00.000Z',
+    runtime: { mode: 'validation', surface: 'demonstration', availability: 'available' },
+    gates, demonstrationLabel: 'Demonstration data \u2014 not live', sourceHealth: [], provenance: [],
+    data: {
+      kind: 'planned',
+      scope: { ...journeyQuery() },
+      itineraries: [{
+        id: 'itinerary-a', transferIds: [], transferInstructions: [], transfers: 0,
+        validity: 'valid', accessibility: 'eligible', risk: 'clear', timing: 'timed', arrivalSeconds: 180,
+        legs: [{
+          patternId: 'pattern-a', routeId: 'A', routeLabel: 'A', direction: 'northbound', actualDestination: 'Inwood-207 St',
+          fromOccurrenceId: 'occ-a12', toOccurrenceId: 'occ-a15', orderedOccurrenceIds: ['occ-a12', 'occ-a15'],
+          fromStationId: 'A12', toStationId: 'A15', orderedStationIds: ['A12', 'A15'],
+        }],
+        capture: {
+          itineraryId: 'itinerary-a', requestMode: 'online-current',
+          scope: { ...journeyQuery() },
+          serviceDate: '2026-08-04', timing: 'timed', capturedAt: '2026-08-04T12:00:00.000Z',
+          disclosure: 'Demonstration data \u2014 not live',
+          validity: {
+            result: 'current-itinerary', pattern: 'actual-now',
+            schedule: {
+              kind: 'current', editionId: 'supplemented-gtfs:edition-7', anchorKind: 'published',
+              anchorAt: '2026-08-04T11:00:00.000Z', lastRetrievedAt: '2026-08-04T11:58:00.000Z',
+              effectiveFrom: '2026-08-04', effectiveUntil: '2026-08-04', currencyAgeSeconds: 3_600,
+              departures: [{
+                patternId: 'pattern-a', occurrenceId: 'occ-a12', clockTime: '08:15',
+                evidence: 'scheduled', timeZone: 'America/New_York',
+              }],
+            },
+            warnings: [], vetoes: [],
+          },
+          serviceClaims: [], equipmentClaims: [],
+        },
+      }],
+    },
+  };
 }
 
 function boardWithEveryArrivalShape(): any {

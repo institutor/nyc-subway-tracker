@@ -6,6 +6,11 @@ import {
   type JourneyQuery,
   type RoutedJourney,
 } from '../../shared/domain/journey-router';
+import {
+  bindJourneyCapturePackage,
+  type JourneyCapturePackage,
+  type JourneyCaptureScope,
+} from '../../shared/domain/journey-capture';
 import { createResponseIdentity } from '../api/response-identity';
 
 export interface JourneyGraphReference {
@@ -22,7 +27,15 @@ export function createJourneyGraphReference(graph: JourneyGraph | undefined): Jo
   return deepFreeze({ contentVersion: `journey-graph-${digest}`, graph: structural });
 }
 
-export function planJourney(graph: JourneyGraph | undefined, query: JourneyQuery) {
+export function planJourney(
+  graph: JourneyGraph | undefined,
+  query: JourneyQuery,
+  captureOptions: {
+    readonly capturePackages?: readonly JourneyCapturePackage[];
+    readonly decidedAt?: string;
+    readonly disclosure?: string;
+  } = {},
+) {
   const scope = captureScope(query);
   if (!graph) return deepFreeze({ kind: 'no-path' as const, reason: 'no-service-path' as const, scope });
   const validated = validateJourneyGraph(graph);
@@ -32,8 +45,39 @@ export function planJourney(graph: JourneyGraph | undefined, query: JourneyQuery
   return deepFreeze({
     ...decision,
     scope,
-    itineraries: decision.itineraries.map((itinerary) => enrichItinerary(itinerary, nodeByOccurrence)),
+    itineraries: decision.itineraries.map((itinerary) => {
+      const enriched = enrichItinerary(itinerary, nodeByOccurrence);
+      const capture = bindExactCapture(enriched, scope, captureOptions);
+      return { ...enriched, ...(capture === undefined ? {} : { capture }) };
+    }),
   });
+}
+
+function bindExactCapture(
+  itinerary: ReturnType<typeof enrichItinerary>,
+  scope: JourneyCaptureScope,
+  options: {
+    readonly capturePackages?: readonly JourneyCapturePackage[];
+    readonly decidedAt?: string;
+    readonly disclosure?: string;
+  },
+): JourneyCapturePackage | undefined {
+  if (!options.capturePackages || !options.decidedAt) return undefined;
+  const accepted: JourneyCapturePackage[] = [];
+  for (const candidate of options.capturePackages) {
+    try {
+      const bound = bindJourneyCapturePackage(candidate, {
+        itinerary,
+        scope,
+        responseDecidedAt: options.decidedAt,
+        responseDisclosure: options.disclosure,
+      });
+      accepted.push(bound);
+    } catch {
+      // Unowned, malformed, or incomplete capture evidence is omitted fail-closed.
+    }
+  }
+  return accepted.length === 1 ? accepted[0] : undefined;
 }
 
 function enrichItinerary(

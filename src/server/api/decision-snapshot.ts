@@ -2,6 +2,7 @@ import { normalizeBoundedIdentity } from '../../shared/domain/canonical';
 import type { NearbyRankingInput } from '../../shared/domain/station-ranking';
 import type { BoardDecision } from '../../shared/domain/types';
 import type { JourneyGraph } from '../../shared/domain/journey-router';
+import type { JourneyCapturePackage } from '../../shared/domain/journey-capture';
 
 export interface SnapshotSourceHealth {
   readonly source: string;
@@ -33,6 +34,7 @@ export interface DecisionSnapshot {
   }[];
   readonly mapOverlays?: readonly MapOverlaySnapshot[];
   readonly journeyGraph?: JourneyGraph;
+  readonly journeyCaptures?: readonly JourneyCapturePackage[];
 }
 
 export interface MapOverlaySnapshot {

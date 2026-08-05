@@ -1,5 +1,9 @@
 import type { Direction } from '../../shared/domain/types';
 import { validateJourneyGraph, type JourneyGraph } from '../../shared/domain/journey-router';
+import {
+  bindJourneyCapturePackage,
+  type JourneyCapturePackage,
+} from '../../shared/domain/journey-capture';
 
 const API_VERSION = 'v1';
 const SCHEMA_VERSION = '2026-08-04';
@@ -201,6 +205,7 @@ export interface JourneyItineraryDto {
   readonly timing: 'timed' | 'untimed';
   readonly practicalWalkRange?: WalkRangeDto;
   readonly arrivalSeconds?: number;
+  readonly capture?: JourneyCapturePackage;
 }
 
 export interface JourneyScopeDto {
@@ -687,18 +692,18 @@ function parseMapOverlayData(value: unknown): NonNullable<MapOverlayEnvelopeDto[
 function parseJourney(value: unknown, request: JourneyRequestDto): JourneyEnvelopeDto {
   const root = dynamicRoot(value, ['data']);
   const base = dynamicBase(root);
-  const data = root.data === null ? null : parseJourneyDecision(root.data, request);
+  const data = root.data === null ? null : parseJourneyDecision(root.data, request, base);
   if ((base.runtime.availability === 'locked') !== (data === null)) invalid();
   return freeze({ ...base, data });
 }
 
-function parseJourneyDecision(value: unknown, request: JourneyRequestDto): JourneyDecisionDto {
+function parseJourneyDecision(value: unknown, request: JourneyRequestDto, response: DynamicEnvelopeBase): JourneyDecisionDto {
   const candidate = record(value);
   const kind = enumeration(candidate.kind, ['planned', 'untimed', 'no-path', 'unavailable'] as const);
   if (kind === 'planned' || kind === 'untimed') {
     const row = strictRecord(value, ['kind', 'scope', 'itineraries'], ['label']);
     const scope = parseJourneyScope(row.scope, request);
-    const itineraries = boundedArray(row.itineraries, 8).map((itinerary) => parseJourneyItinerary(itinerary, scope));
+    const itineraries = boundedArray(row.itineraries, 8).map((itinerary) => parseJourneyItinerary(itinerary, scope, response));
     if (itineraries.length === 0) invalid();
     assertUnique(itineraries.map(({ id }) => id));
     if (kind === 'planned') {
@@ -733,10 +738,10 @@ function parseJourneyScope(value: unknown, request: JourneyRequestDto): JourneyS
   return scope;
 }
 
-function parseJourneyItinerary(value: unknown, scope: JourneyScopeDto): JourneyItineraryDto {
+function parseJourneyItinerary(value: unknown, scope: JourneyScopeDto, response: DynamicEnvelopeBase): JourneyItineraryDto {
   const row = strictRecord(value, [
     'id', 'legs', 'transferIds', 'transferInstructions', 'transfers', 'validity', 'accessibility', 'risk', 'timing',
-  ], ['practicalWalkRange', 'arrivalSeconds']);
+  ], ['practicalWalkRange', 'arrivalSeconds', 'capture']);
   const legs = boundedArray(row.legs, 8).map(parseJourneyLeg);
   if (legs.length === 0 || legs[0].fromStationId !== scope.originStationId || legs.at(-1)!.toStationId !== scope.destinationStationId) invalid();
   for (let index = 1; index < legs.length; index += 1) {
@@ -759,7 +764,7 @@ function parseJourneyItinerary(value: unknown, scope: JourneyScopeDto): JourneyI
   const timing = enumeration(row.timing, ['timed', 'untimed'] as const);
   const arrivalSeconds = row.arrivalSeconds === undefined ? undefined : boundedSeconds(row.arrivalSeconds);
   if (timing === 'untimed' && arrivalSeconds !== undefined) invalid();
-  return {
+  const itinerary: JourneyItineraryDto = {
     id: identity(row.id), legs, transferIds, transferInstructions, transfers,
     validity: enumeration(row.validity, ['valid', 'limited'] as const),
     accessibility: enumeration(row.accessibility, ['eligible', 'unknown', 'ineligible'] as const),
@@ -767,6 +772,18 @@ function parseJourneyItinerary(value: unknown, scope: JourneyScopeDto): JourneyI
     ...(row.practicalWalkRange === undefined ? {} : { practicalWalkRange: walkRange(row.practicalWalkRange) }),
     ...(arrivalSeconds === undefined ? {} : { arrivalSeconds }),
   };
+  if (row.capture === undefined) return itinerary;
+  try {
+    const capture = bindJourneyCapturePackage(row.capture, {
+      itinerary,
+      scope,
+      responseDecidedAt: response.decidedAt,
+      responseDisclosure: response.demonstrationLabel,
+    });
+    return { ...itinerary, capture };
+  } catch {
+    return invalid();
+  }
 }
 
 function parseJourneyLeg(value: unknown): JourneyLegDto {

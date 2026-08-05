@@ -1,9 +1,11 @@
 import { normalizeBoundedIdentity, normalizeCanonicalIdentity } from '../../shared/domain/canonical';
 import { parseServiceDate } from '../../shared/domain/clock';
 import type { Direction } from '../../shared/domain/types';
+import { JOURNEY_CAPTURE_DISCLOSURE } from '../../shared/domain/journey-capture';
 import type { BrowserStorage } from './browser-store';
 
-export const ACTIVE_TRIP_STORE_KEY = 'nyc-subway-tracker:active-trip:v2';
+export const ACTIVE_TRIP_STORE_KEY = 'nyc-subway-tracker:active-trip:v3';
+const LEGACY_ACTIVE_TRIP_STORE_KEY = 'nyc-subway-tracker:active-trip:v2';
 
 const MAX_BYTES = 512 * 1_024;
 const MAX_LEGS = 16;
@@ -134,10 +136,20 @@ export interface ActiveTripPatternBoundary {
   readonly verifiedAt: string;
 }
 
+export type ActiveTripCaptureContext =
+  | {
+    readonly kind: 'response-owned';
+    readonly itineraryId: string;
+    readonly requestMode: 'online-current' | 'online-future' | 'offline-reference';
+    readonly timing: 'timed' | 'untimed';
+    readonly disclosure?: typeof JOURNEY_CAPTURE_DISCLOSURE;
+  }
+  | { readonly kind: 'legacy-migrated' };
+
 export interface ActiveTripValidity {
-  readonly result: 'reference-itinerary' | 'untimed-structural-route' | 'untimed-structural-path';
+  readonly result: 'current-itinerary' | 'future-itinerary' | 'reference-itinerary' | 'untimed-structural-route' | 'untimed-structural-path';
   readonly serviceDate: string;
-  readonly pattern: 'actual-now' | 'typical-weekday' | 'late-night';
+  readonly pattern: 'actual-now' | 'typical-weekday' | 'late-night' | 'unspecified';
   readonly schedule: ActiveTripSchedule;
   readonly warnings: readonly ActiveTripLimitation[];
   readonly vetoes: readonly ActiveTripLimitation[];
@@ -202,6 +214,7 @@ export interface ActiveTripContingency {
 export interface ActiveTripRecord {
   readonly id: string;
   readonly capturedAt: string;
+  readonly captureContext: ActiveTripCaptureContext;
   readonly origin: ActiveTripPlace;
   readonly destination: ActiveTripPlace;
   readonly accessibleRouteOnly: boolean;
@@ -217,14 +230,14 @@ export interface ActiveTripRecord {
   readonly contingencies?: readonly ActiveTripContingency[];
 }
 
-interface ActiveTripEnvelopeV2 {
-  readonly version: 2;
+interface ActiveTripEnvelopeV3 {
+  readonly version: 3;
   readonly trip: ActiveTripRecord | null;
 }
 
 type ActiveTripEnvelopeDecode =
-  | { readonly kind: 'current'; readonly envelope: ActiveTripEnvelopeV2 }
-  | { readonly kind: 'migrated'; readonly envelope: ActiveTripEnvelopeV2 }
+  | { readonly kind: 'current'; readonly envelope: ActiveTripEnvelopeV3 }
+  | { readonly kind: 'migrated'; readonly envelope: ActiveTripEnvelopeV3 }
   | { readonly kind: 'future'; readonly raw: string }
   | { readonly kind: 'invalid'; readonly raw: string };
 
@@ -250,10 +263,10 @@ export function createBrowserActiveTripStore(
   storage: BrowserStorage,
   key = ACTIVE_TRIP_STORE_KEY,
 ): BrowserActiveTripStore {
-  const initialRaw = storage.getItem(key);
-  let raw = initialRaw;
+  const currentRaw = storage.getItem(key);
+  const initialRaw = currentRaw ?? (key === ACTIVE_TRIP_STORE_KEY ? storage.getItem(LEGACY_ACTIVE_TRIP_STORE_KEY) : null);
   let decoded: ActiveTripEnvelopeDecode = initialRaw === null
-    ? { kind: 'current', envelope: { version: 2, trip: null } }
+    ? { kind: 'current', envelope: { version: 3, trip: null } }
     : decodeEnvelope(initialRaw);
 
   const read = (): ActiveTripStoreRead => {
@@ -279,15 +292,14 @@ export function createBrowserActiveTripStore(
     } catch {
       return Object.freeze({ kind: 'unavailable', reason: 'invalid-trip' });
     }
-    const priorRaw = raw;
+    const priorRaw = storage.getItem(key);
     try {
       storage.setItem(key, serialized);
     } catch {
       rollbackUnexpectedMutation(storage, key, priorRaw);
       return Object.freeze({ kind: 'unavailable', reason: 'storage-write-failed' });
     }
-    raw = serialized;
-    decoded = { kind: 'current', envelope: { version: 2, trip: accepted } };
+    decoded = { kind: 'current', envelope: { version: 3, trip: accepted } };
     return deepFreeze({ kind: 'saved', trip: accepted });
   };
 
@@ -327,17 +339,24 @@ function decodeEnvelope(raw: string): ActiveTripEnvelopeDecode {
   if (!isPlainRecord(value) || !Number.isSafeInteger(value.version)) {
     return Object.freeze({ kind: 'invalid', raw });
   }
-  if ((value.version as number) > 2) return Object.freeze({ kind: 'future', raw });
+  if ((value.version as number) > 3) return Object.freeze({ kind: 'future', raw });
   try {
+    if (value.version === 3) {
+      const root = strictRecord(value, ['version', 'trip']);
+      return deepFreeze({ kind: 'current', envelope: { version: 3, trip: root.trip === null ? null : parseTrip(root.trip) } });
+    }
     if (value.version === 2) {
       const root = strictRecord(value, ['version', 'trip']);
-      return deepFreeze({ kind: 'current', envelope: { version: 2, trip: root.trip === null ? null : parseTrip(root.trip) } });
+      return deepFreeze({
+        kind: 'migrated',
+        envelope: { version: 3, trip: root.trip === null ? null : migrateLegacyTrip(root.trip) },
+      });
     }
     if (value.version === 1) {
       const root = strictRecord(value, ['version', 'activeTrip']);
       return deepFreeze({
         kind: 'migrated',
-        envelope: { version: 2, trip: root.activeTrip === null ? null : parseTrip(root.activeTrip) },
+        envelope: { version: 3, trip: root.activeTrip === null ? null : migrateLegacyTrip(root.activeTrip) },
       });
     }
   } catch {
@@ -347,15 +366,47 @@ function decodeEnvelope(raw: string): ActiveTripEnvelopeDecode {
 }
 
 function encodeEnvelope(trip: ActiveTripRecord | null): string {
-  const encoded = JSON.stringify({ version: 2, trip });
+  const encoded = JSON.stringify({ version: 3, trip });
   if (new TextEncoder().encode(encoded).byteLength > MAX_BYTES) throw new Error('Active trip exceeds storage limit');
   return encoded;
+}
+
+function migrateLegacyTrip(value: unknown): ActiveTripRecord {
+  if (!isPlainRecord(value) || !isPlainRecord(value.validity)) throw new Error('Invalid legacy active trip');
+  const legacy = value as Record<string, unknown>;
+  const validity = value.validity as Record<string, unknown>;
+  const serviceClaims = Array.isArray(legacy.serviceClaims)
+    ? legacy.serviceClaims.filter((claim) => !isPlainRecord(claim) || claim.id !== 'service-capture')
+    : legacy.serviceClaims;
+  const equipmentClaims = Array.isArray(legacy.equipmentClaims)
+    ? legacy.equipmentClaims.filter((claim) => !isPlainRecord(claim) || claim.equipmentId !== 'not-supplied')
+    : legacy.equipmentClaims;
+  const warnings = Array.isArray(validity.warnings)
+    ? validity.warnings.filter((warning) => !isPlainRecord(warning) || warning.id !== 'capture-limitation')
+    : validity.warnings;
+  const vetoes = Array.isArray(validity.vetoes)
+    ? validity.vetoes.filter((veto) => !isPlainRecord(veto) || veto.id !== 'capture-limitation')
+    : validity.vetoes;
+  return parseTrip({
+    ...legacy,
+    captureContext: { kind: 'legacy-migrated' },
+    serviceClaims,
+    equipmentClaims,
+    validity: {
+      ...validity,
+      result: 'untimed-structural-route',
+      pattern: 'unspecified',
+      schedule: { kind: 'none' },
+      warnings,
+      vetoes,
+    },
+  });
 }
 
 function parseTrip(value: unknown): ActiveTripRecord {
   const root = strictRecord(
     value,
-    ['id', 'capturedAt', 'origin', 'destination', 'accessibleRouteOnly', 'legs', 'transfers', 'serviceClaims', 'equipmentClaims', 'cursor', 'validity'],
+    ['id', 'capturedAt', 'captureContext', 'origin', 'destination', 'accessibleRouteOnly', 'legs', 'transfers', 'serviceClaims', 'equipmentClaims', 'cursor', 'validity'],
     ['exitGuidance', 'platformGuidance', 'accessiblePath', 'contingencies'],
   );
   if (typeof root.accessibleRouteOnly !== 'boolean') throw new Error('Invalid accessibility preference');
@@ -365,14 +416,15 @@ function parseTrip(value: unknown): ActiveTripRecord {
   assertUnique(points.map(({ id }) => id), 'trip point');
   const transfers = boundedArray(root.transfers, 0, Math.max(0, MAX_LEGS - 1), parseTransfer, 'transfers');
   assertUnique(transfers.map(({ id }) => id), 'transfer');
-  const serviceClaims = boundedArray(root.serviceClaims, 1, MAX_CLAIMS, parseServiceClaim, 'service claims');
-  const equipmentClaims = boundedArray(root.equipmentClaims, 1, MAX_CLAIMS, parseEquipmentClaim, 'equipment claims');
+  const serviceClaims = boundedArray(root.serviceClaims, 0, MAX_CLAIMS, parseServiceClaim, 'service claims');
+  const equipmentClaims = boundedArray(root.equipmentClaims, 0, MAX_CLAIMS, parseEquipmentClaim, 'equipment claims');
   assertUnique(serviceClaims.map(({ id }) => id), 'service claim');
   assertUnique(equipmentClaims.map(({ id }) => id), 'equipment claim');
   const cursor = strictRecord(root.cursor, ['pointId']);
   const record: ActiveTripRecord = {
     id: identity(root.id, 'trip'),
     capturedAt: instant(root.capturedAt, 'trip capture'),
+    captureContext: parseCaptureContext(root.captureContext),
     origin: parsePlace(root.origin),
     destination: parsePlace(root.destination),
     accessibleRouteOnly: root.accessibleRouteOnly,
@@ -391,6 +443,25 @@ function parseTrip(value: unknown): ActiveTripRecord {
   };
   validateTripReferences(record);
   return deepFreeze(record);
+}
+
+function parseCaptureContext(value: unknown): ActiveTripCaptureContext {
+  if (!isPlainRecord(value)) throw new Error('Invalid capture context');
+  if (value.kind === 'legacy-migrated') {
+    strictRecord(value, ['kind']);
+    return Object.freeze({ kind: 'legacy-migrated' });
+  }
+  const root = strictRecord(value, ['kind', 'itineraryId', 'requestMode', 'timing'], ['disclosure']);
+  if (root.kind !== 'response-owned') throw new Error('Invalid capture context');
+  return deepFreeze({
+    kind: 'response-owned',
+    itineraryId: identity(root.itineraryId, 'capture itinerary'),
+    requestMode: enumeration(root.requestMode, ['online-current', 'online-future', 'offline-reference'] as const, 'capture request mode'),
+    timing: enumeration(root.timing, ['timed', 'untimed'] as const, 'capture timing'),
+    ...(root.disclosure === undefined ? {} : {
+      disclosure: enumeration(root.disclosure, [JOURNEY_CAPTURE_DISCLOSURE] as const, 'capture disclosure'),
+    }),
+  });
 }
 
 function parsePlace(value: unknown): ActiveTripPlace {
@@ -590,14 +661,17 @@ function parseLimitation(value: unknown): ActiveTripLimitation {
 function parseValidity(value: unknown): ActiveTripValidity {
   const root = strictRecord(value, ['result', 'serviceDate', 'pattern', 'schedule', 'warnings', 'vetoes'], ['patternBoundary']);
   const schedule = parseSchedule(root.schedule);
-  const result = enumeration(root.result, ['reference-itinerary', 'untimed-structural-route', 'untimed-structural-path'] as const, 'validity result');
-  if ((schedule.kind === 'current' || schedule.kind === 'stale') !== (result === 'reference-itinerary')) {
+  const result = enumeration(root.result, [
+    'current-itinerary', 'future-itinerary', 'reference-itinerary', 'untimed-structural-route', 'untimed-structural-path',
+  ] as const, 'validity result');
+  if ((schedule.kind === 'current' || schedule.kind === 'stale')
+    !== ['current-itinerary', 'future-itinerary', 'reference-itinerary'].includes(result)) {
     throw new Error('Scheduled evidence does not own the validity result');
   }
   return deepFreeze({
     result,
     serviceDate: serviceDate(root.serviceDate),
-    pattern: enumeration(root.pattern, ['actual-now', 'typical-weekday', 'late-night'] as const, 'service pattern'),
+    pattern: enumeration(root.pattern, ['actual-now', 'typical-weekday', 'late-night', 'unspecified'] as const, 'service pattern'),
     schedule,
     warnings: boundedArray(root.warnings, 0, MAX_CLAIMS, parseLimitation, 'validity warnings'),
     vetoes: boundedArray(root.vetoes, 0, MAX_CLAIMS, parseLimitation, 'validity vetoes'),
@@ -704,6 +778,22 @@ function validateTripReferences(trip: ActiveTripRecord): void {
   const first = trip.legs[0].points[0];
   const lastLeg = trip.legs[trip.legs.length - 1];
   const last = lastLeg.points[lastLeg.points.length - 1];
+  const timedSchedule = trip.validity.schedule.kind === 'current' || trip.validity.schedule.kind === 'stale';
+  if (trip.captureContext.kind === 'legacy-migrated') {
+    if (trip.validity.result !== 'untimed-structural-route' || trip.validity.pattern !== 'unspecified'
+      || trip.validity.schedule.kind !== 'none') throw new Error('Legacy migration retained unowned timing context');
+  } else {
+    const expectedResult = trip.captureContext.requestMode === 'online-current'
+      ? 'current-itinerary'
+      : trip.captureContext.requestMode === 'online-future'
+        ? 'future-itinerary'
+        : trip.captureContext.timing === 'timed' ? 'reference-itinerary' : trip.validity.result;
+    if (trip.validity.result !== expectedResult
+      || (trip.captureContext.requestMode === 'online-current' && trip.validity.pattern !== 'actual-now')
+      || (trip.captureContext.timing === 'timed') !== timedSchedule) {
+      throw new Error('Capture context contradicts retained validity');
+    }
+  }
   if (first.complexId !== trip.origin.complexId || first.constituentId !== trip.origin.constituentId
     || last.complexId !== trip.destination.complexId || last.constituentId !== trip.destination.constituentId) {
     throw new Error('Trip endpoints do not own the ordered points');
@@ -738,8 +828,10 @@ function validateTripReferences(trip: ActiveTripRecord): void {
   }
   const schedule = trip.validity.schedule;
   if (schedule.kind === 'current' || schedule.kind === 'stale') {
+    const exactAgeSeconds = (Date.parse(trip.capturedAt) - Date.parse(schedule.anchorAt)) / 1_000;
     if (trip.validity.serviceDate < schedule.effectiveFrom || trip.validity.serviceDate > schedule.effectiveUntil
-      || schedule.lastRetrievedAt < schedule.anchorAt || schedule.lastRetrievedAt > trip.capturedAt) {
+      || schedule.lastRetrievedAt < schedule.anchorAt || schedule.lastRetrievedAt > trip.capturedAt
+      || schedule.currencyAgeSeconds !== exactAgeSeconds) {
       throw new Error('Schedule chronology does not own the trip');
     }
     if ((schedule.kind === 'current' && schedule.currencyAgeSeconds > 7_200)
@@ -747,7 +839,9 @@ function validateTripReferences(trip: ActiveTripRecord): void {
       throw new Error('Schedule currency label contradicts its retained age');
     }
   } else if (schedule.kind === 'topology-only') {
+    const exactAgeSeconds = (Date.parse(trip.capturedAt) - Date.parse(schedule.anchorAt)) / 1_000;
     if (schedule.lastRetrievedAt < schedule.anchorAt || schedule.lastRetrievedAt > trip.capturedAt
+      || schedule.currencyAgeSeconds !== exactAgeSeconds
       || (schedule.reason === 'aged' && schedule.currencyAgeSeconds <= 86_400)) {
       throw new Error('Topology schedule context is contradictory');
     }

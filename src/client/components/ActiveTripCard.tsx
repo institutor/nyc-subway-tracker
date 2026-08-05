@@ -32,6 +32,10 @@ export function ActiveTripCard({
         {onClear ? <button type="button" className="danger-action" onClick={onClear}>End active trip</button> : null}
       </header>
 
+      {trip.captureContext.kind === 'response-owned' && trip.captureContext.disclosure
+        ? <p className="surface-disclosure">{trip.captureContext.disclosure}</p>
+        : null}
+
       <ValidityContext trip={trip} />
       {completed ? <p className="trip-complete" role="status">Trip complete — rider confirmed</p> : null}
 
@@ -72,7 +76,7 @@ export function ActiveTripCard({
         ))}
       </div>
 
-      <section className="trip-evidence" aria-label="Historical service context">
+      {trip.serviceClaims.length > 0 ? <section className="trip-evidence" aria-label="Historical service context">
         <h3>Service context</h3>
         {trip.serviceClaims.map((claim) => (
           <article key={claim.id}>
@@ -81,9 +85,9 @@ export function ActiveTripCard({
             <p className="claim-line"><time dateTime={claim.lastCheckedAt}>Last checked {formatClock(claim.lastCheckedAt)}</time>{offline ? <span>Historical — not current</span> : null}</p>
           </article>
         ))}
-      </section>
+      </section> : null}
 
-      <section className="trip-evidence" aria-label="Historical equipment context">
+      {trip.equipmentClaims.length > 0 ? <section className="trip-evidence" aria-label="Historical equipment context">
         <h3>Equipment context</h3>
         {trip.equipmentClaims.map((claim) => (
           <article key={claim.id}>
@@ -92,7 +96,7 @@ export function ActiveTripCard({
             <p className="claim-line"><time dateTime={claim.lastCheckedAt}>Last checked {formatClock(claim.lastCheckedAt)}</time></p>
           </article>
         ))}
-      </section>
+      </section> : null}
 
       {trip.exitGuidance ? (
         <section className="trip-module">
@@ -145,9 +149,10 @@ export function ActiveTripCard({
 
 function ValidityContext({ trip }: { readonly trip: ActiveTripRecord }) {
   const { validity } = trip;
-  const result = validity.result === 'reference-itinerary'
-    ? 'Reference itinerary'
-    : validity.result === 'untimed-structural-route' ? 'Untimed structural route' : 'Untimed structural path';
+  const result = validity.result === 'current-itinerary' ? 'Current itinerary'
+    : validity.result === 'future-itinerary' ? 'Future itinerary'
+      : validity.result === 'reference-itinerary' ? 'Reference itinerary'
+        : validity.result === 'untimed-structural-route' ? 'Untimed structural route' : 'Untimed structural path';
   return (
     <section className="trip-validity" aria-label="Trip reference and validity">
       <div className="trip-validity__primary">
@@ -219,6 +224,7 @@ function scopeLabel(scope: ActiveTripClaimScope, trip: ActiveTripRecord): string
 function patternLabel(pattern: ActiveTripRecord['validity']['pattern']): string {
   if (pattern === 'typical-weekday') return 'Typical weekday';
   if (pattern === 'late-night') return 'Late night';
+  if (pattern === 'unspecified') return 'Service pattern not retained';
   return 'Actual now at capture';
 }
 

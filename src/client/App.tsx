@@ -2,6 +2,11 @@ import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'r
 
 import type { Direction, SavedRecord } from '../shared/domain/types';
 import {
+  bindJourneyCapturePackage,
+  type JourneyCaptureClaimScope,
+  type JourneyCapturePackage,
+} from '../shared/domain/journey-capture';
+import {
   createTransitApiClient,
   type BoardEnvelopeDto,
   type BootstrapDataDto,
@@ -507,7 +512,7 @@ export function App({
   }, [acceptSavedMutation, savedStore]);
 
   const activateTrip = useCallback((itinerary: JourneyItineraryDto, response: JourneyEnvelopeDto) => {
-    const candidate = captureActiveTrip(itinerary, response, catalog?.data.complexes ?? [], mapContext.serviceMeaning);
+    const candidate = captureActiveTrip(itinerary, response, catalog?.data.complexes ?? []);
     if (!candidate) {
       setCaptureMessage('This trip cannot be stored until every required path and evidence field is available.');
       return;
@@ -520,7 +525,7 @@ export function App({
     } else {
       setCaptureMessage('This trip could not be stored on this device.');
     }
-  }, [activeTripStore, catalog, mapContext.serviceMeaning]);
+  }, [activeTripStore, catalog]);
 
   const moveTripCursor = useCallback((pointId: string) => {
     const result = activeTripStore.setCursor(pointId);
@@ -704,21 +709,32 @@ function stationChoice(record: SavedRecord, catalog: readonly CatalogComplexDto[
   };
 }
 
-function captureActiveTrip(
+export function captureActiveTrip(
   itinerary: JourneyItineraryDto,
   response: JourneyEnvelopeDto,
   catalog: readonly CatalogComplexDto[],
-  serviceMeaning: MapContext['serviceMeaning'],
 ): ActiveTripRecord | undefined {
   if (!response.data || (response.data.kind !== 'planned' && response.data.kind !== 'untimed')) return undefined;
   if (response.data.scope.accessibleRouteOnly || itinerary.legs.length === 0) return undefined;
-  const transferByLeg = new Map(itinerary.transferInstructions.map((transfer, index) => [index, transfer]));
-  if (itinerary.legs.length > 1 && itinerary.transferInstructions.length !== itinerary.legs.length - 1) return undefined;
-  const capturedAtMs = Math.max(Date.now(), Date.parse(response.decidedAt));
-  if (!Number.isFinite(capturedAtMs)) return undefined;
-  const capturedAt = new Date(capturedAtMs).toISOString();
-  const tripId = `trip-${capturedAtMs}`;
-  const legs: ActiveTripRecord['legs'] = itinerary.legs.map((leg, legIndex) => ({
+  const ownedItinerary = response.data.itineraries.find(({ id }) => id === itinerary.id);
+  if (!ownedItinerary?.capture) return undefined;
+  let capture: JourneyCapturePackage;
+  try {
+    capture = bindJourneyCapturePackage(ownedItinerary.capture, {
+      itinerary: ownedItinerary,
+      scope: response.data.scope,
+      responseDecidedAt: response.decidedAt,
+      responseDisclosure: response.demonstrationLabel,
+    });
+  } catch {
+    return undefined;
+  }
+  const transferByLeg = new Map(ownedItinerary.transferInstructions.map((transfer, index) => [index, transfer]));
+  if (ownedItinerary.legs.length > 1 && ownedItinerary.transferInstructions.length !== ownedItinerary.legs.length - 1) return undefined;
+  const capturedAt = capture.capturedAt;
+  const tripIndex = response.data.itineraries.findIndex(({ id }) => id === itinerary.id);
+  const tripId = `trip-${response.responseIdentity}-${tripIndex + 1}`;
+  const legs: ActiveTripRecord['legs'] = ownedItinerary.legs.map((leg, legIndex) => ({
     id: `leg-${legIndex + 1}`,
     route: { id: leg.routeId, label: leg.routeLabel, spokenIdentity: `${leg.routeLabel} train`, shape: 'circle' },
     boundDirection: leg.direction,
@@ -728,19 +744,19 @@ function captureActiveTrip(
       const lastPoint = pointIndex === leg.orderedStationIds.length - 1;
       return {
         id: `point-${legIndex + 1}-${pointIndex + 1}`,
-        kind: (lastPoint && legIndex < itinerary.legs.length - 1) || (pointIndex === 0 && legIndex > 0) ? 'decision' as const : 'stop' as const,
+        kind: (lastPoint && legIndex < ownedItinerary.legs.length - 1) || (pointIndex === 0 && legIndex > 0) ? 'decision' as const : 'stop' as const,
         stationName: place.name,
         complexId: place.complexId,
         constituentId: place.constituentId,
         instruction: pointIndex === 0
           ? `Board the ${leg.routeLabel} train toward ${leg.actualDestination}.`
-          : lastPoint ? legIndex < itinerary.legs.length - 1 ? `Leave the ${leg.routeLabel} train for the transfer.` : 'Leave the train at your destination.'
+          : lastPoint ? legIndex < ownedItinerary.legs.length - 1 ? `Leave the ${leg.routeLabel} train for the transfer.` : 'Leave the train at your destination.'
             : `Remain on the ${leg.routeLabel} train.`,
       };
     }),
   }));
   if (legs.some(({ points }) => points.length < 2)) return undefined;
-  const transfers: ActiveTripRecord['transfers'] = itinerary.legs.slice(0, -1).map((leg, index) => {
+  const transfers: ActiveTripRecord['transfers'] = ownedItinerary.legs.slice(0, -1).map((leg, index) => {
     const instruction = transferByLeg.get(index);
     const incoming = legs[index];
     const outgoing = legs[index + 1];
@@ -759,47 +775,107 @@ function captureActiveTrip(
   });
   const origin = resolvePlace(response.data.scope.originStationId, catalog);
   const destination = resolvePlace(response.data.scope.destinationStationId, catalog);
-  const serviceDate = response.data.scope.serviceDate ?? newYorkServiceDate(response.decidedAt);
+  try {
+    return {
+      id: tripId,
+      capturedAt,
+      captureContext: {
+        kind: 'response-owned',
+        itineraryId: capture.itineraryId,
+        requestMode: capture.requestMode,
+        timing: capture.timing,
+        ...(capture.disclosure === undefined ? {} : { disclosure: capture.disclosure }),
+      },
+      origin,
+      destination,
+      accessibleRouteOnly: false,
+      legs,
+      transfers,
+      serviceClaims: capture.serviceClaims.map((claim) => ({
+        ...claim,
+        scope: translateCaptureScope(claim.scope, tripId, ownedItinerary, legs),
+      })),
+      equipmentClaims: capture.equipmentClaims.map((claim) => ({ ...claim })),
+      cursor: { pointId: legs[0]!.points[0]!.id },
+      validity: {
+        result: capture.validity.result,
+        serviceDate: capture.serviceDate,
+        pattern: capture.validity.pattern,
+        schedule: translateCaptureSchedule(capture, ownedItinerary, legs),
+        warnings: capture.validity.warnings.map((warning) => ({
+          ...warning,
+          scope: translateCaptureScope(warning.scope, tripId, ownedItinerary, legs),
+        })),
+        vetoes: capture.validity.vetoes.map((veto) => ({
+          ...veto,
+          scope: translateCaptureScope(veto.scope, tripId, ownedItinerary, legs),
+        })),
+        ...(capture.validity.patternBoundary === undefined ? {} : {
+          patternBoundary: { ...capture.validity.patternBoundary },
+        }),
+      },
+    };
+  } catch {
+    return undefined;
+  }
+}
+
+function translateCaptureSchedule(
+  capture: JourneyCapturePackage,
+  itinerary: JourneyItineraryDto,
+  legs: ActiveTripRecord['legs'],
+): ActiveTripRecord['validity']['schedule'] {
+  const schedule = capture.validity.schedule;
+  if (schedule.kind === 'none') return { kind: 'none' };
+  const departures = schedule.departures.map((departure) => {
+    const legIndex = itinerary.legs.findIndex(({ patternId }) => patternId === departure.patternId);
+    const occurrenceIndex = itinerary.legs[legIndex]?.orderedOccurrenceIds.indexOf(departure.occurrenceId) ?? -1;
+    const leg = legs[legIndex];
+    const point = leg?.points[occurrenceIndex];
+    if (!leg || !point) throw new Error('Capture departure lost itinerary ownership');
+    return {
+      legId: leg.id,
+      pointId: point.id,
+      clockTime: departure.clockTime,
+      evidence: departure.evidence,
+      timeZone: departure.timeZone,
+    };
+  });
+  return schedule.kind === 'stale'
+    ? { ...schedule, departures }
+    : { ...schedule, departures };
+}
+
+function translateCaptureScope(
+  scope: JourneyCaptureClaimScope,
+  tripId: string,
+  itinerary: JourneyItineraryDto,
+  legs: ActiveTripRecord['legs'],
+): ActiveTripRecord['serviceClaims'][number]['scope'] {
+  if (scope.kind === 'itinerary') return { kind: 'trip', tripId };
+  if (scope.kind === 'route') return { kind: 'route', routeId: scope.routeId };
+  if (scope.kind === 'direction') return { kind: 'direction', routeId: scope.routeId, direction: scope.direction };
+  const legIndex = itinerary.legs.findIndex(({ patternId }) => patternId === scope.patternId);
+  const leg = legs[legIndex];
+  if (!leg) throw new Error('Capture claim lost itinerary ownership');
+  if (scope.kind === 'pattern') {
+    return { kind: 'leg', legId: leg.id, routeId: scope.routeId, direction: scope.direction };
+  }
+  const itineraryLeg = itinerary.legs[legIndex]!;
+  if (scope.kind === 'station') {
+    const pointIndex = itineraryLeg.orderedOccurrenceIds.indexOf(scope.occurrenceId);
+    const point = leg.points[pointIndex];
+    if (!point) throw new Error('Capture station claim lost occurrence ownership');
+    return { kind: 'station', stationId: point.constituentId, routeId: scope.routeId, direction: scope.direction };
+  }
+  const fromIndex = itineraryLeg.orderedOccurrenceIds.indexOf(scope.fromOccurrenceId);
+  const toIndex = itineraryLeg.orderedOccurrenceIds.indexOf(scope.toOccurrenceId);
+  const from = leg.points[fromIndex];
+  const to = leg.points[toIndex];
+  if (!from || !to) throw new Error('Capture segment claim lost occurrence ownership');
   return {
-    id: tripId,
-    capturedAt,
-    origin,
-    destination,
-    accessibleRouteOnly: false,
-    legs,
-    transfers,
-    serviceClaims: [{
-      id: 'service-capture',
-      scope: { kind: 'trip', tripId },
-      state: itinerary.risk === 'clear' ? 'normal' : itinerary.risk === 'blocked' ? 'unresolved' : 'changed',
-      consequence: itinerary.risk === 'clear'
-        ? 'No service conflict was present in the accepted itinerary response at capture.'
-        : 'The accepted itinerary response retained service limitations at capture.',
-      lastCheckedAt: response.decidedAt,
-    }],
-    equipmentClaims: [{
-      id: 'equipment-context',
-      equipmentId: 'not-supplied',
-      connectionId: 'trip-structural-path',
-      pathId: itinerary.id,
-      observation: 'unknown',
-      lastCheckedAt: response.decidedAt,
-    }],
-    cursor: { pointId: legs[0]!.points[0]!.id },
-    validity: {
-      result: 'untimed-structural-route',
-      serviceDate,
-      pattern: serviceMeaning,
-      schedule: { kind: 'none' },
-      warnings: [{
-        id: 'capture-limitation',
-        scope: { kind: 'trip', tripId },
-        message: 'No current arrivals or equipment operation are stored with this structural trip.',
-        ownerRecordId: response.responseIdentity,
-        lastCheckedAt: response.decidedAt,
-      }],
-      vetoes: [],
-    },
+    kind: 'segment', fromStationId: from.constituentId, toStationId: to.constituentId,
+    routeId: scope.routeId, direction: scope.direction,
   };
 }
 
@@ -811,14 +887,6 @@ function resolvePlace(stationId: string, catalog: readonly CatalogComplexDto[]):
     complexId: complex?.id ?? stationId,
     constituentId: constituent?.id ?? stationId,
   };
-}
-
-function newYorkServiceDate(value: string): string {
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit',
-  }).formatToParts(new Date(value));
-  const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((candidate) => candidate.type === type)?.value;
-  return `${part('year')}-${part('month')}-${part('day')}`;
 }
 
 function reconnectionInputKey(input: {

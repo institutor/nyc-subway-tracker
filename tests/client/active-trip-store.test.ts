@@ -30,6 +30,10 @@ class MemoryStorage implements BrowserStorage {
 const trip = (overrides: Partial<ActiveTripRecord> = {}): ActiveTripRecord => ({
   id: 'trip-1',
   capturedAt: '2026-08-05T12:00:00.000Z',
+  captureContext: {
+    kind: 'response-owned', itineraryId: 'itinerary-1', requestMode: 'offline-reference', timing: 'untimed',
+    disclosure: 'Demonstration data \u2014 not live',
+  },
   origin: {
     name: 'Jay St–MetroTech',
     complexId: 'complex-jay',
@@ -84,9 +88,9 @@ const trip = (overrides: Partial<ActiveTripRecord> = {}): ActiveTripRecord => ({
 });
 
 describe('strict one-trip device store', () => {
-  test('opens a v2 trip without mutation and returns immutable detached evidence', () => {
+  test('opens a v3 trip without mutation and returns immutable detached evidence', () => {
     const storage = new MemoryStorage();
-    storage.values.set(ACTIVE_TRIP_STORE_KEY, JSON.stringify({ version: 2, trip: trip() }));
+    storage.values.set(ACTIVE_TRIP_STORE_KEY, JSON.stringify({ version: 3, trip: trip() }));
     const store = createBrowserActiveTripStore(storage);
 
     const first = store.read();
@@ -101,7 +105,7 @@ describe('strict one-trip device store', () => {
 
   test('migrates the exact v1 envelope name without writing until a rider mutation', () => {
     const storage = new MemoryStorage();
-    const raw = JSON.stringify({ version: 1, activeTrip: trip() });
+    const raw = JSON.stringify({ version: 1, activeTrip: legacyTrip() });
     storage.values.set(ACTIVE_TRIP_STORE_KEY, raw);
     const store = createBrowserActiveTripStore(storage);
 
@@ -111,21 +115,22 @@ describe('strict one-trip device store', () => {
 
     expect(store.setCursor('point-w4')).toMatchObject({ kind: 'saved', trip: { cursor: { pointId: 'point-w4' } } });
     expect(JSON.parse(storage.values.get(ACTIVE_TRIP_STORE_KEY)!)).toMatchObject({
-      version: 2,
+      version: 3,
       trip: { cursor: { pointId: 'point-w4' } },
     });
     expect(storage.writes).toBe(1);
   });
 
   test.each([
-    JSON.stringify({ version: 3, trip: null }),
-    JSON.stringify({ version: 2, trip: { ...trip(), location: { latitude: 40.7, longitude: -74 } } }),
-    JSON.stringify({ version: 2, trip: { ...trip(), arrivals: [] } }),
-    JSON.stringify({ version: 2, trip: { ...trip(), accountId: 'rider' } }),
-    JSON.stringify({ version: 2, trip: { ...trip(), movementHistory: ['point-w4'] } }),
-    JSON.stringify({ version: 2, trip: { ...trip(), serviceClaims: [{ ...trip().serviceClaims[0], current: true }] } }),
-    JSON.stringify({ version: 1, trip: trip() }),
-    '{"version":2,"trip":',
+    JSON.stringify({ version: 4, trip: null }),
+    JSON.stringify({ version: 3, trip: { ...trip(), location: { latitude: 40.7, longitude: -74 } } }),
+    JSON.stringify({ version: 3, trip: { ...trip(), arrivals: [] } }),
+    JSON.stringify({ version: 3, trip: { ...trip(), accountId: 'rider' } }),
+    JSON.stringify({ version: 3, trip: { ...trip(), movementHistory: ['point-w4'] } }),
+    JSON.stringify({ version: 3, trip: { ...trip(), serviceClaims: [{ ...trip().serviceClaims[0], current: true }] } }),
+    JSON.stringify({ version: 2, trip: { ...legacyTrip(), validity: { kind: 'unowned' } } }),
+    JSON.stringify({ version: 1, trip: legacyTrip() }),
+    '{"version":3,"trip":',
   ])('quarantines future, ambiguous, malformed, and operationally widened bytes %#', (raw) => {
     const storage = new MemoryStorage();
     storage.values.set(ACTIVE_TRIP_STORE_KEY, raw);
@@ -147,9 +152,9 @@ describe('strict one-trip device store', () => {
     expect(store.capture(trip({ id: 'trip-2', capturedAt: '2026-08-05T12:05:00.000Z' }))).toMatchObject({
       kind: 'saved', trip: { id: 'trip-2' },
     });
-    expect(JSON.parse(storage.values.get(ACTIVE_TRIP_STORE_KEY)!)).toMatchObject({ version: 2, trip: { id: 'trip-2' } });
+    expect(JSON.parse(storage.values.get(ACTIVE_TRIP_STORE_KEY)!)).toMatchObject({ version: 3, trip: { id: 'trip-2' } });
     expect(store.clear()).toEqual({ kind: 'saved', trip: null });
-    expect(JSON.parse(storage.values.get(ACTIVE_TRIP_STORE_KEY)!)).toEqual({ version: 2, trip: null });
+    expect(JSON.parse(storage.values.get(ACTIVE_TRIP_STORE_KEY)!)).toEqual({ version: 3, trip: null });
   });
 
   test('manual cursor correction changes only rider input and cannot refresh evidence', () => {
@@ -173,8 +178,9 @@ describe('strict one-trip device store', () => {
     delete missingCore.equipmentClaims;
 
     expect(store.capture(missingCore as unknown as ActiveTripRecord)).toEqual({ kind: 'unavailable', reason: 'invalid-trip' });
-    expect(store.capture(trip({ serviceClaims: [] }))).toEqual({ kind: 'unavailable', reason: 'invalid-trip' });
-    expect(store.capture(trip({ equipmentClaims: [] }))).toEqual({ kind: 'unavailable', reason: 'invalid-trip' });
+    expect(store.capture(trip({ serviceClaims: [], equipmentClaims: [] }))).toMatchObject({
+      kind: 'saved', trip: { serviceClaims: [], equipmentClaims: [] },
+    });
     expect(store.capture(trip({
       validity: {
         ...trip().validity,
@@ -189,7 +195,9 @@ describe('strict one-trip device store', () => {
     expect(store.capture({ ...trip(), exitGuidance: { exitId: 'exit-1' } } as unknown as ActiveTripRecord)).toEqual({
       kind: 'unavailable', reason: 'invalid-trip',
     });
-    expect(store.read()).toEqual({ kind: 'ready', migrated: false, trip: null });
+    expect(store.read()).toMatchObject({
+      kind: 'ready', migrated: false, trip: { serviceClaims: [], equipmentClaims: [] },
+    });
   });
 
   test('admits Scheduled clocks only for exact Current or Stale reference evidence', () => {
@@ -206,6 +214,10 @@ describe('strict one-trip device store', () => {
     };
 
     const result = store.capture(trip({
+      captureContext: {
+        kind: 'response-owned', itineraryId: 'itinerary-1', requestMode: 'offline-reference', timing: 'timed',
+        disclosure: 'Demonstration data \u2014 not live',
+      },
       validity: {
         result: 'reference-itinerary', serviceDate: '2026-08-05', pattern: 'typical-weekday',
         schedule, warnings: [], vetoes: [],
@@ -282,6 +294,10 @@ describe('strict one-trip device store', () => {
     };
 
     expect(store.capture(trip({
+      captureContext: {
+        kind: 'response-owned', itineraryId: 'itinerary-1', requestMode: 'offline-reference', timing: 'timed',
+        disclosure: 'Demonstration data \u2014 not live',
+      },
       validity: {
         result: 'reference-itinerary', serviceDate: '2026-08-05', pattern: 'typical-weekday',
         schedule: current, warnings: [], vetoes: [],
@@ -291,7 +307,7 @@ describe('strict one-trip device store', () => {
 
   test('write failure preserves both the prior bytes and in-memory trip', () => {
     const storage = new MemoryStorage();
-    const prior = JSON.stringify({ version: 2, trip: trip() });
+    const prior = JSON.stringify({ version: 3, trip: trip() });
     storage.values.set(ACTIVE_TRIP_STORE_KEY, prior);
     const store = createBrowserActiveTripStore(storage);
     storage.failWrites = true;
@@ -300,4 +316,61 @@ describe('strict one-trip device store', () => {
     expect(storage.values.get(ACTIVE_TRIP_STORE_KEY)).toBe(prior);
     expect(store.read()).toMatchObject({ trip: { cursor: { pointId: 'point-jay' } } });
   });
+
+  test('migrates v2 by stripping known synthesized placeholders and marking unowned context explicitly', () => {
+    const storage = new MemoryStorage();
+    const synthetic = legacyTrip({
+      serviceClaims: [{
+        id: 'service-capture', scope: { kind: 'trip', tripId: 'trip-1' }, state: 'normal',
+        consequence: 'No service conflict was present in the accepted itinerary response at capture.',
+        lastCheckedAt: '2026-08-05T12:00:00.000Z',
+      }],
+      equipmentClaims: [{
+        id: 'equipment-context', equipmentId: 'not-supplied', connectionId: 'trip-structural-path',
+        pathId: 'itinerary-1', observation: 'unknown', lastCheckedAt: '2026-08-05T12:00:00.000Z',
+      }],
+      validity: {
+        ...trip().validity,
+        warnings: [{
+          id: 'capture-limitation', scope: { kind: 'trip', tripId: 'trip-1' },
+          message: 'No current arrivals or equipment operation are stored with this structural trip.',
+          ownerRecordId: 'response:journey', lastCheckedAt: '2026-08-05T12:00:00.000Z',
+        }],
+      },
+    });
+    storage.values.set(ACTIVE_TRIP_STORE_KEY, JSON.stringify({ version: 2, trip: synthetic }));
+
+    const store = createBrowserActiveTripStore(storage);
+
+    expect(store.read()).toMatchObject({
+      kind: 'ready', migrated: true,
+      trip: {
+        captureContext: { kind: 'legacy-migrated' },
+        serviceClaims: [], equipmentClaims: [],
+        validity: { result: 'untimed-structural-route', pattern: 'unspecified', schedule: { kind: 'none' }, warnings: [] },
+      },
+    });
+    expect(store.setCursor('point-w4')).toMatchObject({ kind: 'saved' });
+    const written = storage.values.get(ACTIVE_TRIP_STORE_KEY)!;
+    expect(JSON.parse(written)).toMatchObject({ version: 3 });
+    expect(written).not.toMatch(/service-capture|not-supplied|capture-limitation/);
+  });
+
+  test('discovers the prior v2 storage key and writes the next rider mutation only to v3', () => {
+    const storage = new MemoryStorage();
+    const legacyKey = 'nyc-subway-tracker:active-trip:v2';
+    storage.values.set(legacyKey, JSON.stringify({ version: 2, trip: legacyTrip() }));
+
+    const store = createBrowserActiveTripStore(storage);
+
+    expect(store.read()).toMatchObject({ kind: 'ready', migrated: true, trip: { id: 'trip-1' } });
+    expect(store.setCursor('point-w4')).toMatchObject({ kind: 'saved' });
+    expect(JSON.parse(storage.values.get(ACTIVE_TRIP_STORE_KEY)!)).toMatchObject({ version: 3 });
+    expect(storage.values.get(legacyKey)).toBeDefined();
+  });
 });
+
+function legacyTrip(overrides: Partial<ActiveTripRecord> = {}): Record<string, unknown> {
+  const { captureContext: _captureContext, ...legacy } = trip(overrides);
+  return legacy;
+}
