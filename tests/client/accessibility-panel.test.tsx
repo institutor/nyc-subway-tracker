@@ -3,12 +3,14 @@ import { describe, expect, test } from 'vitest';
 import { AccessibilityPanel } from '../../src/client/components/AccessibilityPanel';
 import { PlatformGuidance } from '../../src/client/components/PlatformGuidance';
 import type { ResolvedAccessiblePathDecision } from '../../src/shared/domain/accessible-path';
+import { resolvedAlternativeSelection, resolvedWarning } from '../fixtures/accessibility-decisions';
 
-const warning = { active: true as const, state: 'underway-immediate' as const, priority: 'urgent' as const, content: ['Elevator status is Unknown.', 'Northbound transfer elevator', 'The selected step-free path cannot be verified right now.', 'Warn now—the last accessible decision point is not confirmed.', 'Checked time unavailable', 'Use the verified same-complex path.'], selectedPathId: 'selected', destinationIntent: '168 St', accessibleRouteOnly: true, acknowledged: false, stale: false };
+const warning = resolvedWarning();
+const alternative = resolvedAlternativeSelection();
 
 describe('accessible-path rider panel', () => {
   test('renders the warning and safe action first visually and in assistive DOM order', () => {
-    const { container } = render(<AccessibilityPanel warning={warning} path={undefined} equipment={[]} alternative={{ id: 'alt', label: 'Use the verified same-complex path.' }} onSelectAlternative={() => undefined} />);
+    const { container } = render(<AccessibilityPanel warning={warning} path={undefined} equipment={[]} alternative={alternative} onSelectAlternative={() => undefined} />);
     expect(container.firstElementChild?.firstElementChild?.getAttribute('role')).toBe('alert');
     const alert = screen.getByRole('alert');
     expect(alert.textContent).toContain('Elevator status is Unknown.');
@@ -17,9 +19,9 @@ describe('accessible-path rider panel', () => {
 
   test('never auto-selects a replacement and keeps explicit action keyboard-operable', () => {
     let selected = '';
-    render(<AccessibilityPanel warning={warning} path={undefined} equipment={[]} alternative={{ id: 'alt', label: 'Use alternate path' }} onSelectAlternative={(id) => { selected = id; }} />);
+    render(<AccessibilityPanel warning={warning} path={undefined} equipment={[]} alternative={alternative} onSelectAlternative={(id) => { selected = id; }} />);
     expect(selected).toBe('');
-    fireEvent.click(screen.getByRole('button', { name: 'Use alternate path' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Use the verified same-complex path.' }));
     expect(selected).toBe('alt');
   });
 
@@ -41,6 +43,12 @@ describe('accessible-path rider panel', () => {
 
     rerender(<AccessibilityPanel warning={null} path={undefined} equipment={[{ id: 'EL-1', label: 'Elevator', state: 'no-official-outage-reported', freshnessCopy: 'Checked now', required: true }] as never} alternative={null} onSelectAlternative={() => undefined} />);
     expect(screen.queryByText('No official outage reported')).toBeNull();
+
+    rerender(<AccessibilityPanel warning={{ ...warning } as never} path={undefined} equipment={[]} alternative={{ ...alternative } as never} onSelectAlternative={() => undefined} />);
+    expect(screen.queryByRole('alert')).toBeNull();
+
+    rerender(<AccessibilityPanel warning={warning} path={undefined} equipment={[]} alternative={{ ...alternative } as never} onSelectAlternative={() => undefined} />);
+    expect(screen.queryByRole('button')).toBeNull();
   });
 
   test('contains no crowding schema, copy, control, placeholder, or proxy surface', () => {

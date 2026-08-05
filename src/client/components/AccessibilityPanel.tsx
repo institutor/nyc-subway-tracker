@@ -1,6 +1,7 @@
 import { isResolvedAccessiblePathDecision, type ResolvedAccessiblePathDecision } from '../../shared/domain/accessible-path';
 import { isResolvedEquipmentStatusDecision, type EquipmentStatusDecision } from '../../shared/domain/equipment-status';
-import type { AccessibilityWarning } from '../../shared/domain/underway-warning';
+import { isResolvedAccessibilityAlternativeSelection, type ResolvedAccessibilityAlternativeSelection } from '../../shared/domain/accessibility-alternatives';
+import { isResolvedAccessibilityWarning, type AccessibilityWarning } from '../../shared/domain/underway-warning';
 
 export interface AccessibilityPanelProps {
   readonly warning: AccessibilityWarning | null;
@@ -10,7 +11,7 @@ export interface AccessibilityPanelProps {
     readonly label: string;
     readonly required: boolean;
   }[];
-  readonly alternative: { readonly id: string; readonly label: string } | null;
+  readonly alternative: ResolvedAccessibilityAlternativeSelection | null;
   readonly onSelectAlternative: (id: string) => void;
 }
 
@@ -25,12 +26,14 @@ const STATE_COPY = {
 export function AccessibilityPanel({ warning, path, equipment, alternative, onSelectAlternative }: AccessibilityPanelProps) {
   const pathStatus = isResolvedAccessiblePathDecision(path) ? path.status : 'unknown';
   const resolvedEquipment = equipment.filter((machine) => isResolvedEquipmentStatusDecision(machine?.decision));
+  const resolvedWarning = isResolvedAccessibilityWarning(warning) ? warning : null;
+  const resolvedAlternative = isResolvedAccessibilityAlternativeSelection(alternative) ? alternative.first : null;
   return <section className="accessibility-panel" aria-label="Step-free path">
-    {warning?.active ? <div className="accessibility-warning" role="alert" aria-live="assertive">
+    {resolvedWarning?.active ? <div className="accessibility-warning" role="alert" aria-live="assertive">
       <p className="accessibility-warning__eyebrow">Step-free path action</p>
-      <h2>{warning.state === 'underway-immediate' ? 'Act now' : 'Path change'}</h2>
-      <ol className="accessibility-warning__facts">{warning.content.map((line) => <li key={line}>{line}</li>)}</ol>
-      {alternative ? <button type="button" onClick={() => onSelectAlternative(alternative.id)}>{alternative.label}</button> : null}
+      <h2>{resolvedWarning.state === 'underway-immediate' ? 'Act now' : 'Path change'}</h2>
+      <ol className="accessibility-warning__facts">{resolvedWarning.content.map((line) => <li key={line}>{line}</li>)}</ol>
+      {resolvedAlternative ? <button type="button" onClick={() => onSelectAlternative(resolvedAlternative.id)}>{resolvedAlternative.label}</button> : null}
     </div> : null}
     <div className={`accessibility-path accessibility-path--${pathStatus}`}>
       <span className="accessibility-path__node" aria-hidden="true" />

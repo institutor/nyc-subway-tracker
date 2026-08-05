@@ -1,28 +1,39 @@
 import { describe, expect, test } from 'vitest';
-import { classifyPathImpact } from '../../src/shared/domain/path-impact';
+import { acceptEquipmentInventory, acceptEquipmentSnapshot, assessEquipmentStatus } from '../../src/shared/domain/equipment-status';
+import { classifyPathImpact, type ImpactPath } from '../../src/shared/domain/path-impact';
+import { resolvedPath } from '../fixtures/accessibility-decisions';
 
-const path = (id: string, equipmentIds: readonly string[], verified = true) => ({
-  id, canonicalIdentity: id, complexId: 'A12', origin: 'origin-street', destination: 'destination-street', routeId: 'A', direction: 'northbound', platformId: 'A12N', equipmentIds, everyEdgeCurrentAndVerified: verified,
-  edges: [{ id: `${id}-edge`, routeId: 'A', direction: 'northbound', platformId: 'A12N', current: verified, structurallyVerified: verified, officialAccessiblePath: verified }],
+function equipment(targetEquipmentId = 'EL-1') {
+  const inventory = acceptEquipmentInventory({ inventoryId: 'inv', evidenceOwner: 'official-equipment-inventory', sourceScopeId: 'scope', sourceVersion: 'inv-v1', acceptedAt: '2026-07-30T00:00:00.000Z', equipmentIds: ['EL-1', 'EL-2'] });
+  const currentSnapshot = acceptEquipmentSnapshot({ snapshotId: 'snap', evidenceOwner: 'official-equipment-status', sourceScopeId: 'scope', sourceVersion: 'status-v1', inventoryVersion: 'inv-v1', sourceTimestamp: '2026-07-30T12:00:00.000Z', acceptedAt: '2026-07-30T12:00:01.000Z', declaredRecordCount: 1, records: [{ recordId: 'out-1', equipmentId: 'EL-1', state: 'out-of-service' }] }, inventory);
+  return assessEquipmentStatus({ targetEquipmentId, decisionTime: new Date('2026-07-30T12:01:00.000Z'), inventory, currentSnapshot });
+}
+
+const path = (id: string, equipmentIds: readonly string[], eligible = true): ImpactPath => ({
+  canonicalIdentity: id, complexId: 'A12', origin: 'origin-street', destination: 'destination-street', routeId: 'A',
+  direction: 'northbound', platformId: 'A12N', equipmentIds, pathDecision: resolvedPath(id, eligible ? 'eligible' : 'ineligible'),
 });
 
 describe('selected-path equipment impact', () => {
   test('classifies an exact non-member first as Unrelated without widening station scope', () => {
-    expect(classifyPathImpact({ changedEquipmentId: 'EL-OTHER', equipmentState: 'out-of-service', selectedPath: path('selected', ['EL-1']), alternatePaths: [], accessibleRouteOnly: true, destinationIntent: 'destination-street' })).toEqual({ kind: 'unrelated', affectedPathId: null, accessibleRouteOnly: true, destinationIntent: 'destination-street' });
+    expect(classifyPathImpact({ changedEquipment: equipment('EL-2'), selectedPath: path('selected', ['EL-1']), alternatePaths: [], destinationIntent: 'destination-street' }))
+      .toMatchObject({ kind: 'unrelated', affectedPathId: null, accessibleRouteOnly: true, destinationIntent: 'destination-street' });
   });
 
-  test('classifies Reroutable only with an independently complete current same-complex chain', () => {
-    const base = { changedEquipmentId: 'EL-1', equipmentState: 'unknown' as const, selectedPath: path('selected', ['EL-1']), accessibleRouteOnly: true, destinationIntent: 'destination-street' };
-    expect(classifyPathImpact({ ...base, alternatePaths: [path('alternate', ['EL-2'])] })).toMatchObject({ kind: 'reroutable-within-station', replacementPathId: 'alternate', autoSelected: false, evidenceState: 'unknown' });
-    expect(classifyPathImpact({ ...base, alternatePaths: [path('alternate', ['EL-2'], false)] })).toMatchObject({ kind: 'blocking', evidenceState: 'unknown' });
+  test('classifies Reroutable only with an independently resolved eligible same-complex path', () => {
+    const base = { changedEquipment: equipment(), selectedPath: path('selected', ['EL-1']), destinationIntent: 'destination-street' };
+    expect(classifyPathImpact({ ...base, alternatePaths: [path('alternate', ['EL-2'])] })).toMatchObject({ kind: 'reroutable-within-station', replacementPathId: 'alternate', autoSelected: false, evidenceState: 'out-of-service' });
+    expect(classifyPathImpact({ ...base, alternatePaths: [path('alternate', ['EL-2'], false)] })).toMatchObject({ kind: 'blocking', evidenceState: 'out-of-service' });
   });
 
   test('preserves exact destination intent and Accessible Route Only when Blocking', () => {
-    expect(classifyPathImpact({ changedEquipmentId: 'EL-1', equipmentState: 'out-of-service', selectedPath: path('selected', ['EL-1']), alternatePaths: [path('wrong-scope', ['EL-2'])], accessibleRouteOnly: true, destinationIntent: 'other-destination' })).toMatchObject({ kind: 'blocking', accessibleRouteOnly: true, destinationIntent: 'other-destination' });
+    expect(classifyPathImpact({ changedEquipment: equipment(), selectedPath: path('selected', ['EL-1']), alternatePaths: [path('wrong-scope', ['EL-2'])], destinationIntent: 'other-destination' }))
+      .toMatchObject({ kind: 'blocking', accessibleRouteOnly: true, destinationIntent: 'other-destination' });
   });
 
-  test('does not trust a passing summary when any alternate edge lacks independent current evidence', () => {
-    const alternate = { ...path('alternate', ['EL-2']), edges: [{ id: 'alt-edge', routeId: 'A', direction: 'northbound', platformId: 'A12N', current: false, structurallyVerified: true, officialAccessiblePath: true }] };
-    expect(classifyPathImpact({ changedEquipmentId: 'EL-1', equipmentState: 'unknown', selectedPath: path('selected', ['EL-1']), alternatePaths: [alternate], accessibleRouteOnly: true, destinationIntent: 'destination-street' })).toMatchObject({ kind: 'blocking' });
+  test('rejects caller-authored path or equipment approval objects', () => {
+    const selected = path('selected', ['EL-1']);
+    expect(classifyPathImpact({ changedEquipment: { ...equipment() } as never, selectedPath: selected, alternatePaths: [], destinationIntent: 'destination-street' })).toBeUndefined();
+    expect(classifyPathImpact({ changedEquipment: equipment(), selectedPath: { ...selected, pathDecision: { ...selected.pathDecision } as never }, alternatePaths: [], destinationIntent: 'destination-street' })).toBeUndefined();
   });
 });
