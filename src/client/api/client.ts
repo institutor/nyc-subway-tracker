@@ -131,6 +131,7 @@ export interface MapOverlaySegmentDto {
 }
 
 export interface MapOverlayEnvelopeDto extends DynamicEnvelopeBase {
+  readonly cacheState: TransportCacheState;
   readonly data: {
     readonly theme: MapThemeDto;
     readonly serviceEpoch: string | null;
@@ -365,6 +366,7 @@ export interface BoardDataDto {
 }
 
 export interface BoardEnvelopeDto extends DynamicEnvelopeBase {
+  readonly cacheState: TransportCacheState;
   readonly data: BoardDataDto | null;
   /** Local monotonic receipt evidence; never sourced from or sent to the server. */
   readonly receivedAtMonotonicMs?: number;
@@ -394,40 +396,53 @@ export class TransitApiError extends Error {
 
 type Fetcher = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
+export type TransportCacheState = 'network' | 'historical';
+
+interface ReceivedJson {
+  readonly value: unknown;
+  readonly cacheState: TransportCacheState;
+}
+
+function networkValue(received: ReceivedJson): unknown {
+  if (received.cacheState !== 'network') throw new TransitApiError();
+  return received.value;
+}
+
 export function createTransitApiClient(fetcher: Fetcher = globalThis.fetch.bind(globalThis)): TransitApiClient {
   const get = (url: string, signal?: AbortSignal) => requestJson(fetcher, url, { signal });
   return Object.freeze({
     async bootstrap(signal?: AbortSignal) {
-      return parseBootstrap(await get('/api/v1/bootstrap', signal));
+      return parseBootstrap(networkValue(await get('/api/v1/bootstrap', signal)));
     },
     async catalog(contentVersion: string, signal?: AbortSignal) {
-      return parseCatalog(await get(`/api/v1/stations/catalog/${encodeIdentifier(contentVersion)}`, signal));
+      return parseCatalog(networkValue(await get(`/api/v1/stations/catalog/${encodeIdentifier(contentVersion)}`, signal)));
     },
     async searchStations(query: string, limit = 10, signal?: AbortSignal) {
       const capturedQuery = searchQuery(query);
       if (!Number.isSafeInteger(limit) || limit < 1 || limit > 25) invalid();
       const params = new URLSearchParams({ q: capturedQuery, limit: String(limit) });
-      return parseStationSearch(await get(`/api/v1/stations/search?${params.toString()}`, signal), capturedQuery);
+      return parseStationSearch(networkValue(await get(`/api/v1/stations/search?${params.toString()}`, signal)), capturedQuery);
     },
     async mapReference(theme: MapThemeDto, contentVersion: string, signal?: AbortSignal) {
       const capturedTheme = parseMapTheme(theme);
       const capturedVersion = encodeIdentity(contentVersion);
       return parseMapReference(
-        await get(`/api/v1/maps/${capturedTheme}/reference/${encodeURIComponent(capturedVersion)}`, signal),
+        networkValue(await get(`/api/v1/maps/${capturedTheme}/reference/${encodeURIComponent(capturedVersion)}`, signal)),
         capturedTheme,
         capturedVersion,
       );
     },
     async mapOverlay(theme: MapThemeDto, signal?: AbortSignal) {
       const capturedTheme = parseMapTheme(theme);
-      return parseMapOverlay(await get(`/api/v1/maps/${capturedTheme}/overlay`, signal), capturedTheme);
+      const received = await get(`/api/v1/maps/${capturedTheme}/overlay`, signal);
+      return parseMapOverlay(received.value, capturedTheme, received.cacheState);
     },
     async planJourney(query: JourneyRequestDto, signal?: AbortSignal) {
       const captured = captureJourneyRequest(query);
       const value = await requestJson(fetcher, '/api/v1/journeys', {
         method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(captured), signal,
       });
-      return parseJourney(value, captured);
+      return parseJourney(networkValue(value), captured);
     },
     async nearby(fix: LocationFixDto, accessibleRouteOnly: boolean, signal?: AbortSignal) {
       const captured = captureLocationFix(fix);
@@ -444,7 +459,7 @@ export function createTransitApiClient(fetcher: Fetcher = globalThis.fetch.bind(
         }),
         signal,
       });
-      return parseNearby(value);
+      return parseNearby(networkValue(value));
     },
     async board(
       stationId: string,
@@ -458,18 +473,19 @@ export function createTransitApiClient(fetcher: Fetcher = globalThis.fetch.bind(
       if (capturedRouteIds.length) params.set('routes', capturedRouteIds.join(','));
       if (capturedDirection) params.set('direction', capturedDirection);
       const query = params.size === 0 ? '' : `?${params.toString()}`;
-      const raw = await get(`/api/v1/stations/${encodeURIComponent(capturedStationId)}/board${query}`, signal);
+      const received = await get(`/api/v1/stations/${encodeURIComponent(capturedStationId)}/board${query}`, signal);
       const receivedAtMonotonicMs = monotonicNow();
       return parseBoard(
-        raw,
+        received.value,
         { stationId: capturedStationId, routeIds: capturedRouteIds, ...(capturedDirection ? { direction: capturedDirection } : {}) },
         receivedAtMonotonicMs,
+        received.cacheState,
       );
     },
   });
 }
 
-async function requestJson(fetcher: Fetcher, url: string, init: RequestInit): Promise<unknown> {
+async function requestJson(fetcher: Fetcher, url: string, init: RequestInit): Promise<ReceivedJson> {
   let response: Response;
   try {
     response = await fetcher(url, init);
@@ -480,8 +496,13 @@ async function requestJson(fetcher: Fetcher, url: string, init: RequestInit): Pr
   if (!response.ok || !response.headers.get('content-type')?.toLocaleLowerCase('en-US').startsWith('application/json')) {
     throw new TransitApiError();
   }
+  const cacheStateHeader = response.headers.get('x-subway-cache-state');
+  const cacheState = cacheStateHeader === null ? 'network'
+    : cacheStateHeader === 'historical' ? 'historical'
+      : undefined;
+  if (!cacheState) throw new TransitApiError();
   try {
-    return await response.json();
+    return { value: await response.json(), cacheState };
   } catch {
     throw new TransitApiError();
   }
@@ -578,13 +599,17 @@ function mapPoint(value: unknown): readonly [number, number] {
   return [longitude, latitude];
 }
 
-function parseMapOverlay(value: unknown, requestedTheme: MapThemeDto): MapOverlayEnvelopeDto {
+function parseMapOverlay(
+  value: unknown,
+  requestedTheme: MapThemeDto,
+  cacheState: TransportCacheState,
+): MapOverlayEnvelopeDto {
   const root = dynamicRoot(value, ['data']);
   const base = dynamicBase(root);
   const data = root.data === null ? null : parseMapOverlayData(root.data);
   if ((base.runtime.availability === 'locked') !== (data === null)) invalid();
   if (data && data.theme !== requestedTheme) invalid();
-  return freeze({ ...base, data });
+  return freeze({ ...base, cacheState, data });
 }
 
 function parseMapOverlayData(value: unknown): NonNullable<MapOverlayEnvelopeDto['data']> {
@@ -829,6 +854,7 @@ function parseBoard(
   value: unknown,
   request: { readonly stationId: string; readonly routeIds: readonly string[]; readonly direction?: Direction },
   receivedAtMonotonicMs: number,
+  cacheState: TransportCacheState,
 ): BoardEnvelopeDto {
   const root = dynamicRoot(value, ['data']);
   const base = dynamicBase(root);
@@ -839,7 +865,7 @@ function parseBoard(
   if (request.direction && data?.directions.some(({ direction }) => direction !== request.direction)) invalid();
   if (request.routeIds.length > 0 && data?.directions.some(({ primary, secondary }) =>
     [...primary, ...secondary].some(({ route }) => !request.routeIds.includes(route.id)))) invalid();
-  return freeze({ ...base, data, receivedAtMonotonicMs });
+  return freeze({ ...base, cacheState, data, receivedAtMonotonicMs });
 }
 
 function parseBoardData(value: unknown): BoardDataDto {

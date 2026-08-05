@@ -48,7 +48,7 @@ export function MapView({
     serviceMeaning: 'actual-now', spatialView: 'schematic', viewport: { centerX: 40.7128, centerY: -74.006, zoom: 1 },
   });
   const [reference, setReference] = useState<MapReferenceDto>();
-  const [overlay, setOverlay] = useState<NonNullable<MapOverlayEnvelopeDto['data']>>();
+  const [overlay, setOverlay] = useState<MapOverlayEnvelopeDto>();
   const [mapPhase, setMapPhase] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
   const referenceGeneration = useRef(0);
   const referenceAbort = useRef<AbortController | undefined>(undefined);
@@ -61,7 +61,7 @@ export function MapView({
     const controller = new AbortController();
     overlayAbort.current = controller;
     void api.mapOverlay('day', controller.signal).then((response) => {
-      if (!controller.signal.aborted) setOverlay(response.data ?? undefined);
+      if (!controller.signal.aborted) setOverlay(response);
     }).catch(() => {
       if (!controller.signal.aborted) setOverlay(undefined);
     });
@@ -110,6 +110,7 @@ export function MapView({
   };
 
   const actualUnavailable = !connected;
+  const retainedHistoricalOverlay = overlay?.cacheState === 'historical';
   const serviceLabel = context.serviceMeaning === 'actual-now'
     ? 'Actual now'
     : context.serviceMeaning === 'typical-weekday' ? 'Typical weekday — reference' : 'Late night — reference';
@@ -126,6 +127,7 @@ export function MapView({
       </div>
 
       {!connected ? <StatusBanner tone="warning"><p>Current service information is unavailable. Choose a reference pattern to continue.</p></StatusBanner> : null}
+      {retainedHistoricalOverlay ? <StatusBanner tone="warning"><p>A retained historical service overlay is available, but it is hidden because it is not current.</p></StatusBanner> : null}
       <div className="map-axis-controls" role="group" aria-label="Map service meaning">
         <button type="button" aria-pressed={context.serviceMeaning === 'actual-now'} disabled={actualUnavailable} onClick={() => chooseMeaning('actual-now')}>Actual now</button>
         <button type="button" aria-pressed={context.serviceMeaning === 'typical-weekday'} onClick={() => chooseMeaning('typical-weekday')}>Typical weekday</button>
@@ -146,7 +148,7 @@ export function MapView({
       {mapPhase === 'error' && context.serviceMeaning !== 'actual-now' ? <StatusBanner tone="locked"><p>This map reference is not available on this device.</p></StatusBanner> : null}
       <VectorNetworkMap
         reference={context.serviceMeaning === 'actual-now' ? undefined : reference}
-        overlay={context.serviceMeaning === 'actual-now' ? overlay : undefined}
+        overlay={context.serviceMeaning === 'actual-now' && overlay?.cacheState === 'network' ? overlay.data ?? undefined : undefined}
         viewport={context.viewport}
         serviceLabel={offlineReference ? `${serviceLabel}. Reference pattern—not live.` : context.serviceMeaning === 'actual-now' ? serviceLabel : `${serviceLabel}. Not current`}
       />

@@ -1,20 +1,26 @@
 const CACHE_NAMES = Object.freeze({
-  shell: 'subway-first-shell-v1',
-  structural: 'subway-first-structural-v1',
-  historical: 'subway-first-history-v1',
+  shell: 'subway-first-shell-v2',
+  structural: 'subway-first-structural-v2',
+  historical: 'subway-first-history-v2',
 });
 
 const RETIRED_CACHES = Object.freeze([
   'subway-first-shell-v0',
   'subway-first-structural-v0',
   'subway-first-history-v0',
+  'subway-first-shell-v1',
+  'subway-first-structural-v1',
+  'subway-first-history-v1',
 ]);
 
+const INJECTED_BUILD_ASSETS = self.__SUBWAY_BUILD_ASSETS__;
+const BUILD_SHELL_URLS = validateBuildShellUrls(Array.isArray(INJECTED_BUILD_ASSETS) ? INJECTED_BUILD_ASSETS : []);
 const SHELL_URLS = Object.freeze([
   '/',
   '/index.html',
   '/manifest.webmanifest',
   '/icons/app-icon.svg',
+  ...BUILD_SHELL_URLS,
 ]);
 
 const SENSITIVE_QUERY_KEYS = new Set([
@@ -83,8 +89,10 @@ function classifyRequest(request) {
 }
 
 function classifyEligibleQuery(url) {
-  if (!/^\/api\/v1\/stations\/[^/]+\/board$/.test(url.pathname)) return null;
-  const allowed = new Set(['direction', 'routes']);
+  const board = /^\/api\/v1\/stations\/[^/]+\/board$/.test(url.pathname);
+  const status = url.pathname === '/api/v1/status';
+  if (!board && !status) return null;
+  const allowed = new Set(board ? ['direction', 'routes'] : ['stationId', 'routes', 'direction']);
   for (const key of url.searchParams.keys()) {
     if (!allowed.has(key)) return null;
   }
@@ -104,7 +112,7 @@ function hasSensitiveRequestMaterial(request, url) {
 async function networkFirstNavigation(request) {
   try {
     const response = await fetch(request);
-    if (isCacheableResponse(response, false)) {
+    if (isCacheableResponse(response, 'shell')) {
       const shell = await caches.open(CACHE_NAMES.shell);
       await shell.put('/index.html', response.clone());
     }
@@ -122,7 +130,9 @@ async function cacheFirst(request, cacheName) {
   const stored = await cache.match(request);
   if (stored) return stored;
   const response = await fetch(request);
-  if (isCacheableResponse(response, cacheName === CACHE_NAMES.structural)) await cache.put(request, response.clone());
+  if (isCacheableResponse(response, cacheName === CACHE_NAMES.structural ? 'structural' : 'shell')) {
+    await cache.put(request, response.clone());
+  }
   return response;
 }
 
@@ -130,7 +140,7 @@ async function networkFirstHistorical(request) {
   const cache = await caches.open(CACHE_NAMES.historical);
   try {
     const response = await fetch(request);
-    if (isCacheableResponse(response, true)) {
+    if (isCacheableResponse(response, 'historical')) {
       await cache.put(request, response.clone());
       await trimCache(cache, HISTORICAL_LIMIT);
     }
@@ -149,13 +159,32 @@ async function networkFirstHistorical(request) {
   }
 }
 
-function isCacheableResponse(response, requireJson) {
+function isCacheableResponse(response, policy) {
   if (!response || !response.ok || response.type === 'opaque') return false;
-  if (requireJson && !/^application\/(?:[a-z0-9.+-]*\+)?json(?:\s*;|$)/i.test(response.headers.get('content-type') || '')) return false;
+  if (policy !== 'shell' && !/^application\/(?:[a-z0-9.+-]*\+)?json(?:\s*;|$)/i.test(response.headers.get('content-type') || '')) return false;
   const cacheControl = response.headers.get('cache-control')?.toLowerCase() || '';
-  if (cacheControl.includes('no-store') || cacheControl.includes('private')) return false;
+  if (cacheControl.includes('private')) return false;
   if (response.headers.has('set-cookie') || response.headers.get('vary') === '*') return false;
+  if (policy === 'historical') {
+    return cacheControl.includes('no-store')
+      && response.headers.get('x-subway-historical-cache') === 'public-v1';
+  }
+  if (cacheControl.includes('no-store')) return false;
   return true;
+}
+
+function validateBuildShellUrls(values) {
+  if (values.length > 64) throw new Error('Invalid build shell manifest');
+  const accepted = [];
+  const seen = new Set();
+  for (const value of values) {
+    if (typeof value !== 'string'
+      || !/^\/assets\/[A-Za-z0-9_.-]+\.(?:css|js|png|svg|woff|woff2)$/.test(value)
+      || seen.has(value)) throw new Error('Invalid build shell manifest');
+    seen.add(value);
+    accepted.push(value);
+  }
+  return Object.freeze(accepted);
 }
 
 async function trimCache(cache, maximum) {

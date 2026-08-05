@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react';
 import { compareCanonicalIdentity } from '../../shared/domain/canonical';
 import type { Direction, SavedRecord } from '../../shared/domain/types';
 import type { BoardEnvelopeDto, CatalogComplexDto } from '../api/client';
+import { formatClaimTime, sourceLabel } from '../components/ArrivalRow';
 import { RouteToken } from '../components/RouteToken';
 import { StatusBanner } from '../components/StatusBanner';
 
@@ -53,6 +54,7 @@ export function SavedView({
             const name = complex?.name ?? record.constituentId;
             const isEditing = editingId === record.id && draft?.id === record.id;
             const board = boards.get(record.id);
+            const retainedHistorical = offline || board?.cacheState === 'historical';
             return (
               <article className="saved-card" key={record.id} aria-labelledby={`saved-${record.id}-heading`}>
                 <header className="saved-card__header">
@@ -86,10 +88,16 @@ export function SavedView({
                 )}
 
                 {board?.data?.alerts.length ? (
-                  <section className="saved-card__alerts" aria-label={`${name} service alerts`}>
-                    <h4>Service changes</h4>
+                  <section className="saved-card__alerts" aria-label={`${name} ${retainedHistorical ? 'historical ' : ''}service alerts`}>
+                    <h4>{retainedHistorical ? 'Historical service changes' : 'Service changes'}</h4>
                     {board.data.alerts.map((alert) => (
-                      <p key={alert.id}><strong>{alert.routeIds.join(', ')}</strong> {alert.text}</p>
+                      <div key={alert.id}>
+                        <p><strong>{alert.routeIds.join(', ')}</strong> {alert.text}</p>
+                        <p className="claim-line">
+                          <span>{alert.demonstrationLabel}</span><span>{sourceLabel(alert.provenance)}</span>
+                          {retainedHistorical ? <time dateTime={alert.provenance.observedAt}>Last checked {formatClaimTime(alert.provenance.observedAt)}</time> : null}
+                        </p>
+                      </div>
                     ))}
                   </section>
                 ) : null}

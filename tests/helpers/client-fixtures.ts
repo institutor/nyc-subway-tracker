@@ -141,6 +141,7 @@ export function boardEnvelope(
   const secondRoute = routeIds[1] ?? primaryRoute;
   return {
     ...dynamicBase,
+    cacheState: 'network',
     responseIdentity: `response:board:${stationId}`,
     gateDecision: gates['arrival-boards'],
     data: {

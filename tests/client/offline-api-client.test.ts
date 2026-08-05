@@ -71,7 +71,7 @@ describe('offline tools API boundary', () => {
         theme: 'day', serviceEpoch: 'epoch-7',
         segments: [{ id: 'segment-a', routeIds: ['A'], state: 'affected', alertIds: ['alert-a'] }],
       },
-    }));
+    }, { 'x-subway-cache-state': 'historical' }));
 
     const result = await client.mapOverlay('day');
 
@@ -79,6 +79,7 @@ describe('offline tools API boundary', () => {
       theme: 'day', serviceEpoch: 'epoch-7',
       segments: [{ id: 'segment-a', routeIds: ['A'], state: 'affected', alertIds: ['alert-a'] }],
     });
+    expect(result.cacheState).toBe('historical');
   });
 
   test('posts a coordinate-free owned journey request and accepts exact ordered station structure', async () => {
@@ -142,6 +143,6 @@ describe('offline tools API boundary', () => {
   });
 });
 
-function json(value: unknown): Response {
-  return new Response(JSON.stringify(value), { status: 200, headers: { 'content-type': 'application/json' } });
+function json(value: unknown, headers: HeadersInit = {}): Response {
+  return new Response(JSON.stringify(value), { status: 200, headers: { 'content-type': 'application/json', ...Object.fromEntries(new Headers(headers)) } });
 }

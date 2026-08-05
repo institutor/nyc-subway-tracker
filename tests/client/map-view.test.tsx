@@ -71,6 +71,22 @@ describe('independent map service meaning', () => {
       serviceMeaning: 'typical-weekday', spatialView: 'geographic', selectedStationId: 'A12', selectedRouteId: 'A',
     }));
   });
+
+  test('never paints a retained historical overlay as Actual now while the navigator reports online', async () => {
+    const api = mapApi('historical');
+    render(<MapView
+      api={api}
+      bootstrap={bootstrap}
+      catalog={catalog}
+      connected
+      initialContext={{ serviceMeaning: 'actual-now', spatialView: 'schematic', viewport: { centerX: 40.7, centerY: -74, zoom: 1 } }}
+      onContextChange={vi.fn()}
+      onActivateTrip={vi.fn()}
+    />);
+
+    expect(await screen.findByText('A retained historical service overlay is available, but it is hidden because it is not current.')).toBeInTheDocument();
+    expect(screen.getByText('No unsupported current geometry is drawn.')).toBeInTheDocument();
+  });
 });
 
 describe('journey planning and activation', () => {
@@ -157,7 +173,7 @@ const catalog = [
   { id: 'D14', name: '59 St', routeIds: ['A', 'C'], constituents: [{ id: 'D14', name: '59 St', directionalStopIds: ['D14N', 'D14S'] }] },
 ] as const;
 
-function mapApi() {
+function mapApi(cacheState: 'network' | 'historical' = 'network') {
   const reference = (theme: 'day' | 'night'): MapReferenceEnvelopeDto => ({
     apiVersion: 'v1', schemaVersion: '2026-08-04', contentVersion: theme === 'day' ? 'map-day-7' : 'map-night-7',
     demonstrationLabel: 'Demonstration data — not live',
@@ -172,7 +188,7 @@ function mapApi() {
   return {
     mapReference: vi.fn(async (theme: 'day' | 'night') => reference(theme)),
     mapOverlay: vi.fn(async (theme: 'day' | 'night') => ({
-      ...dynamic, data: { theme, serviceEpoch: 'epoch-7', segments: [{ id: 'line-a', routeIds: ['A'], state: 'normal', alertIds: [] }] },
+      ...dynamic, cacheState, data: { theme, serviceEpoch: 'epoch-7', segments: [{ id: 'line-a', routeIds: ['A'], state: 'normal', alertIds: [] }] },
     })),
   } as unknown as TransitApiClient & { mapReference: ReturnType<typeof vi.fn>; mapOverlay: ReturnType<typeof vi.fn> };
 }

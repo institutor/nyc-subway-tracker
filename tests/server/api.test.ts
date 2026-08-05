@@ -595,6 +595,8 @@ describe('versioned subway API', () => {
 
     await withApi(createApp(dependencies), async ({ request }) => {
       const response = await request('/api/v1/stations/A12/board');
+      expect(response.headers.get('cache-control')).toBe('no-store');
+      expect(response.headers.get('x-subway-historical-cache')).toBe('public-v1');
       const body = await response.json();
       expect(body).toMatchObject({
         decidedAt: DECIDED_AT.toISOString(), serverTime: DECIDED_AT.toISOString(),
@@ -710,7 +712,9 @@ describe('versioned subway API', () => {
         'route-a', 'route-c-station', 'station-wide', 'systemwide',
       ]);
 
-      const routeStatus = await (await request('/api/v1/status?routes=A&direction=northbound')).json();
+      const routeStatusResponse = await request('/api/v1/status?routes=A&direction=northbound');
+      expect(routeStatusResponse.headers.get('x-subway-historical-cache')).toBe('public-v1');
+      const routeStatus = await routeStatusResponse.json();
       expect(routeStatus.data.alerts.map(({ id }: { id: string }) => id)).toEqual([
         'route-a', 'station-wide', 'systemwide',
       ]);
@@ -861,6 +865,7 @@ describe('versioned subway API', () => {
     await withApi(createApp(dependencies), async ({ request }) => {
       const response = await request('/api/v1/maps/day/overlay');
       expect(response.headers.get('cache-control')).toBe('no-store');
+      expect(response.headers.get('x-subway-historical-cache')).toBe('public-v1');
       const body = await response.json();
       expect(body).toMatchObject({
         demonstrationLabel: 'Demonstration data — not live',
@@ -1426,6 +1431,7 @@ describe('versioned subway API', () => {
       for (const response of responses) {
         const body = await response.json();
         expect(response.headers.get('cache-control')).toBe('no-store');
+        expect(response.headers.get('x-subway-historical-cache')).toBeNull();
         expect(body.runtime).toMatchObject({ mode, surface: 'public', availability: 'locked' });
         expect(body.data).toBeNull();
         expect(body).not.toHaveProperty('demonstrationLabel');

@@ -1,12 +1,14 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { useState } from 'react';
 import { describe, expect, test, vi } from 'vitest';
 
 import { App } from '../../src/client/App';
+import type { BoardEnvelopeDto } from '../../src/client/api/client';
 import { ActiveTripCard } from '../../src/client/components/ActiveTripCard';
 import { OfflineBanner } from '../../src/client/components/OfflineBanner';
 import type { ActiveTripRecord } from '../../src/client/storage/active-trip-store';
 import { createBrowserStructuralStore } from '../../src/client/storage/structural-store';
+import { writeLastUsedStation } from '../../src/client/state/app-state';
 import { StationView } from '../../src/client/views/StationView';
 import {
   ControlledGeolocation,
@@ -44,6 +46,33 @@ describe('explicit global Offline presentation', () => {
     expect(screen.getByText('Was due 8:03 AM')).toBeTruthy();
     expect(screen.queryByText('3 min')).toBeNull();
     expect(screen.queryByText('Live')).toBeNull();
+    expect(screen.getByRole('region', { name: 'Historical service alert' })).toBeTruthy();
+  });
+
+  test('keeps a service-worker historical board frozen while the browser still reports online', async () => {
+    const storage = new MemoryStorage();
+    writeLastUsedStation(storage, { complexId: 'A12', constituentId: 'A12', name: '125 St' });
+    const geolocation = new ControlledGeolocation();
+    const historicalBoard = {
+      ...boardEnvelope(),
+      cacheState: 'historical',
+    } as BoardEnvelopeDto;
+    render(
+      <App
+        api={createClientApi({ board: vi.fn(async () => historicalBoard) })}
+        geolocation={geolocation}
+        storage={storage}
+        connectivity="online"
+      />,
+    );
+
+    await waitFor(() => expect(geolocation.requests).toHaveLength(1));
+    act(() => geolocation.fail(0, 2));
+
+    await screen.findByText('Historical board · last checked 8:00 AM');
+    expect(screen.getByText('Was due 8:03 AM')).toBeTruthy();
+    expect(screen.queryByText('Live')).toBeNull();
+    expect(screen.queryByText('3 min')).toBeNull();
     expect(screen.getByRole('region', { name: 'Historical service alert' })).toBeTruthy();
   });
 

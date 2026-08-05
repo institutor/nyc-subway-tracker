@@ -157,6 +157,20 @@ describe('transit API client boundary', () => {
     expect(fetcher.mock.calls[0][0]).toBe('/api/v1/stations/A12/board?routes=A%2CC&direction=northbound');
   });
 
+  test('carries only the exact service-worker historical state through the board DTO boundary', async () => {
+    const historical = createTransitApiClient(async () => jsonResponse(boardEnvelope, {
+      'x-subway-cache-state': 'historical',
+    }));
+    const current = createTransitApiClient(async () => jsonResponse(boardEnvelope));
+    const forged = createTransitApiClient(async () => jsonResponse(boardEnvelope, {
+      'x-subway-cache-state': 'stale-ish',
+    }));
+
+    expect((await historical.board('A12') as { readonly cacheState?: string }).cacheState).toBe('historical');
+    expect((await current.board('A12') as { readonly cacheState?: string }).cacheState).toBe('network');
+    await expect(forged.board('A12')).rejects.toThrow('Transit information is unavailable.');
+  });
+
   test('rejects malformed or expanded operational data with a generic rider-safe error', async () => {
     const expanded = structuredClone(boardEnvelope) as Record<string, unknown>;
     (expanded.data as Record<string, unknown>).crowding = { secretProviderField: true };
@@ -268,10 +282,10 @@ describe('transit API client boundary', () => {
   });
 });
 
-function jsonResponse(value: unknown): Response {
+function jsonResponse(value: unknown, headers: HeadersInit = {}): Response {
   return new Response(JSON.stringify(value), {
     status: 200,
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', ...Object.fromEntries(new Headers(headers)) },
   });
 }
 

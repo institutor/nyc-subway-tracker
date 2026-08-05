@@ -172,7 +172,7 @@ export function App({ api, geolocation, storage: providedStorage, connectivity: 
                 routeIds: direction.routeIds,
                 direction: direction.direction,
               }, controller.signal);
-              connectivity.reportRequestResult('accepted');
+              if (board.cacheState === 'network') connectivity.reportRequestResult('accepted');
               settleNearbyBoard(key, { phase: 'ready', board });
             } catch (error) {
               if (!isAbort(error)) {
@@ -210,7 +210,7 @@ export function App({ api, geolocation, storage: providedStorage, connectivity: 
     setSelectedBoard((current) => ({ phase: 'loading', ...(current.board ? { board: current.board } : {}) }));
     void apiClient.board(station.constituentId, filters, controller.signal).then((board) => {
       if (!controller.signal.aborted && selectedGeneration.current === requestId) {
-        connectivity.reportRequestResult('accepted');
+        if (board.cacheState === 'network') connectivity.reportRequestResult('accepted');
         setSelectedBoard({ phase: 'ready', board });
       }
     }).catch((error: unknown) => {
@@ -325,7 +325,7 @@ export function App({ api, geolocation, storage: providedStorage, connectivity: 
     savedAbort.current.set(record.id, controller);
     void apiClient.board(record.constituentId, { routeIds: [] }, controller.signal).then((board) => {
       if (controller.signal.aborted || savedAbort.current.get(record.id) !== controller) return;
-      connectivity.reportRequestResult('accepted');
+      if (board.cacheState === 'network') connectivity.reportRequestResult('accepted');
       setSavedBoards((current) => new Map(current).set(record.id, board));
     }).catch((error: unknown) => {
       if (!isAbort(error)) connectivity.reportRequestResult(classifyRequestFailure(error));
@@ -429,7 +429,7 @@ export function App({ api, geolocation, storage: providedStorage, connectivity: 
                 board={selectedBoard.board}
                 phase={selectedBoard.phase}
                 filters={state.filters}
-                historical={offline}
+                historical={offline || selectedBoard.board?.cacheState === 'historical'}
                 onFiltersChange={changeFilters}
                 onRefresh={() => runSelectedBoard(selectedStation, stateRef.current.filters)}
                 onSave={saveCurrentStation}

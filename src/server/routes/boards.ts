@@ -2,7 +2,7 @@ import type { Request, Response } from 'express';
 
 import { API_VERSION, DEMONSTRATION_LABEL, SCHEMA_VERSION } from '../api/contracts';
 import { captureDecisionSnapshot } from '../api/decision-snapshot';
-import { sendNoStoreJson } from '../api/http';
+import { sendNoStoreJson, sendPublicHistoricalJson } from '../api/http';
 import { toProvenanceDtos, toSourceHealthDtos } from '../api/provenance-dto';
 import { createResponseIdentity } from '../api/response-identity';
 import type { AppDependencies } from '../bootstrap';
@@ -43,7 +43,7 @@ export function boardHandler(dependencies: AppDependencies) {
           provenance: toProvenanceDtos(snapshot.provenance),
           capabilities: Object.freeze({ arrivals: 'unavailable', accessibility: 'locked', guidance: 'locked', commute: 'locked' }),
         };
-    sendNoStoreJson(response, 200, {
+    sendPublicHistoricalJson(response, 200, {
       apiVersion: API_VERSION,
       schemaVersion: SCHEMA_VERSION,
       responseIdentity: createResponseIdentity(['board', filters.stationId, filters.direction ?? '', filters.routeIds.join(','), decidedAt, JSON.stringify(data)]),

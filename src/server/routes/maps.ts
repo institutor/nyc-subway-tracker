@@ -2,7 +2,7 @@ import type { Request, Response } from 'express';
 
 import { API_VERSION, DEMONSTRATION_LABEL, SCHEMA_VERSION } from '../api/contracts';
 import { captureDecisionSnapshot } from '../api/decision-snapshot';
-import { sendImmutableJson, sendNoStoreJson } from '../api/http';
+import { sendImmutableJson, sendNoStoreJson, sendPublicHistoricalJson } from '../api/http';
 import { toProvenanceDtos, toSourceHealthDtos } from '../api/provenance-dto';
 import { createResponseIdentity } from '../api/response-identity';
 import type { AppDependencies } from '../bootstrap';
@@ -82,7 +82,7 @@ export function mapOverlayHandler(dependencies: AppDependencies) {
       : deepFreeze({ theme, serviceEpoch: null, segments: [] });
     const sourceHealth = toSourceHealthDtos(snapshot.sourceHealth);
     const provenance = toProvenanceDtos(snapshot.provenance);
-    sendNoStoreJson(response, 200, {
+    sendPublicHistoricalJson(response, 200, {
       apiVersion: API_VERSION,
       schemaVersion: SCHEMA_VERSION,
       responseIdentity: createResponseIdentity([

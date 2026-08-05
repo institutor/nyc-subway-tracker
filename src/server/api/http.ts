@@ -7,6 +7,12 @@ export function sendNoStoreJson(response: Response, status: number, body: unknow
   response.status(status).json(body);
 }
 
+export function sendPublicHistoricalJson(response: Response, status: number, body: unknown): void {
+  response.setHeader('Cache-Control', 'no-store');
+  response.setHeader('x-subway-historical-cache', 'public-v1');
+  response.status(status).json(body);
+}
+
 export function createStrongEtag(body: unknown): string {
   return `"${createHash('sha256').update(JSON.stringify(body)).digest('hex')}"`;
 }

@@ -2,7 +2,7 @@ import type { Request, Response } from 'express';
 
 import { API_VERSION, DEMONSTRATION_LABEL, SCHEMA_VERSION } from '../api/contracts';
 import { captureDecisionSnapshot } from '../api/decision-snapshot';
-import { sendNoStoreJson } from '../api/http';
+import { sendNoStoreJson, sendPublicHistoricalJson } from '../api/http';
 import { createResponseIdentity } from '../api/response-identity';
 import type { AppDependencies } from '../bootstrap';
 import { buildStatusDto } from '../services/board-service';
@@ -31,7 +31,7 @@ export function statusHandler(dependencies: AppDependencies) {
     const snapshot = captureDecisionSnapshot(dependencies.snapshotProvider);
     const boards = (snapshot.boards ?? []).map(({ decision }) => decision);
     const data = buildStatusDto(boards, stationId, routeIds, direction, snapshot.sourceHealth, snapshot.provenance);
-    sendNoStoreJson(response, 200, {
+    sendPublicHistoricalJson(response, 200, {
       apiVersion: API_VERSION,
       schemaVersion: SCHEMA_VERSION,
       responseIdentity: createResponseIdentity(['status', stationId ?? '', routeIds.join(','), direction ?? '', decidedAt, JSON.stringify(data)]),

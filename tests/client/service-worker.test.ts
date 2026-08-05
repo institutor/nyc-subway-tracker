@@ -8,20 +8,22 @@ const SW_PATH = new URL('../../public/sw.js', import.meta.url);
 
 describe('offline service-worker policy', () => {
   test('precaches the reloadable app shell in its own versioned cohort', async () => {
-    const worker = createWorker();
+    const worker = createWorker([], ['/assets/index-app.js', '/assets/index-theme.css']);
 
     await worker.dispatchLifecycle('install');
 
-    expect(worker.cache('subway-first-shell-v1').added).toEqual([
+    expect(worker.cache('subway-first-shell-v2').added).toEqual([
       '/', '/index.html', '/manifest.webmanifest', '/icons/app-icon.svg',
+      '/assets/index-app.js', '/assets/index-theme.css',
     ]);
     expect(worker.skipWaiting).toHaveBeenCalledTimes(1);
-    expect(worker.cacheNames()).toEqual(['subway-first-shell-v1']);
+    expect(worker.cacheNames()).toEqual(['subway-first-shell-v2']);
   });
 
   test('migrates only explicitly retired Subway First cohorts and preserves unrelated caches', async () => {
     const worker = createWorker([
       'subway-first-shell-v0', 'subway-first-structural-v0', 'subway-first-history-v0',
+      'subway-first-shell-v1', 'subway-first-structural-v1', 'subway-first-history-v1',
       'another-product-v4', 'subway-first-not-owned',
     ]);
 
@@ -29,6 +31,7 @@ describe('offline service-worker policy', () => {
 
     expect(worker.deleted).toEqual([
       'subway-first-shell-v0', 'subway-first-structural-v0', 'subway-first-history-v0',
+      'subway-first-shell-v1', 'subway-first-structural-v1', 'subway-first-history-v1',
     ]);
     expect(worker.cacheNames()).toEqual(['another-product-v4', 'subway-first-not-owned']);
     expect(worker.claimClients).toHaveBeenCalledTimes(1);
@@ -63,21 +66,21 @@ describe('offline service-worker policy', () => {
     await worker.dispatchFetch(request('/api/v1/stations/catalog/catalog-v1'));
     await worker.dispatchFetch(request('/api/v1/maps/night/reference/map-v1'));
 
-    expect(worker.cache('subway-first-structural-v1').puts.map(({ key }) => key)).toEqual([
+    expect(worker.cache('subway-first-structural-v2').puts.map(({ key }) => key)).toEqual([
       'https://subway.test/api/v1/stations/catalog/catalog-v1',
       'https://subway.test/api/v1/maps/night/reference/map-v1',
     ]);
-    expect(worker.cache('subway-first-history-v1').puts).toEqual([]);
+    expect(worker.cache('subway-first-history-v2').puts).toEqual([]);
   });
 
   test('serves a failed recent board or overlay only as explicitly historical content', async () => {
     const worker = createWorker();
     const board = request('/api/v1/stations/station-a/board?routes=F&direction=northbound');
     const overlay = request('/api/v1/maps/day/overlay');
-    worker.cache('subway-first-history-v1').seed(board.url, new Response('{"board":"stored"}', {
+    worker.cache('subway-first-history-v2').seed(board.url, new Response('{"board":"stored"}', {
       status: 200, headers: { 'content-type': 'application/json' },
     }));
-    worker.cache('subway-first-history-v1').seed(overlay.url, new Response('{"overlay":"stored"}', {
+    worker.cache('subway-first-history-v2').seed(overlay.url, new Response('{"overlay":"stored"}', {
       status: 200, headers: { 'content-type': 'application/json' },
     }));
     worker.fetcher.mockRejectedValue(new TypeError('network unreachable'));
@@ -90,11 +93,49 @@ describe('offline service-worker policy', () => {
     expect(overlayResponse?.headers.get('x-subway-cache-state')).toBe('historical');
   });
 
-  test('does not persist private or no-store responses even for an eligible public path', async () => {
+  test('stores an exact public historical opt-in while retaining no-store at the HTTP boundary', async () => {
     const worker = createWorker();
     worker.fetcher.mockResolvedValue(new Response('{}', {
       status: 200,
-      headers: { 'cache-control': 'private, no-store', 'set-cookie': 'session=secret' },
+      headers: {
+        'cache-control': 'no-store',
+        'content-type': 'application/json',
+        'x-subway-historical-cache': 'public-v1',
+      },
+    }));
+
+    await worker.dispatchFetch(request('/api/v1/stations/station-a/board'));
+
+    expect(worker.cache('subway-first-history-v2').puts).toHaveLength(1);
+  });
+
+  test.each([
+    ['/api/v1/stations/station-a/board', {}],
+    ['/api/v1/stations/station-a/board', { 'x-subway-historical-cache': 'public-v2' }],
+    ['/api/v1/maps/day/overlay', {}],
+    ['/api/v1/status?stationId=station-a&routes=A&direction=northbound', {}],
+  ])('rejects an unsanctioned historical response for %s', async (path, extraHeaders) => {
+    const worker = createWorker();
+    worker.fetcher.mockResolvedValue(new Response('{}', {
+      status: 200,
+      headers: { 'cache-control': 'no-store', 'content-type': 'application/json', ...extraHeaders },
+    }));
+
+    await worker.dispatchFetch(request(path));
+
+    expect(worker.allPuts()).toEqual([]);
+  });
+
+  test('does not persist private, secret, or unsanctioned no-store responses even for an eligible public path', async () => {
+    const worker = createWorker();
+    worker.fetcher.mockResolvedValue(new Response('{}', {
+      status: 200,
+      headers: {
+        'cache-control': 'private, no-store',
+        'content-type': 'application/json',
+        'set-cookie': 'session=secret',
+        'x-subway-historical-cache': 'public-v1',
+      },
     }));
 
     await worker.dispatchFetch(request('/api/v1/stations/station-a/board'));
@@ -116,7 +157,7 @@ describe('offline service-worker policy', () => {
 
   test('reloads the cached app shell when a navigation request cannot reach the network', async () => {
     const worker = createWorker();
-    worker.cache('subway-first-shell-v1').seed('/index.html', new Response('<main>offline shell</main>', {
+    worker.cache('subway-first-shell-v2').seed('/index.html', new Response('<main>offline shell</main>', {
       status: 200, headers: { 'content-type': 'text/html' },
     }));
     worker.fetcher.mockRejectedValue(new TypeError('network unreachable'));
@@ -145,7 +186,7 @@ function request(path: string, init: { method?: string; mode?: string; destinati
   };
 }
 
-function createWorker(initialCaches: readonly string[] = []) {
+function createWorker(initialCaches: readonly string[] = [], buildAssets: readonly string[] = []) {
   const listeners = new Map<string, (event: Record<string, unknown>) => void>();
   const caches = new ControlledCacheStorage(initialCaches);
   const fetcher = vi.fn<(request: ControlledRequest) => Promise<Response>>();
@@ -159,6 +200,7 @@ function createWorker(initialCaches: readonly string[] = []) {
     console,
     setTimeout,
     clearTimeout,
+    __SUBWAY_BUILD_ASSETS__: buildAssets,
     caches,
     fetch: fetcher,
     location: { origin: 'https://subway.test' },

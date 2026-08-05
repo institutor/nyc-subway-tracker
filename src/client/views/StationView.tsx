@@ -28,9 +28,10 @@ export function StationView({
   readonly onSave?: () => void;
   readonly saved?: boolean;
 }) {
+  const retainedHistorical = historical || board?.cacheState === 'historical';
   const firstRow = board?.data?.directions.flatMap((direction) => [...direction.primary, ...direction.secondary])[0];
   const validThrough = firstRow?.validThrough ?? board?.serverTime ?? '1970-01-01T00:00:00.000Z';
-  const reading = useBoardClock(board?.serverTime ?? validThrough, validThrough, undefined, board?.receivedAtMonotonicMs, !historical);
+  const reading = useBoardClock(board?.serverTime ?? validThrough, validThrough, undefined, board?.receivedAtMonotonicMs, !retainedHistorical);
   const routeIds = board?.data?.station?.routeIds ?? [];
   const directions = board?.data?.directions.map(({ direction }) => direction) ?? [];
   const reversed = reverseDirection(filters.direction, directions);
@@ -54,27 +55,27 @@ export function StationView({
 
       {board?.data ? (
         <>
-          <p className="board-mode">{historical
+          <p className="board-mode">{retainedHistorical
             ? `Historical board · last checked ${formatClaimTime(board.serverTime)}`
             : board.data.mode === 'live' ? 'Live and expected arrivals' : board.data.mode === 'scheduled-fallback' ? 'Schedule fallback' : 'Arrival status'}</p>
           {board.data.alerts.map((alert) => (
-            <section className="service-alert" aria-label={historical ? 'Historical service alert' : 'Service alert'} key={alert.id}>
+            <section className="service-alert" aria-label={retainedHistorical ? 'Historical service alert' : 'Service alert'} key={alert.id}>
               <span className="service-alert__mark" aria-hidden="true">!</span>
               <div>
-                <h3>{historical ? 'Historical service alert' : 'Service alert'}</h3>
+                <h3>{retainedHistorical ? 'Historical service alert' : 'Service alert'}</h3>
                 <p>{alert.text}</p>
-                <p className="claim-line"><span>{alert.demonstrationLabel}</span><span>{sourceLabel(alert.provenance)}</span>{historical ? <time dateTime={alert.provenance.observedAt}>Last checked {formatClaimTime(alert.provenance.observedAt)}</time> : null}</p>
+                <p className="claim-line"><span>{alert.demonstrationLabel}</span><span>{sourceLabel(alert.provenance)}</span>{retainedHistorical ? <time dateTime={alert.provenance.observedAt}>Last checked {formatClaimTime(alert.provenance.observedAt)}</time> : null}</p>
               </div>
             </section>
           ))}
           <div className="station-board">
-            {board.data.directions.map((direction) => <DirectionTrack key={direction.direction} direction={direction} reading={reading} historical={historical} />)}
+            {board.data.directions.map((direction) => <DirectionTrack key={direction.direction} direction={direction} reading={reading} historical={retainedHistorical} />)}
           </div>
         </>
       ) : null}
 
       <div className="context-dock" role="toolbar" aria-label="Board controls">
-        <button type="button" aria-label="Refresh train times" onClick={onRefresh} disabled={historical}>
+        <button type="button" aria-label="Refresh train times" onClick={onRefresh} disabled={retainedHistorical}>
           <span aria-hidden="true">↻</span><span>Refresh</span>
         </button>
         {onSave ? (

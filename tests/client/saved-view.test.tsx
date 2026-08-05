@@ -150,6 +150,7 @@ describe('exact catalog station search', () => {
 
 function boardWithFilteredAlert(): BoardEnvelopeDto {
   return {
+    cacheState: 'network',
     apiVersion: 'v1', schemaVersion: '2026-08-04', responseIdentity: 'board-b',
     decidedAt: '2026-08-04T12:00:00.000Z', serverTime: '2026-08-04T12:00:00.000Z',
     runtime: { mode: 'validation', surface: 'demonstration', availability: 'available' }, gates: {},
