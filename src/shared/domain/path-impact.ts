@@ -10,6 +10,8 @@ export type ResolvedPathImpactDecision = Readonly<({
   readonly decisionId: string;
   readonly equipmentDecisionId: string;
   readonly selectedPathEvaluationId: string;
+  readonly selectedPathPackageVersion: string;
+  readonly selectedEquipmentIds: readonly string[];
   readonly stationComplexId: string;
   readonly constituentStationId: string;
   readonly routeId: string;
@@ -21,6 +23,8 @@ export type ResolvedPathImpactDecision = Readonly<({
   readonly exposureDecisionId: string | null;
   readonly changedEquipmentId: string;
   readonly changedEquipmentState: EquipmentStatusDecision['state'];
+  readonly changedEquipmentFreshnessCopy: string;
+  readonly changedEquipmentAssessedAt: string;
   readonly affectedPathId: string | null;
   readonly accessibleRouteOnly: true;
   readonly originIntent: string;
@@ -124,6 +128,8 @@ function resolveImpact(
     decisionId: `${equipment.decisionId}|${selected.evaluationId}|${value.kind}|${replacement?.evaluationId ?? 'none'}|${createdAt}`,
     equipmentDecisionId: equipment.decisionId,
     selectedPathEvaluationId: selected.evaluationId,
+    selectedPathPackageVersion: selected.packageVersion,
+    selectedEquipmentIds: selected.equipmentIds,
     stationComplexId: selected.stationComplexId,
     constituentStationId: selected.constituentStationId,
     routeId: selected.routeId,
@@ -135,6 +141,8 @@ function resolveImpact(
     exposureDecisionId: selected.exposureDecisionId,
     changedEquipmentId: equipment.targetEquipmentId,
     changedEquipmentState: equipment.state,
+    changedEquipmentFreshnessCopy: equipment.freshnessCopy,
+    changedEquipmentAssessedAt: equipment.assessedAt,
     accessibleRouteOnly: true as const,
     originIntent: selected.originIntent,
     destinationIntent: selected.destinationIntent,

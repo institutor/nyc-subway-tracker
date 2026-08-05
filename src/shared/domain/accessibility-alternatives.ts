@@ -62,6 +62,16 @@ export interface ResolvedAccessibilityAlternativeOffer {
   readonly canonicalIdentity: string;
   readonly pathId: string;
   readonly pathEvaluationId: string;
+  readonly pathPackageVersion: string;
+  readonly stationComplexId: string;
+  readonly constituentStationId: string;
+  readonly routeId: string;
+  readonly direction: ResolvedAccessiblePathDecision['direction'];
+  readonly platformId: string;
+  readonly equipmentSourceScopeId: string;
+  readonly equipmentSourceVersion: string;
+  readonly surface: ResolvedAccessiblePathDecision['surface'];
+  readonly exposureDecisionId: string | null;
   readonly tier: AccessibilityAlternativeTier;
   readonly originIntent: string;
   readonly destinationIntent: string;
@@ -268,6 +278,16 @@ function publicOffer(offer: AcceptedOffer): ResolvedAccessibilityAlternativeOffe
     canonicalIdentity: offer.canonicalIdentity,
     pathId: offer.pathDecision.pathId,
     pathEvaluationId: offer.pathEvaluationId,
+    pathPackageVersion: offer.pathDecision.packageVersion,
+    stationComplexId: offer.pathDecision.stationComplexId,
+    constituentStationId: offer.pathDecision.constituentStationId,
+    routeId: offer.pathDecision.routeId,
+    direction: offer.pathDecision.direction,
+    platformId: offer.pathDecision.platformId,
+    equipmentSourceScopeId: offer.pathDecision.equipmentSourceScopeId,
+    equipmentSourceVersion: offer.pathDecision.equipmentSourceVersion,
+    surface: offer.pathDecision.surface,
+    exposureDecisionId: offer.pathDecision.exposureDecisionId,
     tier: offer.tier,
     originIntent: offer.originIntent,
     destinationIntent: offer.destinationIntent,

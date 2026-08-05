@@ -3,26 +3,27 @@ import { describe, expect, test } from 'vitest';
 import { AccessibilityPanel, ValidationAccessibilityPanel } from '../../src/client/components/AccessibilityPanel';
 import { PlatformGuidance, ValidationPlatformGuidance } from '../../src/client/components/PlatformGuidance';
 import type { ResolvedAccessiblePathDecision } from '../../src/shared/domain/accessible-path';
-import { resolvedAlternativeSelection, resolvedWarning } from '../fixtures/accessibility-decisions';
+import { resolvedAlternativeSelection, resolvedEquipmentStatus, resolvedWarning } from '../fixtures/accessibility-decisions';
 import { resolvedPath } from '../fixtures/accessibility-decisions';
 import { resolvedValidationGuidance } from '../fixtures/platform-guidance';
 
 const warning = resolvedWarning();
-const alternative = resolvedAlternativeSelection();
-const decisionTime = new Date('2026-08-01T00:00:00.000Z');
+const selectedPath = resolvedPath('selected', 'eligible', { equipmentIds: ['EL-1'], destinationIntent: '168 St' });
+const alternative = resolvedAlternativeSelection(selectedPath);
+const decisionTime = new Date('2026-08-01T00:02:00.000Z');
 
 describe('accessible-path rider panel', () => {
   test('renders the warning and safe action first visually and in assistive DOM order', () => {
-    const { container } = render(<ValidationAccessibilityPanel warning={warning} path={resolvedPath('selected')} equipment={[]} alternative={alternative} onSelectAlternative={() => undefined} decisionTime={decisionTime} />);
+    const { container } = render(<ValidationAccessibilityPanel warning={warning} path={selectedPath} equipment={[]} alternative={alternative} onSelectAlternative={() => undefined} decisionTime={decisionTime} />);
     expect(container.firstElementChild?.firstElementChild?.getAttribute('role')).toBe('alert');
     const alert = screen.getByRole('alert');
-    expect(alert.textContent).toContain('Elevator status is Unknown.');
+    expect(alert.textContent).toContain('Official status: EL-1 is out of service.');
     expect(screen.getByRole('button', { name: 'Use the verified same-complex path.' })).toBeTruthy();
   });
 
   test('never auto-selects a replacement and keeps explicit action keyboard-operable', () => {
     let selected = '';
-    render(<ValidationAccessibilityPanel warning={warning} path={resolvedPath('selected')} equipment={[]} alternative={alternative} onSelectAlternative={(id) => { selected = id; }} decisionTime={decisionTime} />);
+    render(<ValidationAccessibilityPanel warning={warning} path={selectedPath} equipment={[]} alternative={alternative} onSelectAlternative={(id) => { selected = id; }} decisionTime={decisionTime} />);
     expect(selected).toBe('');
     fireEvent.click(screen.getByRole('button', { name: 'Use the verified same-complex path.' }));
     expect(selected).toBe('alt');
@@ -65,6 +66,46 @@ describe('accessible-path rider panel', () => {
 
     rerender(<ValidationAccessibilityPanel warning={warning} path={resolvedPath('selected')} equipment={[]} alternative={{ ...alternative } as never} onSelectAlternative={() => undefined} decisionTime={decisionTime} />);
     expect(screen.queryByRole('button')).toBeNull();
+  });
+
+  test('does not render or invoke an offer from a selection unrelated to the warning receipt', () => {
+    let selected = '';
+    const unrelated = resolvedAlternativeSelection(resolvedPath('other-selected'));
+    render(<ValidationAccessibilityPanel warning={warning} path={selectedPath} equipment={[]} alternative={unrelated} onSelectAlternative={(id) => { selected = id; }} decisionTime={decisionTime} />);
+    expect(screen.getByRole('alert')).toBeTruthy();
+    expect(screen.queryByRole('button')).toBeNull();
+    expect(selected).toBe('');
+  });
+
+  test('does not render a genuine warning for an unrelated displayed path', () => {
+    const unrelatedPath = resolvedPath('other-selected', 'eligible', { equipmentIds: ['EL-1'], destinationIntent: '168 St' });
+    render(<ValidationAccessibilityPanel warning={resolvedWarning(unrelatedPath)} path={selectedPath} equipment={[]} alternative={null} onSelectAlternative={() => undefined} decisionTime={decisionTime} />);
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  test('keeps a warning visible for a newer current evaluation of the same exact path scope', () => {
+    const laterDecisionTime = new Date('2026-08-01T00:03:00.000Z');
+    const newerSamePath = resolvedPath('selected', 'eligible', {
+      equipmentIds: ['EL-1'],
+      destinationIntent: '168 St',
+      decisionTime: laterDecisionTime.toISOString(),
+    });
+    render(<ValidationAccessibilityPanel warning={warning} path={newerSamePath} equipment={[]} alternative={null} onSelectAlternative={() => undefined} decisionTime={laterDecisionTime} />);
+    expect(screen.getByRole('alert')).toBeTruthy();
+  });
+
+  test('does not render a genuine same-machine equipment receipt that the displayed path did not own', () => {
+    const unrelatedReceipt = resolvedEquipmentStatus('EL-1', 'different-snapshot');
+    render(<ValidationAccessibilityPanel
+      warning={null}
+      path={selectedPath}
+      equipment={[{ decision: unrelatedReceipt, label: 'Elevator EL-1', required: true }]}
+      alternative={null}
+      onSelectAlternative={() => undefined}
+      decisionTime={decisionTime}
+    />);
+    expect(screen.queryByRole('list', { name: 'Path equipment status' })).toBeNull();
+    expect(screen.queryByText('No official outage reported')).toBeNull();
   });
 
   test('contains no crowding schema, copy, control, placeholder, or proxy surface', () => {

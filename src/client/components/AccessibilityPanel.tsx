@@ -1,7 +1,7 @@
 import { accessiblePathDecisionAllowsPresentation, type ResolvedAccessiblePathDecision } from '../../shared/domain/accessible-path';
-import { isResolvedEquipmentStatusDecision, type EquipmentStatusDecision } from '../../shared/domain/equipment-status';
+import { equipmentDecisionAllowsUse, type EquipmentStatusDecision } from '../../shared/domain/equipment-status';
 import { isResolvedAccessibilityAlternativeSelection, type ResolvedAccessibilityAlternativeSelection } from '../../shared/domain/accessibility-alternatives';
-import { isResolvedAccessibilityWarning, type AccessibilityWarning } from '../../shared/domain/underway-warning';
+import { warningMatchesAlternativeSelection, warningMatchesDisplayedPath, type AccessibilityWarning } from '../../shared/domain/underway-warning';
 import type { ExposureSurface } from '../../shared/domain/exposure-decision';
 
 export interface AccessibilityPanelProps {
@@ -18,7 +18,7 @@ const STATE_COPY = {
   'out-of-service': 'Out of service',
   'planned-outage': 'Planned outage',
   unknown: 'Unknown',
-  'out-of-service-rechecking': 'Out of service—status being rechecked',
+  'out-of-service-rechecking': 'Out of service - status being rechecked',
 } as const;
 
 export function AccessibilityPanel(props: AccessibilityPanelProps) {
@@ -33,9 +33,17 @@ export function ValidationAccessibilityPanel(props: AccessibilityPanelProps) {
 function AccessibilityPanelForSurface({ warning, path, equipment, alternative, onSelectAlternative, decisionTime, surface }: AccessibilityPanelProps & { readonly surface: ExposureSurface }) {
   const resolvedPath = accessiblePathDecisionAllowsPresentation(path, surface, decisionTime) ? path : undefined;
   const pathStatus = resolvedPath?.status ?? 'unknown';
-  const resolvedEquipment = resolvedPath ? equipment.filter((machine) => isResolvedEquipmentStatusDecision(machine?.decision)) : [];
-  const resolvedWarning = resolvedPath && isResolvedAccessibilityWarning(warning) ? warning : null;
-  const resolvedAlternative = resolvedWarning && isResolvedAccessibilityAlternativeSelection(alternative) ? alternative.first : null;
+  const resolvedEquipment = resolvedPath ? equipment.filter((machine) => {
+    const decision = machine?.decision;
+    return equipmentDecisionAllowsUse(decision, decisionTime)
+      && resolvedPath.equipmentIds.includes(decision.targetEquipmentId)
+      && resolvedPath.equipmentDecisionIds[decision.targetEquipmentId] === decision.decisionId
+      && decision.sourceScopeId === resolvedPath.equipmentSourceScopeId
+      && decision.sourceVersion === resolvedPath.equipmentSourceVersion;
+  }) : [];
+  const resolvedWarning = resolvedPath && warningMatchesDisplayedPath(warning, resolvedPath, decisionTime) ? warning : null;
+  const resolvedAlternative = resolvedWarning && isResolvedAccessibilityAlternativeSelection(alternative)
+    && warningMatchesAlternativeSelection(resolvedWarning, alternative, decisionTime) ? alternative.first : null;
   return <section className="accessibility-panel" aria-label="Step-free path">
     {resolvedWarning?.active ? <div className="accessibility-warning" role="alert" aria-live="assertive">
       <p className="accessibility-warning__eyebrow">Step-free path action</p>
@@ -51,9 +59,9 @@ function AccessibilityPanelForSurface({ warning, path, equipment, alternative, o
       </div>
     </div>
     {resolvedEquipment.length ? <ul className="equipment-list" aria-label="Path equipment status">{[...resolvedEquipment]
-      .sort((a, b) => Number(b.required) - Number(a.required))
+      .sort((a, b) => resolvedPath!.equipmentIds.indexOf(a.decision.targetEquipmentId) - resolvedPath!.equipmentIds.indexOf(b.decision.targetEquipmentId))
       .map((machine) => <li key={machine.decision.targetEquipmentId}>
-        <span><strong>{machine.label}</strong>{machine.required ? <small> Required by selected path</small> : null}</span>
+        <span><strong>Equipment {machine.decision.targetEquipmentId}</strong><small> Required by selected path</small></span>
         <span>{STATE_COPY[machine.decision.state]}</span>
         <span>{machine.decision.freshnessCopy}</span>
       </li>)}</ul> : null}

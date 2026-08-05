@@ -4,7 +4,7 @@ import { resolveAccessibilityExposure, VALIDATION_EXPOSURE_REGISTRY } from '../.
 import { acceptAccessibilityAlternativeRegistry, chooseAccessibilityAlternative } from '../../src/shared/domain/accessibility-alternatives';
 import { acceptEquipmentHistory, acceptEquipmentInventory, assessEquipmentStatus } from '../../src/shared/domain/equipment-status';
 import { classifyPathImpact } from '../../src/shared/domain/path-impact';
-import { createAccessibilityWarning } from '../../src/shared/domain/underway-warning';
+import { createAccessibilityWarning, deriveLastAccessibleDecisionPoint } from '../../src/shared/domain/underway-warning';
 
 function review(role: string) {
   return { decision: 'approve' as const, reviewer: `${role} Reviewer`, date: '2026-07-30', recordVersion: 'coverage-v1' };
@@ -111,11 +111,51 @@ export function resolvedAlternativeSelection(selectedPath = resolvedPath('select
   return chooseAccessibilityAlternative(registry, { decisionTime: new Date('2026-08-01T00:00:00.000Z') });
 }
 
-export function resolvedWarning() {
+export function resolvedEquipmentStatus(targetEquipmentId = 'EL-1', snapshotId = 'unrelated-snapshot') {
+  const inventory = acceptEquipmentInventory({
+    inventoryId: `inventory:${snapshotId}`,
+    evidenceOwner: 'official-equipment-inventory',
+    sourceScopeId: 'nyc-equipment',
+    sourceVersion: 'inventory-v1',
+    acceptedAt: '2026-07-31T23:00:00.000Z',
+    equipmentIds: [targetEquipmentId, 'EL-OTHER'],
+  });
+  const history = acceptEquipmentHistory({
+    historyId: `history:${snapshotId}`,
+    evidenceOwner: 'official-equipment-status',
+    sourceScopeId: 'nyc-equipment',
+    sourceVersion: 'equipment-v1',
+    inventoryVersion: 'inventory-v1',
+    snapshots: [{
+      snapshotId,
+      sequenceOrdinal: 1,
+      predecessorSnapshotId: null,
+      evidenceOwner: 'official-equipment-status',
+      sourceScopeId: 'nyc-equipment',
+      sourceVersion: 'equipment-v1',
+      inventoryVersion: 'inventory-v1',
+      sourceTimestamp: '2026-08-01T00:01:00.000Z',
+      acceptedAt: '2026-08-01T00:01:01.000Z',
+      declaredRecordCount: 1,
+      records: [{ recordId: 'out-other', equipmentId: 'EL-OTHER', state: 'out-of-service' }],
+    }],
+  }, inventory);
+  return assessEquipmentStatus({
+    targetEquipmentId,
+    decisionTime: new Date('2026-08-01T00:02:00.000Z'),
+    inventory,
+    history,
+  });
+}
+
+export function resolvedWarning(
+  selectedPath = resolvedPath('selected', 'eligible', { equipmentIds: ['EL-1'], destinationIntent: '168 St' }),
+) {
   const inventory = acceptEquipmentInventory({ inventoryId: 'inv', evidenceOwner: 'official-equipment-inventory', sourceScopeId: 'nyc-equipment', sourceVersion: 'inv-v1', acceptedAt: '2026-07-31T23:00:00.000Z', equipmentIds: ['EL-1'] });
   const history = acceptEquipmentHistory({ historyId: 'history', evidenceOwner: 'official-equipment-status', sourceScopeId: 'nyc-equipment', sourceVersion: 'equipment-v1', inventoryVersion: 'inv-v1', snapshots: [{ snapshotId: 'snap', sequenceOrdinal: 1, predecessorSnapshotId: null, evidenceOwner: 'official-equipment-status', sourceScopeId: 'nyc-equipment', sourceVersion: 'equipment-v1', inventoryVersion: 'inv-v1', sourceTimestamp: '2026-08-01T00:01:00.000Z', acceptedAt: '2026-08-01T00:01:01.000Z', declaredRecordCount: 1, records: [{ recordId: 'out', equipmentId: 'EL-1', state: 'out-of-service' }] }] }, inventory);
   const changedEquipment = assessEquipmentStatus({ targetEquipmentId: 'EL-1', decisionTime: new Date('2026-08-01T00:02:00.000Z'), inventory, history });
-  const selectedPath = resolvedPath('selected', 'eligible', { equipmentIds: ['EL-1'], destinationIntent: '168 St' });
   const impactDecision = classifyPathImpact({ changedEquipment, selectedPath, alternatePaths: [], decisionTime: new Date('2026-08-01T00:02:00.000Z') })!;
-  return createAccessibilityWarning({ fact: 'Elevator status is Unknown.', connection: 'Northbound transfer elevator', consequence: 'The selected step-free path cannot be verified right now.', freshness: 'Checked time unavailable', phase: 'underway', decisionPoint: { status: 'unknown' }, impactDecision, alternativeSelection: resolvedAlternativeSelection(selectedPath) });
+  const decisionTime = new Date('2026-08-01T00:02:00.000Z');
+  const decisionPoint = deriveLastAccessibleDecisionPoint({ cursorOrder: 1, affectedOrder: 2, points: [], selectedPath, decisionTime });
+  return createAccessibilityWarning({ phase: 'underway', decisionPoint, impactDecision, alternativeSelection: resolvedAlternativeSelection(selectedPath), decisionTime });
 }
