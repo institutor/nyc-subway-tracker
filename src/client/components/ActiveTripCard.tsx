@@ -107,29 +107,6 @@ export function ActiveTripCard({
         </section>
       ) : null}
 
-      {trip.platformGuidance ? (
-        <section className="trip-module">
-          <h3>Platform position</h3>
-          <p><strong>{titleWords(trip.platformGuidance.zone)} of the platform</strong></p>
-          <p>{trip.platformGuidance.objective}</p>
-          <p>{directionLabel(trip.platformGuidance.direction)} · {titleWords(trip.platformGuidance.orientation)} orientation · {titleWords(trip.platformGuidance.certainty)} certainty</p>
-          <p className="claim-line"><time dateTime={trip.platformGuidance.verifiedAt}>Verified {formatDate(trip.platformGuidance.verifiedAt)}</time></p>
-        </section>
-      ) : null}
-
-      {trip.accessiblePath ? (
-        <section className="trip-module">
-          <h3>Structurally step-free path</h3>
-          <p><strong>Structurally step-free; live elevator status unavailable</strong></p>
-          <p>{trip.accessiblePath.verificationContext}</p>
-          <ol>
-            {trip.accessiblePath.connections.map((connection) => (
-              <li key={connection.id}>{connection.from} to {connection.to} · {titleWords(connection.movement)}{connection.equipmentId ? ` · ${connection.equipmentId}` : ''}</li>
-            ))}
-          </ol>
-        </section>
-      ) : null}
-
       {trip.contingencies && trip.contingencies.length > 0 ? (
         <section className="trip-module">
           <h3>Previously verified contingency</h3>

@@ -167,8 +167,19 @@ describe('explicit global Offline presentation', () => {
 });
 
 describe('complete device-held active trip', () => {
-  test('renders every core claim with its own scope and time plus verified-only modules', () => {
-    render(<ActiveTripCard trip={activeTrip()} offline onSetCursor={() => undefined} onClear={() => undefined} />);
+  test('renders core trip claims but withholds legacy scalar accessibility modules while public gates are locked', () => {
+    const legacy = {
+      ...activeTrip(),
+      platformGuidance: {
+        ownerRecordId: 'platform-owner', legId: 'leg-a', routeId: 'A', direction: 'southbound', orientation: 'forward',
+        zone: 'middle', objective: 'Fastest verified transfer at 59 St.', certainty: 'high', verifiedAt: '2026-08-05T11:53:00.000Z',
+      },
+      accessiblePath: {
+        ownerRecordId: 'path-owner', verificationContext: 'Complete reviewed structural chain.', verifiedAt: '2026-08-05T11:52:00.000Z',
+        connections: [{ id: 'path-connection-1', from: '125 St entrance', to: 'A platform', movement: 'elevator', equipmentId: 'EL-101', restrictions: [] }],
+      },
+    } as unknown as ActiveTripRecord;
+    render(<ActiveTripCard trip={legacy} offline onSetCursor={() => undefined} onClear={() => undefined} />);
 
     expect(screen.getByRole('heading', { name: '125 St to Canal St' })).toBeTruthy();
     expect(screen.getByText('Reference itinerary')).toBeTruthy();
@@ -192,10 +203,10 @@ describe('complete device-held active trip', () => {
     expect(equipment.textContent).toContain('Last checked 7:57 AM');
 
     expect(screen.getByRole('heading', { name: 'Exit guidance' })).toBeTruthy();
-    expect(screen.getByRole('heading', { name: 'Platform position' })).toBeTruthy();
-    expect(screen.getByText('Middle of the platform')).toBeTruthy();
-    expect(screen.getByRole('heading', { name: 'Structurally step-free path' })).toBeTruthy();
-    expect(screen.getByText('Structurally step-free; live elevator status unavailable')).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'Platform position' })).toBeNull();
+    expect(screen.queryByText('Middle of the platform')).toBeNull();
+    expect(screen.queryByRole('heading', { name: 'Structurally step-free path' })).toBeNull();
+    expect(screen.queryByText('Structurally step-free; live elevator status unavailable')).toBeNull();
     expect(screen.getByRole('heading', { name: 'Previously verified contingency' })).toBeTruthy();
   });
 
@@ -344,14 +355,6 @@ function activeTrip(): ActiveTripRecord {
     exitGuidance: {
       ownerRecordId: 'exit-owner', exitId: 'exit-canal-north', legId: 'leg-c', purpose: 'Closest verified exit for Canal Street.',
       verificationContext: 'Reviewed station-exit record.', verifiedAt: '2026-08-05T11:54:00.000Z', limitations: ['Street access may change.'],
-    },
-    platformGuidance: {
-      ownerRecordId: 'platform-owner', legId: 'leg-a', routeId: 'A', direction: 'southbound', orientation: 'forward',
-      zone: 'middle', objective: 'Fastest verified transfer at 59 St.', certainty: 'high', verifiedAt: '2026-08-05T11:53:00.000Z',
-    },
-    accessiblePath: {
-      ownerRecordId: 'path-owner', verificationContext: 'Complete reviewed structural chain.', verifiedAt: '2026-08-05T11:52:00.000Z',
-      connections: [{ id: 'path-connection-1', from: '125 St entrance', to: 'A platform', movement: 'elevator', equipmentId: 'EL-101', restrictions: [] }],
     },
     contingencies: [{
       id: 'contingency-a', ownerRecordId: 'contingency-owner', trigger: 'A service becomes unavailable.', affectedLegId: 'leg-a',

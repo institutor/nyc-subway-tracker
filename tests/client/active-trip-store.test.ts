@@ -103,6 +103,43 @@ describe('strict one-trip device store', () => {
     expect(store.read()).toMatchObject({ trip: { serviceClaims: [{ consequence: 'F trains are running with delays toward Jamaica–179 St.' }] } });
   });
 
+  test('migrates legacy scalar accessibility modules out of v3 while preserving unrelated trip data', () => {
+    const storage = new MemoryStorage();
+    const legacyClaimTrip = {
+      ...trip(),
+      accessibleRouteOnly: true,
+      platformGuidance: {
+        ownerRecordId: 'forged-platform-owner', legId: 'leg-1', routeId: 'F', direction: 'northbound',
+        orientation: 'forward', zone: 'front', objective: 'Fast transfer', certainty: 'high',
+        verifiedAt: '2026-08-05T11:50:00.000Z',
+      },
+      accessiblePath: {
+        ownerRecordId: 'forged-path-owner', verificationContext: 'Caller says reviewed',
+        verifiedAt: '2026-08-05T11:50:00.000Z',
+        connections: [{
+          id: 'forged-edge', from: 'Street', to: 'Platform', movement: 'elevator',
+          equipmentId: 'EL-FORGED', restrictions: [],
+        }],
+      },
+    };
+    storage.values.set(ACTIVE_TRIP_STORE_KEY, JSON.stringify({ version: 3, trip: legacyClaimTrip }));
+
+    const read = createBrowserActiveTripStore(storage).read();
+
+    expect(read).toMatchObject({
+      kind: 'ready', migrated: true,
+      trip: {
+        id: 'trip-1', accessibleRouteOnly: true,
+        origin: { constituentId: 'station-jay-f' }, destination: { constituentId: 'station-w4-f' },
+        serviceClaims: [{ id: 'service-1' }], equipmentClaims: [{ id: 'equipment-1' }],
+      },
+    });
+    if (read.kind !== 'ready' || !read.trip) return;
+    expect(read.trip).not.toHaveProperty('platformGuidance');
+    expect(read.trip).not.toHaveProperty('accessiblePath');
+    expect(storage.writes).toBe(0);
+  });
+
   test('migrates the exact v1 envelope name without writing until a rider mutation', () => {
     const storage = new MemoryStorage();
     const raw = JSON.stringify({ version: 1, activeTrip: legacyTrip() });

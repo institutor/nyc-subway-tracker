@@ -166,34 +166,6 @@ export interface ActiveTripExitGuidance {
   readonly limitations: readonly string[];
 }
 
-export interface ActiveTripPlatformGuidance {
-  readonly ownerRecordId: string;
-  readonly legId: string;
-  readonly routeId: string;
-  readonly direction: Direction;
-  readonly orientation: 'forward' | 'reverse';
-  readonly zone: 'front' | 'middle' | 'back';
-  readonly objective: string;
-  readonly certainty: 'high' | 'medium' | 'low';
-  readonly verifiedAt: string;
-}
-
-export interface ActiveTripPathConnection {
-  readonly id: string;
-  readonly from: string;
-  readonly to: string;
-  readonly movement: 'elevator' | 'compliant-ramp' | 'level-path';
-  readonly equipmentId?: string;
-  readonly restrictions: readonly string[];
-}
-
-export interface ActiveTripAccessiblePath {
-  readonly ownerRecordId: string;
-  readonly verificationContext: string;
-  readonly verifiedAt: string;
-  readonly connections: readonly ActiveTripPathConnection[];
-}
-
 export interface ActiveTripContingency {
   readonly id: string;
   readonly ownerRecordId: string;
@@ -225,8 +197,6 @@ export interface ActiveTripRecord {
   readonly cursor: { readonly pointId: string };
   readonly validity: ActiveTripValidity;
   readonly exitGuidance?: ActiveTripExitGuidance;
-  readonly platformGuidance?: ActiveTripPlatformGuidance;
-  readonly accessiblePath?: ActiveTripAccessiblePath;
   readonly contingencies?: readonly ActiveTripContingency[];
 }
 
@@ -343,7 +313,11 @@ function decodeEnvelope(raw: string): ActiveTripEnvelopeDecode {
   try {
     if (value.version === 3) {
       const root = strictRecord(value, ['version', 'trip']);
-      return deepFreeze({ kind: 'current', envelope: { version: 3, trip: root.trip === null ? null : parseTrip(root.trip) } });
+      const migrated = root.trip !== null && hasLegacyAccessibilityClaims(root.trip);
+      return deepFreeze({
+        kind: migrated ? 'migrated' : 'current',
+        envelope: { version: 3, trip: root.trip === null ? null : parseTrip(root.trip) },
+      });
     }
     if (value.version === 2) {
       const root = strictRecord(value, ['version', 'trip']);
@@ -435,8 +409,6 @@ function parseTrip(value: unknown): ActiveTripRecord {
     cursor: { pointId: identity(cursor.pointId, 'trip cursor point') },
     validity: parseValidity(root.validity),
     ...(root.exitGuidance === undefined ? {} : { exitGuidance: parseExitGuidance(root.exitGuidance) }),
-    ...(root.platformGuidance === undefined ? {} : { platformGuidance: parsePlatformGuidance(root.platformGuidance) }),
-    ...(root.accessiblePath === undefined ? {} : { accessiblePath: parseAccessiblePath(root.accessiblePath) }),
     ...(root.contingencies === undefined ? {} : {
       contingencies: boundedArray(root.contingencies, 1, 2, parseContingency, 'contingencies'),
     }),
@@ -701,47 +673,6 @@ function parseExitGuidance(value: unknown): ActiveTripExitGuidance {
   });
 }
 
-function parsePlatformGuidance(value: unknown): ActiveTripPlatformGuidance {
-  const root = strictRecord(value, ['ownerRecordId', 'legId', 'routeId', 'direction', 'orientation', 'zone', 'objective', 'certainty', 'verifiedAt']);
-  return deepFreeze({
-    ownerRecordId: identity(root.ownerRecordId, 'platform owner record'),
-    legId: identity(root.legId, 'platform leg'),
-    routeId: identity(root.routeId, 'platform route'),
-    direction: direction(root.direction),
-    orientation: enumeration(root.orientation, ['forward', 'reverse'] as const, 'platform orientation'),
-    zone: enumeration(root.zone, ['front', 'middle', 'back'] as const, 'platform zone'),
-    objective: display(root.objective, 'platform objective'),
-    certainty: enumeration(root.certainty, ['high', 'medium', 'low'] as const, 'platform certainty'),
-    verifiedAt: instant(root.verifiedAt, 'platform guidance'),
-  });
-}
-
-function parsePathConnection(value: unknown): ActiveTripPathConnection {
-  const root = strictRecord(value, ['id', 'from', 'to', 'movement', 'restrictions'], ['equipmentId']);
-  const movement = enumeration(root.movement, ['elevator', 'compliant-ramp', 'level-path'] as const, 'path movement');
-  if (movement === 'elevator' && root.equipmentId === undefined) throw new Error('Elevator path lacks equipment identity');
-  return deepFreeze({
-    id: identity(root.id, 'path connection'),
-    from: display(root.from, 'path start'),
-    to: display(root.to, 'path end'),
-    movement,
-    ...(root.equipmentId === undefined ? {} : { equipmentId: identity(root.equipmentId, 'path equipment') }),
-    restrictions: boundedStrings(root.restrictions, 0, MAX_STEPS, 'path restrictions'),
-  });
-}
-
-function parseAccessiblePath(value: unknown): ActiveTripAccessiblePath {
-  const root = strictRecord(value, ['ownerRecordId', 'verificationContext', 'verifiedAt', 'connections']);
-  const connections = boundedArray(root.connections, 1, MAX_POINTS, parsePathConnection, 'path connections');
-  assertUnique(connections.map(({ id }) => id), 'path connection');
-  return deepFreeze({
-    ownerRecordId: identity(root.ownerRecordId, 'path owner record'),
-    verificationContext: display(root.verificationContext, 'path verification'),
-    verifiedAt: instant(root.verifiedAt, 'accessible path'),
-    connections,
-  });
-}
-
 function parseContingency(value: unknown): ActiveTripContingency {
   const root = strictRecord(
     value,
@@ -854,15 +785,6 @@ function validateTripReferences(trip: ActiveTripRecord): void {
   if (trip.exitGuidance && (!legById.has(trip.exitGuidance.legId) || trip.exitGuidance.verifiedAt > trip.capturedAt)) {
     throw new Error('Exit guidance is outside the trip');
   }
-  if (trip.platformGuidance) {
-    const leg = legById.get(trip.platformGuidance.legId);
-    if (!leg || leg.route.id !== trip.platformGuidance.routeId || leg.boundDirection !== trip.platformGuidance.direction) {
-      throw new Error('Platform guidance is outside the trip');
-    }
-    if (trip.platformGuidance.verifiedAt > trip.capturedAt) throw new Error('Platform guidance postdates capture');
-  }
-  if (trip.accessibleRouteOnly && trip.accessiblePath === undefined) throw new Error('Accessible trip lacks a complete path');
-  if (trip.accessiblePath?.verifiedAt && trip.accessiblePath.verifiedAt > trip.capturedAt) throw new Error('Accessible path postdates capture');
   for (const contingency of trip.contingencies ?? []) {
     const leg = legById.get(contingency.affectedLegId);
     if (!leg || leg.route.id !== contingency.routeId || leg.boundDirection !== contingency.direction
@@ -873,6 +795,10 @@ function validateTripReferences(trip: ActiveTripRecord): void {
     if (contingency.lastCheckedAt > trip.capturedAt) throw new Error('Contingency postdates capture');
   }
   assertUnique((trip.contingencies ?? []).map(({ id }) => id), 'contingency');
+}
+
+function hasLegacyAccessibilityClaims(value: unknown): boolean {
+  return isPlainRecord(value) && (value.platformGuidance !== undefined || value.accessiblePath !== undefined);
 }
 
 function validateClaimScope(

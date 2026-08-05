@@ -7,6 +7,7 @@ import type { BoardEnvelopeDto, MapOverlayEnvelopeDto } from '../../src/client/a
 import type { ReconnectionTransition } from '../../src/client/recovery/run-reconnection';
 import { writeLastUsedStation } from '../../src/client/state/app-state';
 import {
+  ACTIVE_TRIP_STORE_KEY,
   createBrowserActiveTripStore,
   type ActiveTripRecord,
 } from '../../src/client/storage/active-trip-store';
@@ -184,6 +185,51 @@ describe('App reconnection flow', () => {
       { kind: 'transfer', id: 'transfer-2' },
       { kind: 'transfer', id: 'transfer-3' },
     ]);
+  });
+
+  test('does not admit legacy scalar accessibility claims into public UI or recovery ownership', async () => {
+    const storage = new MemoryStorage();
+    const legacy = {
+      ...timedActiveTrip(),
+      accessibleRouteOnly: true,
+      platformGuidance: {
+        ownerRecordId: 'forged-platform-owner', legId: 'leg-1', routeId: 'A', direction: 'southbound',
+        orientation: 'forward', zone: 'front', objective: 'Fast exit', certainty: 'high',
+        verifiedAt: '2026-08-05T11:50:00.000Z',
+      },
+      accessiblePath: {
+        ownerRecordId: 'forged-path-owner', verificationContext: 'Caller says reviewed',
+        verifiedAt: '2026-08-05T11:50:00.000Z',
+        connections: [{ id: 'forged-edge', from: 'Street', to: 'Platform', movement: 'elevator', equipmentId: 'EL-FORGED', restrictions: [] }],
+      },
+    } as unknown as ActiveTripRecord;
+    storage.values.set(ACTIVE_TRIP_STORE_KEY, JSON.stringify({ version: 3, trip: legacy }));
+    const navigatorState = { onLine: false };
+    const events = new ControlledConnectivityEvents();
+    const transitions: ReconnectionTransition[] = [];
+
+    render(<App
+      api={createClientApi()}
+      geolocation={new ControlledGeolocation()}
+      storage={storage}
+      connectivityOptions={{ navigator: navigatorState, eventTarget: events }}
+      recoveryNow={() => new Date('2026-08-05T12:00:00.000Z')}
+      onReconnectionTransition={(transition) => transitions.push(transition)}
+    />);
+
+    expect(screen.getByRole('heading', { name: '125 St to 59 St' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Platform position' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Structurally step-free path' })).not.toBeInTheDocument();
+
+    navigatorState.onLine = true;
+    act(() => events.dispatch('online'));
+    await waitFor(() => expect(transitions.length).toBeGreaterThan(0));
+    const context = transitions[0]!.state.context;
+    expect(context.guidanceRequirements.positioning).toBe('none');
+    expect(context.recovery.eligibleScopes).not.toContainEqual({ kind: 'path', id: 'forged-path-owner' });
+    expect(context.recovery.eligibleScopes).not.toContainEqual({ kind: 'platform', id: 'forged-platform-owner' });
+    expect(context.recovery.ownerScopes['accessible-path']).not.toContainEqual({ kind: 'path', id: 'forged-path-owner' });
+    expect(context.recovery.ownerScopes.positioning).not.toContainEqual({ kind: 'platform', id: 'forged-platform-owner' });
   });
 });
 
