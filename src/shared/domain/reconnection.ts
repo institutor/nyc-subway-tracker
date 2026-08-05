@@ -394,6 +394,9 @@ export function resolveReconnectionWarning(
     if (resolution.gate.disposition !== 'accepted-fresh') {
       throw new Error('Warning resolution requires fresh owner-accepted evidence');
     }
+    if (Date.parse(resolution.gate.evidenceAt) < Date.parse(warning.ownerGate.evidenceAt)) {
+      throw new Error('Warning resolution evidence cannot predate the invalidation');
+    }
     if (Date.parse(resolution.gate.acceptedAt) < Date.parse(warning.ownerGate.acceptedAt)) {
       throw new Error('Warning resolution evidence cannot predate the invalidation');
     }

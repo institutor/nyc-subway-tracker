@@ -734,6 +734,24 @@ describe('owner-gated reconnection ordering', () => {
     expect(state.visible.activeWarnings).toHaveLength(1);
   });
 
+  test('does not clear a warning with a newly named but stale pre-invalidation observation', () => {
+    const state = stateWithStageOneWarning();
+
+    expect(() => resolveReconnectionWarning(state, {
+      warningId: 'trip-invalidation-stage-1',
+      resolution: {
+        kind: 'owner-resolved',
+        gate: {
+          ...gate('accessible-path'),
+          evidenceId: 'accessible-path-renamed-stale-observation',
+          evidenceAt: RECOVERY.startedAt,
+          acceptedAt: '2026-08-05T12:00:01.000Z',
+        },
+      },
+    }, '2026-08-05T12:00:02.000Z')).toThrow(/evidence cannot predate the invalidation/i);
+    expect(state.visible.activeWarnings).toHaveLength(1);
+  });
+
   test('binds rider replacement to both recovery chronology and the local receipt ceiling', () => {
     const state = stateWithStageOneWarning();
     const resolution = (actedAt: string) => ({
