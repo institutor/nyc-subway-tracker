@@ -75,6 +75,24 @@ describe('offline service-worker policy', () => {
     expect(worker.cache('subway-first-history-v2').puts).toEqual([]);
   });
 
+  test('serves an exact reviewed shell asset across harmless Origin header variance', async () => {
+    const worker = createWorker();
+    const asset = request('/assets/index-app.js');
+    worker.cache('subway-first-shell-v2').seed(asset.url, new Response('cached app shell', {
+      status: 200,
+      headers: { 'content-type': 'text/javascript', vary: 'Origin' },
+    }));
+    worker.fetcher.mockRejectedValue(new TypeError('network unreachable'));
+
+    const response = await worker.dispatchFetch(asset);
+
+    expect(await response?.text()).toBe('cached app shell');
+    expect(worker.cache('subway-first-shell-v2').matches).toContainEqual({
+      key: asset.url,
+      options: { ignoreVary: true },
+    });
+  });
+
   test('serves a failed recent board or overlay only as explicitly historical content', async () => {
     const worker = createWorker();
     const board = request('/api/v1/stations/station-a/board?routes=F&direction=northbound');
@@ -278,14 +296,19 @@ class ControlledCacheStorage {
 class ControlledCache {
   readonly added: string[] = [];
   readonly puts: Array<{ key: string; response: Response }> = [];
+  readonly matches: Array<{ key: string; options: { readonly ignoreVary?: boolean } }> = [];
   private readonly values = new Map<string, Response>();
 
   async addAll(urls: readonly string[]): Promise<void> {
     this.added.push(...urls);
   }
 
-  async match(input: string | ControlledRequest): Promise<Response | undefined> {
+  async match(
+    input: string | ControlledRequest,
+    options: { readonly ignoreVary?: boolean } = {},
+  ): Promise<Response | undefined> {
     const key = typeof input === 'string' ? input : input.url;
+    this.matches.push({ key, options });
     return this.values.get(key)?.clone();
   }
 

@@ -129,6 +129,8 @@ export function App({
   const [catalog, setCatalog] = useState<CatalogEnvelopeDto | undefined>(local.structural?.catalog);
   const [mapVersions, setMapVersions] = useState<BootstrapDataDto['contentVersions']['maps'] | undefined>(local.structural?.contentVersions.maps);
   const [journeyReference, setJourneyReference] = useState<JourneyGraphReferenceDto>();
+  const initialServiceWorkerController = useRef(browserServiceWorker()?.controller ?? null);
+  const [serviceWorkerClaimGeneration, setServiceWorkerClaimGeneration] = useState(0);
   const [savedRecords, setSavedRecords] = useState<readonly SavedRecord[]>(local.savedRecords);
   const [activeTrip, setActiveTrip] = useState<ActiveTripRecord | null>(local.activeTrip);
   const [activeTripOpen, setActiveTripOpen] = useState(offline);
@@ -148,6 +150,21 @@ export function App({
   const savedAbort = useRef(new Map<string, AbortController>());
   const recoveryAbort = useRef<AbortController | undefined>(undefined);
   const recoveryGeneration = useRef(0);
+
+  useEffect(() => {
+    const serviceWorker = browserServiceWorker();
+    if (!serviceWorker) return undefined;
+    let accountedController = initialServiceWorkerController.current;
+    const acceptController = () => {
+      const controller = serviceWorker.controller;
+      if (!controller || controller === accountedController) return;
+      accountedController = controller;
+      setServiceWorkerClaimGeneration((generation) => generation + 1);
+    };
+    serviceWorker.addEventListener('controllerchange', acceptController);
+    acceptController();
+    return () => serviceWorker.removeEventListener('controllerchange', acceptController);
+  }, []);
 
   useEffect(() => {
     if (offline) setActiveTripOpen(Boolean(activeTrip));
@@ -189,6 +206,19 @@ export function App({
       controller.abort();
     };
   }, [apiClient, connected, connectivity.reportRequestResult, structuralStore]);
+
+  useEffect(() => {
+    if (!connected || serviceWorkerClaimGeneration === 0 || !bootstrap) return undefined;
+    const controller = new AbortController();
+    const versions = bootstrap.data.contentVersions;
+    void Promise.allSettled([
+      apiClient.catalog(versions.stationCatalog, controller.signal),
+      apiClient.journeyReference(versions.journeyGraph, controller.signal),
+      apiClient.mapReference('day', versions.maps.day, controller.signal),
+      apiClient.mapReference('night', versions.maps.night, controller.signal),
+    ]);
+    return () => controller.abort();
+  }, [apiClient, bootstrap, connected, serviceWorkerClaimGeneration]);
 
   useEffect(() => {
     const contentVersion = local.structural?.contentVersions.journeyGraph;
@@ -1033,6 +1063,11 @@ function classifyRequestFailure(error: unknown): 'network-unreachable' | 'domain
   if (error instanceof TransitApiError) return error.category;
   if (error instanceof TypeError || (error instanceof DOMException && error.name === 'NetworkError')) return 'network-unreachable';
   return 'domain-unavailable';
+}
+
+function browserServiceWorker(): ServiceWorkerContainer | undefined {
+  if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return undefined;
+  return navigator.serviceWorker;
 }
 
 function browserStorage(): Storage {

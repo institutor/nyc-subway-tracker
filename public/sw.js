@@ -128,7 +128,11 @@ async function networkFirstNavigation(request) {
 
 async function cacheFirst(request, cacheName) {
   const cache = await caches.open(cacheName);
-  const stored = await cache.match(request);
+  // Vite and some CDNs emit `Vary: Origin` for hashed assets. The install-time
+  // request and the page's same-origin `crossorigin` request can therefore have
+  // different header sets even though this policy has already admitted one
+  // exact, same-origin immutable URL.
+  const stored = await cache.match(request, { ignoreVary: true });
   if (stored) return stored;
   const response = await fetch(request);
   if (isCacheableResponse(response, cacheName === CACHE_NAMES.structural ? 'structural' : 'shell')) {
