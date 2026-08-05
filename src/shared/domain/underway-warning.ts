@@ -47,7 +47,7 @@ export function createAccessibilityWarning(input: {
     warningId: `warning:${input.impactDecision.decisionId}:${input.alternativeSelection.decisionId}`,
     active: true, state, priority: 'urgent', content: [input.fact,input.connection,input.consequence,point,input.freshness,safeAction],
     selectedPathId: input.impactDecision.affectedPathId,
-    replacementPathIds: input.alternativeSelection.visible.map((candidate) => candidate.pathDecision.pathId),
+    replacementPathIds: input.alternativeSelection.visible.map((candidate) => candidate.pathId),
     destinationIntent: input.impactDecision.destinationIntent, accessibleRouteOnly: true, acknowledged: false, stale: false,
   });
 }

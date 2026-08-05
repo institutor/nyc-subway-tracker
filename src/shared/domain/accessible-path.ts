@@ -33,6 +33,19 @@ export interface ResolvedAccessiblePathDecision {
   readonly evaluationId: string;
   readonly pathId: string;
   readonly packageVersion: string;
+  readonly stationComplexId: string;
+  readonly constituentStationId: string;
+  readonly originIntent: string;
+  readonly destinationIntent: string;
+  readonly routeId: string;
+  readonly direction: Direction;
+  readonly platformId: string;
+  readonly equipmentIds: readonly string[];
+  readonly equipmentDecisionIds: Readonly<Record<string, string>>;
+  readonly equipmentSourceScopeId: string;
+  readonly equipmentSourceVersion: string;
+  readonly exposureDecisionId: string | null;
+  readonly exposureReleaseDecisionId: string | null;
   readonly surface: ExposureSurface | 'locked';
   readonly evaluatedAt: string;
   readonly validFrom: string;
@@ -43,6 +56,21 @@ export interface ResolvedAccessiblePathDecision {
   readonly offlineCopy?: 'Structurally step-free; live elevator status unavailable';
 }
 const resolvedAccessiblePathDecisions = new WeakSet<object>();
+const resolvedPathEquipmentDependencies = new WeakMap<object, readonly EquipmentStatusDecision[]>();
+
+export interface AccessiblePathAssessmentRequest {
+  readonly stationId: string;
+  readonly originIntent: string;
+  readonly destinationIntent: string;
+  readonly routeId: string;
+  readonly direction: Direction;
+  readonly platformId: string;
+  readonly equipmentSourceScopeId: string;
+  readonly equipmentSourceVersion: string;
+  readonly equipment: Readonly<Record<string, EquipmentStatusDecision>>;
+  readonly exposure?: ResolvedAccessibilityExposure;
+  readonly decisionTime: Date;
+}
 
 const COVERAGE_FIELDS = ['coverageRecordId','coverageRecordVersion','stationComplex','constituentStation','routeOrLine','normalizedDirection','accessibleStreetEntrance','streetCorner','directionalPlatform','boardingArea','completePathId','orderedEdgeIds','equipmentIds','accessiblePathMembershipByEdge','operatingRestrictions','evidenceSources','evidenceReferences','verificationDate','verifier','productDecision','accessibilityDecision','dataQualityDecision','contentDecision','operationsDecision','structuralDisposition','unsupportedScope'] as const;
 const EDGE_EVIDENCE_FIELDS = ['movementType','start','routeId','direction','equipmentId','officialAccessiblePath','restrictions','verificationDate'] as const;
@@ -98,11 +126,19 @@ export function validateAccessibilityRegistry(raw: readonly unknown[]): readonly
 }
 export function orderAccessiblePaths(paths: readonly AccessibilityPackage[]): readonly AccessibilityPackage[] { return Object.freeze([...paths].sort((a,b) => compareCanonicalIdentity(a.canonicalPathIdentity,b.canonicalPathIdentity))); }
 
-export function assessAccessiblePath(rawPackage: AccessibilityPackage, request: { readonly stationId: string; readonly routeId: string; readonly direction: Direction; readonly platformId: string; readonly equipmentSourceScopeId: string; readonly equipmentSourceVersion: string; readonly equipment: Readonly<Record<string, EquipmentStatusDecision>>; readonly exposure?: ResolvedAccessibilityExposure; readonly decisionTime: Date }): ResolvedAccessiblePathDecision {
+export function assessAccessiblePath(rawPackage: AccessibilityPackage, request: AccessiblePathAssessmentRequest): ResolvedAccessiblePathDecision {
   const item = validateAccessibilityPackage(rawPackage);
   const evaluatedAt = canonicalDate(request.decisionTime, 'path decision time');
-  const decide = (status: ResolvedAccessiblePathDecision['status'], reason: string, offlineCopy?: ResolvedAccessiblePathDecision['offlineCopy']) => resolvedPathDecision(item, status, reason, evaluatedAt, request.exposure, offlineCopy);
-  if (!exposureAllowsEvaluation(request.exposure, item.version, 'accessibility', request.decisionTime)) return decide('unknown', 'Accessibility exposure evidence is pending, expired, or does not match this immutable package.');
+  const originIntent = intent(request.originIntent, 'path origin intent');
+  const destinationIntent = intent(request.destinationIntent, 'path destination intent');
+  const dependencies: EquipmentStatusDecision[] = [];
+  const acceptedExposure = exposureAllowsEvaluation(request.exposure, item.version, 'accessibility', request.decisionTime)
+    ? request.exposure
+    : undefined;
+  const decide = (status: ResolvedAccessiblePathDecision['status'], reason: string, offlineCopy?: ResolvedAccessiblePathDecision['offlineCopy']) => resolvedPathDecision(
+    item, request, originIntent, destinationIntent, dependencies, status, reason, evaluatedAt, acceptedExposure, offlineCopy,
+  );
+  if (!acceptedExposure) return decide('unknown', 'Accessibility exposure evidence is pending, expired, or does not match this immutable package.');
   if (item.coverage.constituentStation.id !== request.stationId || item.coverage.routeOrLine !== request.routeId || item.coverage.normalizedDirection !== request.direction || item.coverage.directionalPlatform !== request.platformId) return decide('ineligible', 'No reviewed path package matches the exact station, route, direction, and platform.');
   const missing = item.coverage.equipmentIds.filter((id) => !request.equipment[id]);
   if (missing.length) return decide('unknown', 'Live route-critical equipment evidence is missing.', 'Structurally step-free; live elevator status unavailable');
@@ -114,6 +150,7 @@ export function assessAccessiblePath(rawPackage: AccessibilityPackage, request: 
       || equipment.sourceVersion !== request.equipmentSourceVersion) {
       return decide('unknown', `Current status evidence for required equipment ${id} has the wrong identity, owner, scope, or version.`);
     }
+    dependencies.push(equipment);
     if (equipment.state === 'out-of-service' || equipment.state === 'out-of-service-rechecking') return decide('ineligible', `Required equipment ${id} has accepted adverse evidence.`);
     if (equipment.health !== 'current' || equipment.state !== 'no-official-outage-reported') return decide('unknown', `Current status for required equipment ${id} is not verified.`);
   }
@@ -125,34 +162,70 @@ export function isResolvedAccessiblePathDecision(value: unknown): value is Resol
 }
 
 export function accessiblePathDecisionAllowsPresentation(value: unknown, surface: ExposureSurface, decisionTime: Date): value is ResolvedAccessiblePathDecision {
+  return accessiblePathDecisionAllowsUse(value, decisionTime) && value.surface === surface;
+}
+
+export function accessiblePathDecisionAllowsUse(value: unknown, decisionTime: Date): value is ResolvedAccessiblePathDecision {
   const time = decisionTime instanceof Date ? decisionTime.getTime() : Number.NaN;
-  return isResolvedAccessiblePathDecision(value) && value.surface === surface && Number.isFinite(time)
-    && time >= Date.parse(value.validFrom) && time <= Date.parse(value.validThrough);
+  const dependencies = value && typeof value === 'object' ? resolvedPathEquipmentDependencies.get(value) : undefined;
+  return isResolvedAccessiblePathDecision(value) && Number.isFinite(time)
+    && time >= Date.parse(value.validFrom) && time <= Date.parse(value.validThrough)
+    && Boolean(dependencies)
+    && dependencies!.every((decision) => equipmentDecisionAllowsUse(decision, decisionTime));
 }
 
 function resolvedPathDecision(
   item: AccessibilityPackage,
+  request: AccessiblePathAssessmentRequest,
+  originIntent: string,
+  destinationIntent: string,
+  equipmentDependencies: readonly EquipmentStatusDecision[],
   status: ResolvedAccessiblePathDecision['status'],
   reason: string,
   evaluatedAt: string,
   exposure?: ResolvedAccessibilityExposure,
   offlineCopy?: ResolvedAccessiblePathDecision['offlineCopy'],
 ): ResolvedAccessiblePathDecision {
-  const decision = Object.freeze({
+  const validFromMs = Math.max(
+    Date.parse(evaluatedAt),
+    ...equipmentDependencies.map((dependency) => Date.parse(dependency.validFrom)),
+    ...(exposure ? [Date.parse(exposure.validFrom)] : []),
+  );
+  const validThroughMs = Math.min(
+    ...(exposure ? [Date.parse(exposure.validThrough)] : [Date.parse(evaluatedAt)]),
+    ...equipmentDependencies.map((dependency) => Date.parse(dependency.validThrough)),
+  );
+  const equipmentDecisionIds = Object.fromEntries(equipmentDependencies.map((dependency) => [dependency.targetEquipmentId, dependency.decisionId]));
+  const decision = deepFreeze({
     [accessiblePathDecisionBrand]: true as const,
-    evaluationId: `${item.packageId}:${item.version}:${status}`,
+    evaluationId: [item.packageId, item.version, status, evaluatedAt, originIntent, destinationIntent,
+      exposure?.decisionId ?? 'locked', ...equipmentDependencies.map((dependency) => dependency.decisionId)].join('|'),
     pathId: item.canonicalPathIdentity,
     packageVersion: item.version,
-    surface: exposure?.surface ?? 'locked',
+    stationComplexId: item.coverage.stationComplex.id,
+    constituentStationId: item.coverage.constituentStation.id,
+    originIntent,
+    destinationIntent,
+    routeId: item.coverage.routeOrLine,
+    direction: item.coverage.normalizedDirection,
+    platformId: item.coverage.directionalPlatform,
+    equipmentIds: [...item.coverage.equipmentIds],
+    equipmentDecisionIds,
+    equipmentSourceScopeId: request.equipmentSourceScopeId,
+    equipmentSourceVersion: request.equipmentSourceVersion,
+    exposureDecisionId: exposure?.decisionId ?? null,
+    exposureReleaseDecisionId: exposure?.releaseDecisionId ?? null,
+    surface: exposure?.surface ?? ('locked' as const),
     evaluatedAt,
-    validFrom: exposure?.validFrom ?? evaluatedAt,
-    validThrough: exposure?.validThrough ?? evaluatedAt,
+    validFrom: new Date(validFromMs).toISOString(),
+    validThrough: new Date(validThroughMs).toISOString(),
     status,
     reason,
     accessibleRouteOnly: true as const,
     ...(offlineCopy ? { offlineCopy } : {}),
   });
   resolvedAccessiblePathDecisions.add(decision);
+  resolvedPathEquipmentDependencies.set(decision, Object.freeze([...equipmentDependencies]));
   return decision;
 }
 
@@ -169,6 +242,7 @@ function validateEdge(raw: unknown): AccessiblePathEdge {
   return deepFreeze(value);
 }
 function asRecord(value: unknown, name: string): Record<string, unknown> { if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(`${name} must be an object`); return value as Record<string, unknown>; }
+function intent(value: unknown, name: string): string { if (typeof value !== 'string' || value.trim() !== value || !value || value.length > 240) throw new Error(`${name} is invalid`); return value; }
 function exactRecord(value: unknown, fields: readonly string[], name: string): Record<string, unknown> {
   const record = asRecord(value, name);
   const missing = fields.filter((field) => !(field in record));

@@ -1,26 +1,31 @@
 import { describe, expect, test } from 'vitest';
-import { chooseAccessibilityAlternative, type AccessibilityAlternative } from '../../src/shared/domain/accessibility-alternatives';
+import { acceptAccessibilityAlternativeRegistry, chooseAccessibilityAlternative } from '../../src/shared/domain/accessibility-alternatives';
 import { acceptEquipmentHistory, acceptEquipmentInventory, assessEquipmentStatus } from '../../src/shared/domain/equipment-status';
-import { classifyPathImpact, type ImpactPath } from '../../src/shared/domain/path-impact';
+import { classifyPathImpact } from '../../src/shared/domain/path-impact';
 import { createAccessibilityWarning, deriveLastAccessibleDecisionPoint, transitionAccessibilityWarning } from '../../src/shared/domain/underway-warning';
 import { resolvedPath } from '../fixtures/accessibility-decisions';
 
 function impact() {
-  const inventory = acceptEquipmentInventory({ inventoryId: 'inv', evidenceOwner: 'official-equipment-inventory', sourceScopeId: 'scope', sourceVersion: 'inv-v1', acceptedAt: '2026-07-30T00:00:00.000Z', equipmentIds: ['EL-1'] });
-  const history = acceptEquipmentHistory({ historyId: 'history', evidenceOwner: 'official-equipment-status', sourceScopeId: 'scope', sourceVersion: 'status-v1', inventoryVersion: 'inv-v1', snapshots: [{ snapshotId: 'snap', sequenceOrdinal: 1, predecessorSnapshotId: null, evidenceOwner: 'official-equipment-status', sourceScopeId: 'scope', sourceVersion: 'status-v1', inventoryVersion: 'inv-v1', sourceTimestamp: '2026-07-30T12:00:00.000Z', acceptedAt: '2026-07-30T12:00:01.000Z', declaredRecordCount: 1, records: [{ recordId: 'out', equipmentId: 'EL-1', state: 'out-of-service' }] }] }, inventory);
-  const changedEquipment = assessEquipmentStatus({ targetEquipmentId: 'EL-1', decisionTime: new Date('2026-07-30T12:01:00.000Z'), inventory, history });
-  const selectedPath: ImpactPath = { canonicalIdentity: 'selected', complexId: 'A12', origin: 'origin', destination: '168 St', routeId: 'A', direction: 'northbound', platformId: 'A12N', equipmentIds: ['EL-1'], pathDecision: resolvedPath('selected') };
-  return classifyPathImpact({ changedEquipment, selectedPath, alternatePaths: [], destinationIntent: '168 St' })!;
+  const inventory = acceptEquipmentInventory({ inventoryId: 'inv', evidenceOwner: 'official-equipment-inventory', sourceScopeId: 'nyc-equipment', sourceVersion: 'inv-v1', acceptedAt: '2026-07-31T23:00:00.000Z', equipmentIds: ['EL-1'] });
+  const history = acceptEquipmentHistory({ historyId: 'history', evidenceOwner: 'official-equipment-status', sourceScopeId: 'nyc-equipment', sourceVersion: 'equipment-v1', inventoryVersion: 'inv-v1', snapshots: [{ snapshotId: 'snap', sequenceOrdinal: 1, predecessorSnapshotId: null, evidenceOwner: 'official-equipment-status', sourceScopeId: 'nyc-equipment', sourceVersion: 'equipment-v1', inventoryVersion: 'inv-v1', sourceTimestamp: '2026-08-01T00:01:00.000Z', acceptedAt: '2026-08-01T00:01:01.000Z', declaredRecordCount: 1, records: [{ recordId: 'out', equipmentId: 'EL-1', state: 'out-of-service' }] }] }, inventory);
+  const changedEquipment = assessEquipmentStatus({ targetEquipmentId: 'EL-1', decisionTime: new Date('2026-08-01T00:02:00.000Z'), inventory, history });
+  const selectedPath = resolvedPath('selected', 'eligible', { equipmentIds: ['EL-1'], destinationIntent: '168 St' });
+  return { decision: classifyPathImpact({ changedEquipment, selectedPath, alternatePaths: [], decisionTime: new Date('2026-08-01T00:02:00.000Z') })!, selectedPath };
 }
 
-function alternatives() {
-  const pathDecision = resolvedPath('alt');
-  const candidate: AccessibilityAlternative = { id: 'alt', label: 'Use the verified 127 St entrance path.', canonicalIdentity: 'alt', tier: 'same-complex', pathDecision, singlePointElevatorDependencies: 0, transfers: 0, accessibleWalkingMeters: 100, disruptionRisk: 0, travelSeconds: 60, includesBus: false };
-  return chooseAccessibilityAlternative([candidate], { includeBuses: false });
+function alternatives(selectedPath: ReturnType<typeof resolvedPath>) {
+  const pathDecision = resolvedPath('alt', 'eligible', { originIntent: selectedPath.originIntent, destinationIntent: selectedPath.destinationIntent });
+  const registry = acceptAccessibilityAlternativeRegistry({
+    registryId: 'warning-alternatives', evidenceOwner: 'app-owned-accessibility-alternatives',
+    selectedPathEvaluationId: selectedPath.evaluationId, createdAt: '2026-08-01T00:00:00.000Z', validThrough: '2026-08-01T00:04:00.000Z',
+    offers: [{ offerId: 'alt', evidenceOwner: 'app-owned-accessibility-alternatives', label: 'Use the verified 127 St entrance path.', canonicalIdentity: pathDecision.pathId, pathEvaluationId: pathDecision.evaluationId, pathPackageVersion: pathDecision.packageVersion, tier: 'same-complex', originIntent: pathDecision.originIntent, destinationIntent: pathDecision.destinationIntent, singlePointElevatorDependencies: 0, transfers: 0, accessibleWalkingMeters: 100, disruptionRisk: 0, travelSeconds: 60, includesBus: false }],
+  }, selectedPath, [pathDecision]);
+  return { selection: chooseAccessibilityAlternative(registry, { decisionTime: new Date('2026-08-01T00:02:00.000Z') }), pathDecision };
 }
 
 function warning(phase: 'predeparture' | 'underway' = 'underway', decisionPoint: ReturnType<typeof deriveLastAccessibleDecisionPoint> = { status: 'unknown' }) {
-  return createAccessibilityWarning({ fact: 'Elevator EL-1 status is Unknown.', connection: 'Northbound platform elevator', consequence: 'The selected step-free path cannot be verified right now.', freshness: 'Checked time unavailable', phase, decisionPoint, impactDecision: impact(), alternativeSelection: alternatives() });
+  const impactContext = impact();
+  return createAccessibilityWarning({ fact: 'Elevator EL-1 status is Unknown.', connection: 'Northbound platform elevator', consequence: 'The selected step-free path cannot be verified right now.', freshness: 'Checked time unavailable', phase, decisionPoint, impactDecision: impactContext.decision, alternativeSelection: alternatives(impactContext.selectedPath).selection });
 }
 
 describe('underway accessibility warning', () => {
@@ -51,7 +56,8 @@ describe('underway accessibility warning', () => {
     const active = warning();
     expect(transitionAccessibilityWarning(active, { type: 'replacement-selected', pathDecision: resolvedPath('other') }).active).toBe(true);
     expect(transitionAccessibilityWarning(active, { type: 'replacement-selected', pathDecision: resolvedPath('alt', 'ineligible') }).active).toBe(true);
-    expect(transitionAccessibilityWarning(active, { type: 'replacement-selected', pathDecision: alternatives().first!.pathDecision })).toMatchObject({ active: false, selectedPathId: 'alt' });
+    const linked = impact();
+    expect(transitionAccessibilityWarning(active, { type: 'replacement-selected', pathDecision: alternatives(linked.selectedPath).pathDecision })).toMatchObject({ active: false, selectedPathId: 'alt' });
     expect(transitionAccessibilityWarning(active, { type: 'owner-resolved', pathDecision: resolvedPath('selected', 'ineligible') }).active).toBe(true);
     expect(transitionAccessibilityWarning(active, { type: 'owner-resolved', pathDecision: resolvedPath('selected') }).active).toBe(false);
   });

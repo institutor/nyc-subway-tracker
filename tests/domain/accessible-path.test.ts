@@ -72,7 +72,11 @@ function equipment(overrides: { targetEquipmentId?: string; snapshotScope?: stri
   });
 }
 
-const equipmentEvidence = { equipmentSourceScopeId: 'nyc-equipment', equipmentSourceVersion: 'equipment-v1', decisionTime: at('2026-08-01T00:00:00Z') } as const;
+const equipmentEvidence = {
+  originIntent: 'origin-street', destinationIntent: 'destination-street',
+  equipmentSourceScopeId: 'nyc-equipment', equipmentSourceVersion: 'equipment-v1',
+  decisionTime: at('2026-08-01T00:00:00Z'),
+} as const;
 
 const validationAccessibilityExposure = resolveAccessibilityExposure(
   VALIDATION_EXPOSURE_REGISTRY,
@@ -176,6 +180,23 @@ describe('complete accessible path evidence', () => {
     expect(assessAccessiblePath(packageFixture(), { stationId: 'A12', routeId: 'A', direction: 'northbound', platformId: 'A12N', equipment: { 'EL-A12-01': equipment() }, exposure: validationAccessibilityExposure, ...equipmentEvidence }).status).toBe('eligible');
     expect(assessAccessiblePath(packageFixture(), { stationId: 'A12', routeId: 'A', direction: 'southbound', platformId: 'A12S', equipment: {}, exposure: validationAccessibilityExposure, ...equipmentEvidence }).status).toBe('ineligible');
     expect(assessAccessiblePath(packageFixture(), { stationId: 'A12', routeId: 'A', direction: 'northbound', platformId: 'A12N', equipment: {}, exposure: validationAccessibilityExposure, ...equipmentEvidence }).offlineCopy).toBe('Structurally step-free; live elevator status unavailable');
+  });
+
+  test('owns exact path scope, rider intent, equipment decisions, exposure, and intersected validity', () => {
+    const machine = equipment();
+    const decision = assessAccessiblePath(packageFixture(), {
+      stationId: 'A12', routeId: 'A', direction: 'northbound', platformId: 'A12N',
+      equipment: { 'EL-A12-01': machine }, exposure: validationAccessibilityExposure, ...equipmentEvidence,
+    });
+    expect(decision).toMatchObject({
+      stationComplexId: 'A12', constituentStationId: 'A12', originIntent: 'origin-street', destinationIntent: 'destination-street',
+      routeId: 'A', direction: 'northbound', platformId: 'A12N', equipmentIds: ['EL-A12-01'],
+      equipmentDecisionIds: { 'EL-A12-01': machine.decisionId }, equipmentSourceScopeId: 'nyc-equipment',
+      equipmentSourceVersion: 'equipment-v1', exposureDecisionId: validationAccessibilityExposure.decisionId,
+      exposureReleaseDecisionId: validationAccessibilityExposure.releaseDecisionId, validThrough: machine.validThrough,
+    });
+    expect(Object.isFrozen(decision.equipmentIds)).toBe(true);
+    expect(Object.isFrozen(decision.equipmentDecisionIds)).toBe(true);
   });
 
   test('rejects a genuine positive equipment decision after its source-validity window', () => {
