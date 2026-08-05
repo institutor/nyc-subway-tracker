@@ -16,6 +16,6 @@ function PlatformGuidanceForSurface({ guidance, decisionTime, surface }: Platfor
   if (!platformGuidanceAllowsPresentation(guidance, surface, decisionTime)) return null;
   return <section className="platform-guidance" aria-label="Platform guidance">
     <p className="platform-guidance__position">Board near the {guidance.position}</p>
-    <p>{guidance.zoneBenefit.split('|').at(-1)}</p>
+    <p>{guidance.zoneBenefit.copy}</p>
   </section>;
 }
