@@ -1,0 +1,29 @@
+:root {
+  color-scheme: dark;
+  --tunnel: #061018;
+  --platform: #0b1a24;
+  --platform-raised: #102633;
+  --enamel: #f4f7f8;
+  --steel: #a7bac4;
+  --steel-dim: #6f8793;
+  --signal: #ffd166;
+  --service-warning: #ff7b72;
+  --line: #29414e;
+  --shadow: rgba(0, 0, 0, 0.34);
+  --display-face: "Arial Narrow", "Roboto Condensed", "Helvetica Neue", sans-serif;
+  --body-face: Aptos, "Segoe UI", system-ui, sans-serif;
+  --utility-face: "Cascadia Mono", "SFMono-Regular", Consolas, monospace;
+  --step--1: clamp(0.72rem, 0.68rem + 0.2vw, 0.82rem);
+  --step-0: clamp(0.94rem, 0.89rem + 0.24vw, 1.05rem);
+  --step-1: clamp(1.12rem, 1.02rem + 0.5vw, 1.35rem);
+  --step-2: clamp(1.42rem, 1.18rem + 1.18vw, 2rem);
+  --step-3: clamp(1.9rem, 1.5rem + 2vw, 2.9rem);
+  --space-1: 0.35rem;
+  --space-2: 0.6rem;
+  --space-3: 0.9rem;
+  --space-4: 1.25rem;
+  --space-5: 1.75rem;
+  --space-6: 2.5rem;
+  --target: 3rem;
+  --frame: 58rem;
+}
