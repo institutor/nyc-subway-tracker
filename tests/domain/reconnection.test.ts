@@ -496,6 +496,27 @@ describe('owner-gated reconnection ordering', () => {
     expect(stage3Requested).toBeGreaterThan(stage2Presented);
   });
 
+  test.each([
+    ['unresolved', invalidatingResult(2)],
+    ['vetoed', {
+      ...validResult(2),
+      tripServicePattern: 'unusable' as const,
+      invalidation: invalidation(2, validResult(2).serviceChanges.gate),
+    }],
+  ])('prevents current arrivals when the active trip service pattern is %s', (_name, stage2Result) => {
+    let state = finishStage(createReconnectionState(CONTEXT, {
+      historicalPositioningGuidance: true,
+    }), 1);
+    state = requestReconnectionStage(state, 2);
+    state = acceptReconnectionStage(state, stage2Result);
+    state = commitReconnectionStage(state, 2);
+    state = presentReconnectionStage(state, 2);
+    state = requestReconnectionStage(state, 3);
+
+    expect(() => acceptReconnectionStage(state, validResult(3)))
+      .toThrow(/active trip service pattern.*current arrivals/i);
+  });
+
   test('one fresh arrival snapshot restores nothing until feed recovery and train readmission are both owner-complete', () => {
     let oneSnapshot = createReconnectionState(CONTEXT, { historicalPositioningGuidance: true });
     oneSnapshot = finishStage(oneSnapshot, 1);

@@ -121,6 +121,27 @@ describe('client reconnection runner', () => {
       expect(warning).toBeLessThan(presented);
     }
   });
+
+  test('continues later diagnostics but withholds current arrivals after trip service evidence fails closed', async () => {
+    const loads: number[] = [];
+    const result = await runReconnection({
+      context,
+      initial: { historicalPositioningGuidance: true, historicalTransferGuidance: true },
+      loadStage: async ({ stage }) => {
+        loads.push(stage);
+        return stage === 2 ? undefined : validResult(stage);
+      },
+      now: () => new Date(ACCEPTED_AT),
+    });
+
+    expect(result.kind).toBe('complete');
+    expect(loads).toEqual([1, 2, 3, 4, 5]);
+    expect(result.state.stages.find(({ stage }) => stage === 3)?.result).toMatchObject({
+      stage: 3,
+      arrivals: { disposition: 'withheld' },
+    });
+    expect(result.state.visible.currentArrivalsRestored).toBe(false);
+  });
 });
 
 function deferred<T>() {

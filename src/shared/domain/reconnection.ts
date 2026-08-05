@@ -297,8 +297,23 @@ export function acceptReconnectionStage(
   assertCurrentStage(state, stage);
   assertStageStatus(state, stage, 'requested', `Stage ${stage} must be requested before owner acceptance`);
   validateStageOwnerGates(result, state.context.recovery);
+  validateStageDependencies(state, result);
   validateStageSemantics(result, state.context.recovery);
   return transitionStage(state, stage, 'accepted', result, 'stage-owner-accepted');
+}
+
+function validateStageDependencies(state: ReconnectionState, result: ReconnectionStageResult): void {
+  if (result.stage !== 3
+    || state.context.activeTripId === null
+    || result.arrivals.disposition !== 'current') return;
+
+  const serviceResult = stageRecord(state, 2).result;
+  if (serviceResult?.stage !== 2
+    || serviceResult.serviceChanges.disposition !== 'resolved'
+    || serviceResult.serviceChanges.gate.disposition !== 'accepted-fresh'
+    || serviceResult.tripServicePattern !== 'verified') {
+    throw new Error('The active trip service pattern must be verified before restoring current arrivals');
+  }
 }
 
 export function commitReconnectionStage(state: ReconnectionState, stage: ReconnectionStage): ReconnectionState {
