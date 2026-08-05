@@ -40,13 +40,17 @@ export interface ResolvedAccessiblePathDecision {
 const resolvedAccessiblePathDecisions = new WeakSet<object>();
 
 const COVERAGE_FIELDS = ['coverageRecordId','coverageRecordVersion','stationComplex','constituentStation','routeOrLine','normalizedDirection','accessibleStreetEntrance','streetCorner','directionalPlatform','boardingArea','completePathId','orderedEdgeIds','equipmentIds','accessiblePathMembershipByEdge','operatingRestrictions','evidenceSources','evidenceReferences','verificationDate','verifier','productDecision','accessibilityDecision','dataQualityDecision','contentDecision','operationsDecision','structuralDisposition','unsupportedScope'] as const;
-const EDGE_EVIDENCE_FIELDS = ['movementType','start','routeId','equipmentId','officialAccessiblePath','restrictions','verificationDate'] as const;
+const EDGE_EVIDENCE_FIELDS = ['movementType','start','routeId','direction','equipmentId','officialAccessiblePath','restrictions','verificationDate'] as const;
 
 export function validateCoverageRow(raw: unknown): StationDirectionCoverageRow {
-  const row = asRecord(raw, '26-field station-direction coverage row');
-  for (const field of COVERAGE_FIELDS) if (!(field in row)) throw new Error(`26-field coverage row missing ${field}`);
-  if (Object.keys(row).length !== 26) throw new Error('26-field coverage row must contain exactly 26 atomic fields');
+  const row = exactRecord(raw, COVERAGE_FIELDS, '26-field station-direction coverage row');
   const value = row as unknown as StationDirectionCoverageRow;
+  exactRecord(value.stationComplex, ['id', 'name'], 'station complex');
+  exactRecord(value.constituentStation, ['id', 'name'], 'constituent station');
+  exactRecord(value.accessibleStreetEntrance, ['id', 'description'], 'accessible street entrance');
+  exactRecord(value.verifier, ['name', 'role'], 'coverage verifier');
+  exactRecord(value.structuralDisposition, ['status', 'reason'], 'structural disposition');
+  exactRecord(value.unsupportedScope, ['lines','directions','entrances','platforms','servicePatterns','paths'], 'unsupported scope');
   if (value.structuralDisposition.status !== 'accepted' || !value.orderedEdgeIds.length) throw new Error('Coverage row is not structurally accepted');
   if (![value.coverageRecordId,value.coverageRecordVersion,value.stationComplex?.id,value.stationComplex?.name,value.constituentStation?.id,value.constituentStation?.name,value.routeOrLine,value.accessibleStreetEntrance?.id,value.accessibleStreetEntrance?.description,value.streetCorner,value.directionalPlatform,value.boardingArea,value.completePathId,value.verificationDate,value.verifier?.name,value.verifier?.role].every(nonEmpty)) throw new Error('Coverage row contains incomplete nested identity, scope, or verification evidence');
   if (!value.operatingRestrictions.length || !value.evidenceSources.length || !value.evidenceReferences.length || !Number.isFinite(Date.parse(`${value.verificationDate}T00:00:00Z`))) throw new Error('Coverage row restrictions, evidence, or verification are incomplete');
@@ -54,13 +58,14 @@ export function validateCoverageRow(raw: unknown): StationDirectionCoverageRow {
   if (!value.unsupportedScope || unsupportedKeys.some((key) => !Array.isArray(value.unsupportedScope[key]))) throw new Error('Coverage row explicitly unsupported scope is incomplete');
   if (value.orderedEdgeIds.some((id) => value.accessiblePathMembershipByEdge[id] !== true)) throw new Error('Coverage row official accessible-path membership is incomplete');
   for (const decision of [value.productDecision, value.accessibilityDecision, value.dataQualityDecision, value.contentDecision, value.operationsDecision]) {
+    exactRecord(decision, ['decision', 'reviewer', 'date', 'recordVersion'], 'coverage review decision');
     if (decision.decision !== 'approve' || decision.recordVersion !== value.coverageRecordVersion || !decision.reviewer || !decision.date) throw new Error('Coverage reviews must approve the same immutable version');
   }
   return deepFreeze(value);
 }
 
 export function validateAccessibilityPackage(raw: unknown): AccessibilityPackage {
-  const root = asRecord(raw, 'accessibility package');
+  const root = exactRecord(raw, ['packageId', 'version', 'canonicalPathIdentity', 'coverage', 'edges', 'approvedVersion'], 'accessibility package');
   const coverage = validateCoverageRow(root.coverage);
   if (!Array.isArray(root.edges)) throw new Error('Accessibility package edges are required');
   const edges = root.edges.map(validateEdge).sort((a, b) => a.order - b.order);
@@ -133,10 +138,10 @@ function resolvedPathDecision(
 }
 
 function validateEdge(raw: unknown): AccessiblePathEdge {
-  const edge = asRecord(raw, 'path edge');
-  for (const field of EDGE_EVIDENCE_FIELDS) if (!(field in edge)) throw new Error(`Path edge missing ${field}`);
-  for (const field of ['id','order','end','platformId','evidenceReference','reviewDisposition','canonicalPathIdentity'] as const) if (!(field in edge)) throw new Error(`Path edge missing ${field}`);
+  const edge = exactRecord(raw, ['id','order',...EDGE_EVIDENCE_FIELDS,'end','platformId','evidenceReference','reviewDisposition','canonicalPathIdentity'], 'path edge');
   const value = edge as unknown as AccessiblePathEdge;
+  exactRecord(value.start, ['id', 'level'], 'path edge start');
+  exactRecord(value.end, ['id', 'level'], 'path edge end');
   if (!Number.isInteger(value.order) || value.order < 1) throw new Error('Path edge order is invalid');
   if (![value.id,value.start?.id,value.start?.level,value.end?.id,value.end?.level,value.routeId,value.platformId,value.verificationDate,value.evidenceReference,value.canonicalPathIdentity].every(nonEmpty)) throw new Error('Path edge endpoints, levels, scope, evidence, or verification are incomplete');
   if (value.movementType === 'stairs' || value.movementType === 'escalator') throw new Error('Path edge is not wheelchair-accessible');
@@ -145,5 +150,12 @@ function validateEdge(raw: unknown): AccessiblePathEdge {
   return deepFreeze(value);
 }
 function asRecord(value: unknown, name: string): Record<string, unknown> { if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(`${name} must be an object`); return value as Record<string, unknown>; }
+function exactRecord(value: unknown, fields: readonly string[], name: string): Record<string, unknown> {
+  const record = asRecord(value, name);
+  const missing = fields.filter((field) => !(field in record));
+  const unexpected = Object.keys(record).filter((field) => !fields.includes(field));
+  if (missing.length || unexpected.length) throw new Error(`${name} must contain its exact schema; missing: ${missing.join(',') || 'none'}; unexpected: ${unexpected.join(',') || 'none'}`);
+  return record;
+}
 function nonEmpty(value: unknown): boolean { return typeof value === 'string' && value.trim().length > 0; }
 function deepFreeze<T>(value: T): T { if (value && typeof value === 'object' && !Object.isFrozen(value)) { Object.freeze(value); for (const child of Object.values(value)) deepFreeze(child); } return value; }

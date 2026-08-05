@@ -26,6 +26,17 @@ describe('immutable platform guidance', () => {
     expect(() => validatePlatformGuidanceRegistry([raw])).toThrow(/operationsDecision/);
   });
 
+  test('rejects extra fields and incomplete nested release or provenance schemas', () => {
+    const candidates = [
+      { ...record(), unexpected: true },
+      { ...record(), releasePackage: { ...record().releasePackage, unexpected: true } },
+      { ...record(), provenance: { ...record().provenance, unexpected: true } },
+      { ...record(), position: undefined },
+      { ...record(), provenance: undefined },
+    ];
+    for (const candidate of candidates) expect(() => validatePlatformGuidanceRegistry([candidate])).toThrow(/exact schema|position|provenance/i);
+  });
+
   test('returns guidance only for exact scope, orientation objective and current platform match', () => {
     expect(resolvePlatformGuidance([record()], request)?.position).toBe('middle');
     expect(resolvePlatformGuidance([record()], { ...request, direction: 'southbound' })).toBeUndefined();

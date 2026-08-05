@@ -110,6 +110,21 @@ describe('complete accessible path evidence', () => {
     for (const item of invalid) expect(() => loadPathEvidence([item])).toThrow();
   });
 
+  test('rejects extra fields at every fixed path-package schema boundary', () => {
+    const fixture = packageFixture();
+    const candidates = [
+      { ...fixture, unexpected: true },
+      { ...fixture, coverage: { ...fixture.coverage, stationComplex: { ...fixture.coverage.stationComplex, unexpected: true } } },
+      { ...fixture, coverage: { ...fixture.coverage, verifier: { ...fixture.coverage.verifier, unexpected: true } } },
+      { ...fixture, coverage: { ...fixture.coverage, productDecision: { ...fixture.coverage.productDecision, unexpected: true } } },
+      { ...fixture, coverage: { ...fixture.coverage, structuralDisposition: { ...fixture.coverage.structuralDisposition, unexpected: true } } },
+      { ...fixture, coverage: { ...fixture.coverage, unsupportedScope: { ...fixture.coverage.unsupportedScope, unexpected: [] } } },
+      { ...fixture, edges: [{ ...fixture.edges[0], unexpected: true }, fixture.edges[1]] },
+      { ...fixture, edges: [{ ...fixture.edges[0], start: { ...fixture.edges[0].start, unexpected: true } }, fixture.edges[1]] },
+    ];
+    for (const candidate of candidates) expect(() => loadPathEvidence([candidate])).toThrow(/exact schema/i);
+  });
+
   test('keeps optional official equipment ingestion unavailable when absent and exact-ID joined when supplied', () => {
     expect(loadOptionalOfficialEquipment(undefined)).toMatchObject({ status: 'unavailable', inventory: [], outages: [] });
     expect(loadOptionalOfficialEquipment({ inventory: [{ equipmentId: 'EL-1' }], outages: [{ equipmentId: 'EL-1', state: 'out-of-service' }], sourceTimestamp: '2026-07-30T12:00:00Z' })).toMatchObject({ status: 'accepted', inventory: [{ equipmentId: 'EL-1' }] });
@@ -189,4 +204,3 @@ describe('equipment decision identity at the path boundary', () => {
     }).status).toBe('unknown');
   });
 });
-
