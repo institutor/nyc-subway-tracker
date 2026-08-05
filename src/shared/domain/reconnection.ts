@@ -791,7 +791,9 @@ function validateOwnerGate(
   if (Date.parse(candidate.acceptedAt) > Date.parse(acceptedThrough)) {
     throw new Error(`${label} acceptance cannot postdate the local receipt bound`);
   }
-  if (!Array.isArray(candidate.scopeMembership) || candidate.scopeMembership.length === 0
+  const expectedScopes = ownership.ownerScopes[expectedDomain];
+  const locked = isLockableOwnerDomain(expectedDomain) && expectedScopes.length === 0;
+  if (!Array.isArray(candidate.scopeMembership) || (!locked && candidate.scopeMembership.length === 0)
     || candidate.scopeMembership.some((scope) => !hasEligibleScope(ownership, scope))) {
     throw new Error(`${label} evidence must belong to the exact eligible scope`);
   }
@@ -823,7 +825,7 @@ function validateRequestOwnership(context: PreservedReconnectionContext): void {
   if (new Set(keys).size !== keys.length) throw new Error('Reconnection eligible scopes must be unique');
   for (const domain of RECONNECTION_OWNER_DOMAINS) {
     const scopes = ownership.ownerScopes?.[domain];
-    if (!Array.isArray(scopes) || scopes.length === 0
+    if (!Array.isArray(scopes) || (!isLockableOwnerDomain(domain) && scopes.length === 0)
       || scopes.some((scope) => !hasEligibleScope(ownership, scope))) {
       throw new Error(`Reconnection requires an exact ${domain} owner scope`);
     }
@@ -832,12 +834,22 @@ function validateRequestOwnership(context: PreservedReconnectionContext): void {
       throw new Error(`Reconnection ${domain} owner scopes must be unique`);
     }
   }
+  const equipmentLocked = ownership.ownerScopes.equipment.length === 0;
+  const pathLocked = ownership.ownerScopes['accessible-path'].length === 0;
+  if (equipmentLocked !== pathLocked) throw new Error('Equipment and accessible-path recovery locks must match');
+  if (ownership.ownerScopes.positioning.length === 0 && context.guidanceRequirements.positioning !== 'none') {
+    throw new Error('Locked positioning recovery must have no guidance requirement');
+  }
 }
 
 const RECONNECTION_OWNER_DOMAINS: readonly ReconnectionOwnerDomain[] = [
   'equipment', 'accessible-path', 'service-change', 'feed-health', 'train-admission',
   'arrivals', 'positioning', 'transfer-guidance', 'maps', 'saved',
 ];
+
+function isLockableOwnerDomain(domain: ReconnectionOwnerDomain): boolean {
+  return domain === 'equipment' || domain === 'accessible-path' || domain === 'positioning';
+}
 
 function hasEligibleScope(
   ownership: ReconnectionRequestOwnership,

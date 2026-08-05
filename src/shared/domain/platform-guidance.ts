@@ -1,4 +1,5 @@
 import { exposureAllowsEvaluation, type ResolvedGuidanceExposure } from './exposure-decision';
+import type { ExposureSurface } from './exposure-decision';
 export type PlatformGuidancePosition = 'front' | 'middle' | 'back';
 export interface PlatformGuidanceRecord {
   readonly coverageRowId:string; readonly immutableVersion:string; readonly supersededVersion:string; readonly complex:string; readonly constituent:string; readonly priorityCategory:string; readonly categoryEvidence:string; readonly route:string; readonly servicePattern:string; readonly direction:string; readonly destination:string; readonly platformId:string; readonly layoutOrientation:string; readonly frontRearOrder:string; readonly zoneGeometry:string; readonly objectiveType:string; readonly objectiveTarget:string; readonly physicalRelationships:string; readonly zoneBenefit:string; readonly certaintyCeiling:string; readonly accessiblePathVersion:string; readonly restrictions:string; readonly supportedScope:string; readonly unsupportedScope:string; readonly task7RecordVersion:string; readonly durableFieldEvidence:string; readonly verificationDate:string; readonly verifier:string; readonly reverificationTriggers:string; readonly reverificationStatus:string; readonly feedbackCorrections:string; readonly productDecision:string; readonly accessibilityDecision:string; readonly dataQualityDecision:string; readonly contentDecision:string; readonly operationsDecision:string; readonly disposition:string; readonly releasePackage:{ readonly packageVersion:string; readonly decisionId:string; readonly inclusion:'included'|'excluded'; readonly scope:string; readonly reason:string }; readonly position:PlatformGuidancePosition; readonly provenance:{ readonly sourceId:string; readonly version:string; readonly immutable:boolean; readonly reviewed:boolean };
@@ -8,6 +9,10 @@ export type ResolvedPlatformGuidance = PlatformGuidanceRecord & {
   readonly [platformGuidanceBrand]: true;
   readonly exposureDecisionId: string;
   readonly releaseDecisionId: string;
+  readonly surface: ExposureSurface;
+  readonly evaluatedAt: string;
+  readonly validFrom: string;
+  readonly validThrough: string;
 };
 const resolvedPlatformGuidance = new WeakSet<object>();
 export interface PlatformGuidanceRequest { readonly complex:string; readonly constituent:string; readonly route:string; readonly servicePattern:string; readonly direction:string; readonly destination:string; readonly platformId:string; readonly orientation:string; readonly objectiveType:string; readonly objectiveTarget:string; readonly accessiblePathVersion:string; readonly now:Date; readonly platformState:'confirmed'|'expected'|'check-signs'; readonly rerouted:boolean; readonly exposure?:ResolvedGuidanceExposure }
@@ -37,10 +42,15 @@ export function resolvePlatformGuidance(raw: readonly unknown[], request: Platfo
     [platformGuidanceBrand]: true as const,
     exposureDecisionId: request.exposure.decisionId,
     releaseDecisionId: request.exposure.releaseDecisionId,
+    surface: request.exposure.surface,
+    evaluatedAt: request.now.toISOString(),
+    validFrom: request.exposure.validFrom,
+    validThrough: request.exposure.validThrough,
   });
   resolvedPlatformGuidance.add(resolved);
   return resolved;
 }
 export function isResolvedPlatformGuidance(value: unknown): value is ResolvedPlatformGuidance { return Boolean(value&&typeof value==='object'&&resolvedPlatformGuidance.has(value)); }
+export function platformGuidanceAllowsPresentation(value:unknown,surface:ExposureSurface,decisionTime:Date):value is ResolvedPlatformGuidance{const time=decisionTime instanceof Date?decisionTime.getTime():Number.NaN;return isResolvedPlatformGuidance(value)&&value.surface===surface&&Number.isFinite(time)&&time>=Date.parse(value.validFrom)&&time<=Date.parse(value.validThrough);}
 function deepFreeze<T>(value:T):T { if(value&&typeof value==='object'&&!Object.isFrozen(value)){Object.freeze(value);for(const child of Object.values(value))deepFreeze(child);}return value; }
 function strictRecord(value:unknown, fields:readonly string[], label:string):Record<string,unknown>{if(!value||typeof value!=='object'||Array.isArray(value))throw new Error(`${label} must be an object`);const root=value as Record<string,unknown>;const missing=fields.filter((field)=>!(field in root));const unexpected=Object.keys(root).filter((field)=>!fields.includes(field));if(missing.length||unexpected.length)throw new Error(`${label} must contain its exact schema; missing: ${missing.join(',')||'none'}; unexpected: ${unexpected.join(',')||'none'}`);return root;}

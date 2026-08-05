@@ -50,6 +50,28 @@ const context: PreservedReconnectionContext = {
 };
 
 describe('client reconnection runner', () => {
+  test('does not call locked equipment or accessibility owners and creates no stage-one requirement or warning', async () => {
+    const lockedContext: PreservedReconnectionContext = {
+      ...context,
+      accessibleRouteOnly: true,
+      guidanceRequirements: { ...context.guidanceRequirements, positioning: 'none' },
+      recovery: {
+        ...context.recovery,
+        ownerScopes: { ...context.recovery.ownerScopes, equipment: [], 'accessible-path': [], positioning: [] },
+      },
+    };
+    const loads: number[] = [];
+    const result = await runReconnection({
+      context: lockedContext,
+      initial: { historicalPositioningGuidance: false, historicalTransferGuidance: true },
+      loadStage: async ({ stage }) => { loads.push(stage); return validResult(stage); },
+      now: () => new Date(ACCEPTED_AT),
+    });
+    expect(loads).toEqual([2, 3, 4, 5]);
+    expect(result.state.stages[0]?.result).toMatchObject({ accessiblePath: { requiredForActiveTrip: false }, invalidation: null });
+    expect(result.state.visible.activeWarnings.some(({ stage }) => stage === 1)).toBe(false);
+  });
+
   test('requests and presents all five owners sequentially without mutating preserved context', async () => {
     const loads: number[] = [];
     const transitions: string[] = [];

@@ -57,6 +57,10 @@ export async function runReconnection(options: RunReconnectionOptions): Promise<
 
     let result: ReconnectionStageResult;
     let acceptedThrough: string;
+    if (stage === 1 && lockedStageOne(state.context)) {
+      acceptedThrough = exactNow(now);
+      result = createFailClosedReconnectionStage(state, stage, 'Accessibility and equipment public exposure is locked.', acceptedThrough);
+    } else {
     try {
       const loaded = await options.loadStage({ stage, state, context: state.context }, signal);
       if (signal.aborted) return { kind: 'aborted', state };
@@ -71,6 +75,7 @@ export async function runReconnection(options: RunReconnectionOptions): Promise<
       }
       acceptedThrough = exactNow(now);
       result = createFailClosedReconnectionStage(state, stage, 'Owner result is unavailable.', acceptedThrough);
+    }
     }
 
     try {
@@ -132,7 +137,9 @@ export function createFailClosedReconnectionStage(
   if (stage === 1) {
     const equipment = gate('equipment');
     const accessiblePath = gate('accessible-path');
-    const required = state.context.activeTripId !== null && state.context.accessibleRouteOnly;
+    const required = state.context.activeTripId !== null && state.context.accessibleRouteOnly
+      && state.context.recovery.ownerScopes.equipment.length > 0
+      && state.context.recovery.ownerScopes['accessible-path'].length > 0;
     return {
       stage,
       equipment: { gate: equipment, disposition: 'unknown' },
@@ -203,6 +210,11 @@ export function createFailClosedReconnectionStage(
     maps: { gate: gate('maps'), disposition: 'unchanged-fail-closed' },
     unrelatedSaved: { gate: gate('saved'), disposition: 'unchanged-fail-closed' },
   };
+}
+
+function lockedStageOne(context: PreservedReconnectionContext): boolean {
+  return context.recovery.ownerScopes.equipment.length === 0
+    && context.recovery.ownerScopes['accessible-path'].length === 0;
 }
 
 function bindLocalAcceptance<T>(value: T, acceptedAt: string): T {

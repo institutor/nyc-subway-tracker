@@ -1,18 +1,16 @@
-import { isResolvedAccessiblePathDecision, type ResolvedAccessiblePathDecision } from '../../shared/domain/accessible-path';
+import { accessiblePathDecisionAllowsPresentation, type ResolvedAccessiblePathDecision } from '../../shared/domain/accessible-path';
 import { isResolvedEquipmentStatusDecision, type EquipmentStatusDecision } from '../../shared/domain/equipment-status';
 import { isResolvedAccessibilityAlternativeSelection, type ResolvedAccessibilityAlternativeSelection } from '../../shared/domain/accessibility-alternatives';
 import { isResolvedAccessibilityWarning, type AccessibilityWarning } from '../../shared/domain/underway-warning';
+import type { ExposureSurface } from '../../shared/domain/exposure-decision';
 
 export interface AccessibilityPanelProps {
   readonly warning: AccessibilityWarning | null;
   readonly path: ResolvedAccessiblePathDecision | undefined;
-  readonly equipment: readonly {
-    readonly decision: EquipmentStatusDecision;
-    readonly label: string;
-    readonly required: boolean;
-  }[];
+  readonly equipment: readonly { readonly decision: EquipmentStatusDecision; readonly label: string; readonly required: boolean }[];
   readonly alternative: ResolvedAccessibilityAlternativeSelection | null;
   readonly onSelectAlternative: (id: string) => void;
+  readonly decisionTime: Date;
 }
 
 const STATE_COPY = {
@@ -23,11 +21,21 @@ const STATE_COPY = {
   'out-of-service-rechecking': 'Out of service—status being rechecked',
 } as const;
 
-export function AccessibilityPanel({ warning, path, equipment, alternative, onSelectAlternative }: AccessibilityPanelProps) {
-  const pathStatus = isResolvedAccessiblePathDecision(path) ? path.status : 'unknown';
-  const resolvedEquipment = equipment.filter((machine) => isResolvedEquipmentStatusDecision(machine?.decision));
-  const resolvedWarning = isResolvedAccessibilityWarning(warning) ? warning : null;
-  const resolvedAlternative = isResolvedAccessibilityAlternativeSelection(alternative) ? alternative.first : null;
+export function AccessibilityPanel(props: AccessibilityPanelProps) {
+  return <AccessibilityPanelForSurface {...props} surface="public" />;
+}
+
+/** Explicit validation-only harness; App never imports or selects this component. */
+export function ValidationAccessibilityPanel(props: AccessibilityPanelProps) {
+  return <AccessibilityPanelForSurface {...props} surface="validation" />;
+}
+
+function AccessibilityPanelForSurface({ warning, path, equipment, alternative, onSelectAlternative, decisionTime, surface }: AccessibilityPanelProps & { readonly surface: ExposureSurface }) {
+  const resolvedPath = accessiblePathDecisionAllowsPresentation(path, surface, decisionTime) ? path : undefined;
+  const pathStatus = resolvedPath?.status ?? 'unknown';
+  const resolvedEquipment = resolvedPath ? equipment.filter((machine) => isResolvedEquipmentStatusDecision(machine?.decision)) : [];
+  const resolvedWarning = resolvedPath && isResolvedAccessibilityWarning(warning) ? warning : null;
+  const resolvedAlternative = resolvedWarning && isResolvedAccessibilityAlternativeSelection(alternative) ? alternative.first : null;
   return <section className="accessibility-panel" aria-label="Step-free path">
     {resolvedWarning?.active ? <div className="accessibility-warning" role="alert" aria-live="assertive">
       <p className="accessibility-warning__eyebrow">Step-free path action</p>

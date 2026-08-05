@@ -999,7 +999,6 @@ function createAppReconnectionContext(input: {
   const legOwnerScopes: readonly ReconnectionScopeMembership[] = remainingLegs.length > 0
     ? remainingLegs.map(({ id }) => ({ kind: 'leg' as const, id }))
     : stationOwnerScopes;
-  const pathOwnerScopes: readonly ReconnectionScopeMembership[] = stationOwnerScopes;
   const trainOwnerScopes: readonly ReconnectionScopeMembership[] = storedTrainChoice
     ? [{ kind: 'train', id: storedTrainChoice }]
     : stationOwnerScopes;
@@ -1011,7 +1010,6 @@ function createAppReconnectionContext(input: {
   const transferOwnerScopes: readonly ReconnectionScopeMembership[] = upcomingTransfers.length > 0
     ? upcomingTransfers.map(({ id }) => ({ kind: 'transfer' as const, id }))
     : legOwnerScopes;
-  const positioningOwnerScopes: readonly ReconnectionScopeMembership[] = legOwnerScopes;
   const savedOwnerScopes: readonly ReconnectionScopeMembership[] = input.savedRecords
     .filter(({ constituentId }) => constituentId !== input.stationId)
     .map(({ id }) => ({ kind: 'saved-record' as const, id }));
@@ -1067,13 +1065,13 @@ function createAppReconnectionContext(input: {
       contextKey,
       eligibleScopes,
       ownerScopes: {
-        equipment: pathOwnerScopes,
-        'accessible-path': pathOwnerScopes,
+        equipment: [],
+        'accessible-path': [],
         'service-change': input.activeTrip ? legOwnerScopes : stationOwnerScopes,
         'feed-health': stationOwnerScopes,
         'train-admission': trainOwnerScopes,
         arrivals: stationOwnerScopes,
-        positioning: positioningOwnerScopes,
+        positioning: [],
         'transfer-guidance': transferOwnerScopes,
         maps: [mapScope],
         saved: savedOwnerScopes.length > 0 ? savedOwnerScopes : [contextScope],

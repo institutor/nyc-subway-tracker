@@ -226,10 +226,20 @@ describe('App reconnection flow', () => {
     await waitFor(() => expect(transitions.length).toBeGreaterThan(0));
     const context = transitions[0]!.state.context;
     expect(context.guidanceRequirements.positioning).toBe('none');
+    expect(context.recovery.ownerScopes.equipment).toEqual([]);
+    expect(context.recovery.ownerScopes['accessible-path']).toEqual([]);
+    expect(context.recovery.ownerScopes.positioning).toEqual([]);
     expect(context.recovery.eligibleScopes).not.toContainEqual({ kind: 'path', id: 'forged-path-owner' });
     expect(context.recovery.eligibleScopes).not.toContainEqual({ kind: 'platform', id: 'forged-platform-owner' });
     expect(context.recovery.ownerScopes['accessible-path']).not.toContainEqual({ kind: 'path', id: 'forged-path-owner' });
     expect(context.recovery.ownerScopes.positioning).not.toContainEqual({ kind: 'platform', id: 'forged-platform-owner' });
+    const stageOne = transitions.find(({ phase, stage }) => phase === 'presented' && stage === 1)?.state;
+    expect(stageOne?.stages[0]?.result).toMatchObject({
+      stage: 1,
+      accessiblePath: { requiredForActiveTrip: false },
+      invalidation: null,
+    });
+    expect(stageOne?.visible.activeWarnings.some(({ stage }) => stage === 1)).toBe(false);
   });
 });
 
