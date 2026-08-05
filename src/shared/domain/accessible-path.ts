@@ -1,7 +1,7 @@
 import { compareCanonicalIdentity, normalizeCanonicalIdentity } from './canonical';
 import type { EquipmentStatusDecision } from './equipment-status';
 import type { Direction } from './types';
-import { exposureAllowsEvaluation, type AccessibilityExposureDecision } from './exposure-decision';
+import { exposureAllowsEvaluation, type ResolvedAccessibilityExposure } from './exposure-decision';
 
 interface ReviewDecision { readonly decision: 'approve' | 'changes-required'; readonly reviewer: string; readonly date: string; readonly recordVersion: string }
 export interface StationDirectionCoverageRow {
@@ -26,7 +26,18 @@ export interface AccessiblePathEdge {
   readonly evidenceReference: string; readonly reviewDisposition: 'approved' | 'rejected' | 'pending'; readonly canonicalPathIdentity: string;
 }
 export interface AccessibilityPackage { readonly packageId: string; readonly version: string; readonly canonicalPathIdentity: string; readonly coverage: StationDirectionCoverageRow; readonly edges: readonly AccessiblePathEdge[]; readonly approvedVersion: string }
-export interface AccessiblePathDecision { readonly status: 'eligible' | 'ineligible' | 'unknown'; readonly reason: string; readonly accessibleRouteOnly: true; readonly offlineCopy?: 'Structurally step-free; live elevator status unavailable' }
+const accessiblePathDecisionBrand: unique symbol = Symbol('resolved-accessible-path-decision');
+export interface ResolvedAccessiblePathDecision {
+  readonly [accessiblePathDecisionBrand]: true;
+  readonly evaluationId: string;
+  readonly pathId: string;
+  readonly packageVersion: string;
+  readonly status: 'eligible' | 'ineligible' | 'unknown';
+  readonly reason: string;
+  readonly accessibleRouteOnly: true;
+  readonly offlineCopy?: 'Structurally step-free; live elevator status unavailable';
+}
+const resolvedAccessiblePathDecisions = new WeakSet<object>();
 
 const COVERAGE_FIELDS = ['coverageRecordId','coverageRecordVersion','stationComplex','constituentStation','routeOrLine','normalizedDirection','accessibleStreetEntrance','streetCorner','directionalPlatform','boardingArea','completePathId','orderedEdgeIds','equipmentIds','accessiblePathMembershipByEdge','operatingRestrictions','evidenceSources','evidenceReferences','verificationDate','verifier','productDecision','accessibilityDecision','dataQualityDecision','contentDecision','operationsDecision','structuralDisposition','unsupportedScope'] as const;
 const EDGE_EVIDENCE_FIELDS = ['movementType','start','routeId','equipmentId','officialAccessiblePath','restrictions','verificationDate'] as const;
@@ -77,18 +88,42 @@ export function validateAccessibilityRegistry(raw: readonly unknown[]): readonly
 }
 export function orderAccessiblePaths(paths: readonly AccessibilityPackage[]): readonly AccessibilityPackage[] { return Object.freeze([...paths].sort((a,b) => compareCanonicalIdentity(a.canonicalPathIdentity,b.canonicalPathIdentity))); }
 
-export function assessAccessiblePath(rawPackage: AccessibilityPackage, request: { readonly stationId: string; readonly routeId: string; readonly direction: Direction; readonly platformId: string; readonly equipment: Readonly<Record<string, EquipmentStatusDecision>>; readonly exposure: AccessibilityExposureDecision }): AccessiblePathDecision {
+export function assessAccessiblePath(rawPackage: AccessibilityPackage, request: { readonly stationId: string; readonly routeId: string; readonly direction: Direction; readonly platformId: string; readonly equipment: Readonly<Record<string, EquipmentStatusDecision>>; readonly exposure?: ResolvedAccessibilityExposure }): ResolvedAccessiblePathDecision {
   const item = validateAccessibilityPackage(rawPackage);
-  if (!exposureAllowsEvaluation(request.exposure, item.version, 'accessibility')) return Object.freeze({ status: 'unknown', reason: 'Accessibility exposure evidence is pending or does not match this immutable package.', accessibleRouteOnly: true });
-  if (item.coverage.constituentStation.id !== request.stationId || item.coverage.routeOrLine !== request.routeId || item.coverage.normalizedDirection !== request.direction || item.coverage.directionalPlatform !== request.platformId) return Object.freeze({ status: 'ineligible' as const, reason: 'No reviewed path package matches the exact station, route, direction, and platform.', accessibleRouteOnly: true as const });
+  if (!exposureAllowsEvaluation(request.exposure, item.version, 'accessibility')) return resolvedPathDecision(item, 'unknown', 'Accessibility exposure evidence is pending or does not match this immutable package.');
+  if (item.coverage.constituentStation.id !== request.stationId || item.coverage.routeOrLine !== request.routeId || item.coverage.normalizedDirection !== request.direction || item.coverage.directionalPlatform !== request.platformId) return resolvedPathDecision(item, 'ineligible', 'No reviewed path package matches the exact station, route, direction, and platform.');
   const missing = item.coverage.equipmentIds.filter((id) => !request.equipment[id]);
-  if (missing.length) return Object.freeze({ status: 'unknown' as const, reason: 'Live route-critical equipment evidence is missing.', accessibleRouteOnly: true as const, offlineCopy: 'Structurally step-free; live elevator status unavailable' as const });
+  if (missing.length) return resolvedPathDecision(item, 'unknown', 'Live route-critical equipment evidence is missing.', 'Structurally step-free; live elevator status unavailable');
   for (const id of item.coverage.equipmentIds) {
     const equipment = request.equipment[id];
-    if (equipment.state === 'out-of-service' || equipment.state === 'out-of-service-rechecking') return Object.freeze({ status: 'ineligible' as const, reason: `Required equipment ${id} has accepted adverse evidence.`, accessibleRouteOnly: true as const });
-    if (equipment.health !== 'current' || equipment.state !== 'no-official-outage-reported') return Object.freeze({ status: 'unknown' as const, reason: `Current status for required equipment ${id} is not verified.`, accessibleRouteOnly: true as const });
+    if (equipment.state === 'out-of-service' || equipment.state === 'out-of-service-rechecking') return resolvedPathDecision(item, 'ineligible', `Required equipment ${id} has accepted adverse evidence.`);
+    if (equipment.health !== 'current' || equipment.state !== 'no-official-outage-reported') return resolvedPathDecision(item, 'unknown', `Current status for required equipment ${id} is not verified.`);
   }
-  return Object.freeze({ status: 'eligible' as const, reason: 'Every structural edge and route-critical equipment decision passes for the exact path.', accessibleRouteOnly: true as const });
+  return resolvedPathDecision(item, 'eligible', 'Every structural edge and route-critical equipment decision passes for the exact path.');
+}
+
+export function isResolvedAccessiblePathDecision(value: unknown): value is ResolvedAccessiblePathDecision {
+  return Boolean(value && typeof value === 'object' && resolvedAccessiblePathDecisions.has(value));
+}
+
+function resolvedPathDecision(
+  item: AccessibilityPackage,
+  status: ResolvedAccessiblePathDecision['status'],
+  reason: string,
+  offlineCopy?: ResolvedAccessiblePathDecision['offlineCopy'],
+): ResolvedAccessiblePathDecision {
+  const decision = Object.freeze({
+    [accessiblePathDecisionBrand]: true as const,
+    evaluationId: `${item.packageId}:${item.version}:${status}`,
+    pathId: item.canonicalPathIdentity,
+    packageVersion: item.version,
+    status,
+    reason,
+    accessibleRouteOnly: true as const,
+    ...(offlineCopy ? { offlineCopy } : {}),
+  });
+  resolvedAccessiblePathDecisions.add(decision);
+  return decision;
 }
 
 function validateEdge(raw: unknown): AccessiblePathEdge {
