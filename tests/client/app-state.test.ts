@@ -17,7 +17,41 @@ describe('rider-owned application state', () => {
 
     expect(state.selectedStation).toEqual(chosenStation);
     expect(state.selectionOwner).toBe('explicit');
-    expect(state.location.fix).toBeUndefined();
+    expect(state.location).toEqual({
+      phase: 'ready', requestId: 1,
+      fix: { coordinate: { latitude: 40.7, longitude: -74 }, accuracyMeters: 5 },
+    });
+  });
+
+  test('finishes a successful location retry without surrendering an explicit station', () => {
+    let state = createInitialAppState({ savedStations: [] });
+    state = appReducer(state, { type: 'station-selected', station: chosenStation, owner: 'explicit' });
+    state = appReducer(state, { type: 'location-requested', requestId: 2 });
+    state = appReducer(state, {
+      type: 'location-resolved', requestId: 2,
+      fix: { coordinate: { latitude: 40.7, longitude: -74 }, accuracyMeters: 50 },
+    });
+
+    expect(state.selectedStation).toEqual(chosenStation);
+    expect(state.selectionOwner).toBe('explicit');
+    expect(state.location).toEqual({
+      phase: 'ready', requestId: 2,
+      fix: { coordinate: { latitude: 40.7, longitude: -74 }, accuracyMeters: 50 },
+    });
+  });
+
+  test.each([
+    ['location-denied', 'denied'],
+    ['location-failed', 'failed'],
+  ] as const)('finishes an unsuccessful explicit-station retry as %s', (type, phase) => {
+    let state = createInitialAppState({ savedStations: [] });
+    state = appReducer(state, { type: 'station-selected', station: chosenStation, owner: 'explicit' });
+    state = appReducer(state, { type: 'location-requested', requestId: 3 });
+    state = appReducer(state, { type, requestId: 3 });
+
+    expect(state.selectedStation).toEqual(chosenStation);
+    expect(state.selectionOwner).toBe('explicit');
+    expect(state.location).toEqual({ phase, requestId: 3 });
   });
 
   test('accepts only the newest overlapping Nearby response', () => {

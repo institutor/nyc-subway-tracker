@@ -10,7 +10,7 @@ import {
 } from './api/client';
 import { AppHeader } from './components/AppHeader';
 import { StatusBanner } from './components/StatusBanner';
-import { boardRequestKey } from './components/StationCard';
+import { boardRequestKey, type NearbyBoardState } from './components/StationCard';
 import { ThumbDock } from './components/ThumbDock';
 import { useLocation } from './hooks/use-location';
 import {
@@ -50,7 +50,7 @@ export function App({ api, geolocation, storage: providedStorage }: AppProps = {
   stateRef.current = state;
   const [bootstrap, setBootstrap] = useState<BootstrapEnvelopeDto>();
   const [catalog, setCatalog] = useState<CatalogEnvelopeDto>();
-  const [nearbyBoards, setNearbyBoards] = useState<ReadonlyMap<string, BoardEnvelopeDto>>(() => new Map());
+  const [nearbyBoards, setNearbyBoards] = useState<ReadonlyMap<string, NearbyBoardState>>(() => new Map());
   const [selectedBoard, setSelectedBoard] = useState<SelectedBoardState>({ phase: 'idle' });
   const [stationOpen, setStationOpen] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -100,20 +100,29 @@ export function App({ api, geolocation, storage: providedStorage }: AppProps = {
         }
         const exactDirections = response.data.cards.flatMap(({ directions }) => directions);
         const unique = new Map(exactDirections.map((direction) => [boardRequestKey(direction), direction]));
-        const entries = await Promise.all([...unique.entries()].map(async ([key, direction]) => {
-          try {
-            const board = await apiClient.board(direction.constituentId, {
-              routeIds: direction.routeIds,
-              direction: direction.direction,
-            }, controller.signal);
-            return [key, board] as const;
-          } catch (error) {
-            if (isAbort(error)) throw error;
-            return undefined;
-          }
-        }));
-        if (controller.signal.aborted || nearbyGeneration.current !== requestId) return;
-        setNearbyBoards(new Map(entries.filter((entry): entry is readonly [string, BoardEnvelopeDto] => entry !== undefined)));
+        setNearbyBoards(new Map([...unique.keys()].map((key) => [key, { phase: 'loading' } as const])));
+        for (const [key, direction] of unique) {
+          void (async () => {
+            try {
+              const board = await apiClient.board(direction.constituentId, {
+                routeIds: direction.routeIds,
+                direction: direction.direction,
+              }, controller.signal);
+              settleNearbyBoard(key, { phase: 'ready', board });
+            } catch (error) {
+              if (!isAbort(error)) settleNearbyBoard(key, { phase: 'unavailable' });
+            }
+          })();
+        }
+
+        function settleNearbyBoard(key: string, next: NearbyBoardState) {
+          if (controller.signal.aborted || nearbyGeneration.current !== requestId) return;
+          setNearbyBoards((current) => {
+            const settled = new Map(current);
+            settled.set(key, next);
+            return settled;
+          });
+        }
       } catch (error) {
         if (!isAbort(error) && nearbyGeneration.current === requestId) dispatch({ type: 'nearby-failed', requestId });
       }
@@ -136,9 +145,9 @@ export function App({ api, geolocation, storage: providedStorage }: AppProps = {
 
   const openFallbackStation = useCallback((kind: 'denied' | 'failed', requestId: number) => {
     const current = stateRef.current;
-    if (current.selectionOwner === 'explicit') return;
     dispatch({ type: kind === 'denied' ? 'location-denied' : 'location-failed', requestId });
     nearbyAbort.current?.abort();
+    if (current.selectionOwner === 'explicit') return;
     if (current.lastUsedStation) {
       setPickerOpen(false);
       setStationOpen(true);
@@ -152,11 +161,12 @@ export function App({ api, geolocation, storage: providedStorage }: AppProps = {
     geolocation,
     onRequest: (requestId) => dispatch({ type: 'location-requested', requestId }),
     onFix: (requestId, fix) => {
-      if (stateRef.current.selectionOwner === 'explicit') return;
+      const explicitSelection = stateRef.current.selectionOwner === 'explicit';
       dispatch({ type: 'location-resolved', requestId, fix });
+      runNearby(fix);
+      if (explicitSelection) return;
       setPickerOpen(false);
       setStationOpen(false);
-      runNearby(fix);
     },
     onDenied: (requestId) => openFallbackStation('denied', requestId),
     onFailure: (requestId) => openFallbackStation('failed', requestId),
@@ -177,14 +187,20 @@ export function App({ api, geolocation, storage: providedStorage }: AppProps = {
     };
   }), [catalog, local.savedRecords]);
 
-  const selectStation = useCallback((station: StationChoice) => {
+  const selectStation = useCallback((
+    station: StationChoice,
+    exactFilters?: { readonly routeIds: readonly string[]; readonly direction: NonNullable<AppState['filters']['direction']> },
+  ) => {
     nearbyAbort.current?.abort();
     nearbyGeneration.current += 1;
     dispatch({ type: 'station-selected', station, owner: 'explicit' });
+    if (exactFilters) {
+      dispatch({ type: 'filters-changed', routeIds: exactFilters.routeIds, direction: exactFilters.direction });
+    }
     writeLastUsedStation(storage, station);
     setPickerOpen(false);
     setStationOpen(true);
-    runSelectedBoard(station, stateRef.current.filters);
+    runSelectedBoard(station, exactFilters ?? stateRef.current.filters);
   }, [runSelectedBoard, storage]);
 
   const changeFilters = useCallback((filters: AppState['filters']) => {
@@ -208,13 +224,14 @@ export function App({ api, geolocation, storage: providedStorage }: AppProps = {
               {fallback ? (
                 <StatusBanner tone="warning" actions={(
                   <>
-                    <button type="button" onClick={location.retry}>Try location again</button>
+                    {fallback === 'failed' ? <button type="button" onClick={location.retry}>Try location again</button> : null}
                     <button type="button" onClick={() => { setStationOpen(false); setPickerOpen(true); }}>Choose a station</button>
                   </>
                 )}>
-                  <p>{fallback === 'failed'
-                    ? 'Location unavailable. Showing your last station.'
-                    : 'Location access is off. Showing your last station.'}</p>
+                  <p>Location unavailable. Showing your last station.</p>
+                  {fallback === 'denied'
+                    ? <p>Location permission is off. Enable location in your device settings to refresh Nearby.</p>
+                    : null}
                 </StatusBanner>
               ) : null}
               <StationView
@@ -238,7 +255,11 @@ export function App({ api, geolocation, storage: providedStorage }: AppProps = {
               onSelect={selectStation}
               onRetryLocation={location.retry}
               onOpenPicker={() => setPickerOpen(true)}
-              onRefresh={() => state.location.fix ? runNearby(state.location.fix) : location.retry()}
+              onRefresh={() => {
+                if (stateRef.current.location.phase === 'denied') return;
+                if (stateRef.current.location.fix) runNearby(stateRef.current.location.fix);
+                else location.retry();
+              }}
             />
           ) : <FutureSurface surface={state.surface} savedCount={savedChoices.length} />}
         </div>

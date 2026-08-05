@@ -20,8 +20,18 @@ export function useLocation(options: UseLocationOptions): LocationController {
   optionsRef.current = options;
   const generation = useRef(0);
   const autoStarted = useRef(false);
+  const mounted = useRef(false);
+
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      generation.current += 1;
+    };
+  }, []);
 
   const retry = useCallback(() => {
+    if (!mounted.current) return;
     autoStarted.current = true;
     const requestId = generation.current + 1;
     generation.current = requestId;
@@ -36,13 +46,13 @@ export function useLocation(options: UseLocationOptions): LocationController {
     }
     geolocation.getCurrentPosition(
       (position) => {
-        if (generation.current !== requestId) return;
+        if (!mounted.current || generation.current !== requestId) return;
         const fix = capturePosition(position);
         if (!fix) current.onFailure(requestId);
         else current.onFix(requestId, fix);
       },
       (error) => {
-        if (generation.current !== requestId) return;
+        if (!mounted.current || generation.current !== requestId) return;
         if (error.code === 1) current.onDenied(requestId);
         else current.onFailure(requestId);
       },
@@ -52,14 +62,41 @@ export function useLocation(options: UseLocationOptions): LocationController {
 
   useEffect(() => {
     if (options.autoStart === false || autoStarted.current) return;
-    let active = true;
-    queueMicrotask(() => {
-      if (active && !autoStarted.current) retry();
+    return scheduleAfterPaint(() => {
+      if (!autoStarted.current) retry();
     });
-    return () => { active = false; };
   }, [options.autoStart, retry]);
 
   return Object.freeze({ retry });
+}
+
+function scheduleAfterPaint(callback: () => void): () => void {
+  let active = true;
+  let firstFrame: number | undefined;
+  let secondFrame: number | undefined;
+  let fallbackTimer: ReturnType<typeof setTimeout> | undefined;
+  const finish = () => {
+    if (!active) return;
+    active = false;
+    if (fallbackTimer !== undefined) clearTimeout(fallbackTimer);
+    callback();
+  };
+  if (typeof globalThis.requestAnimationFrame === 'function') {
+    firstFrame = globalThis.requestAnimationFrame(() => {
+      if (!active) return;
+      secondFrame = globalThis.requestAnimationFrame(finish);
+    });
+  } else {
+    fallbackTimer = setTimeout(finish, 0);
+  }
+  return () => {
+    active = false;
+    if (fallbackTimer !== undefined) clearTimeout(fallbackTimer);
+    if (typeof globalThis.cancelAnimationFrame === 'function') {
+      if (firstFrame !== undefined) globalThis.cancelAnimationFrame(firstFrame);
+      if (secondFrame !== undefined) globalThis.cancelAnimationFrame(secondFrame);
+    }
+  };
 }
 
 function capturePosition(position: GeolocationPosition): LocationFixDto | undefined {

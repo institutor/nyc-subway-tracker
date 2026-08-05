@@ -71,11 +71,11 @@ export function appReducer(state: AppState, action: AppAction): AppState {
     return freeze({ ...state, location: { phase: 'requesting', requestId: requestId(action.requestId) } });
   }
   if (action.type === 'location-resolved') {
-    if (action.requestId !== state.location.requestId || state.selectionOwner === 'explicit') return state;
+    if (action.requestId !== state.location.requestId) return state;
     return freeze({ ...state, location: { phase: 'ready', requestId: action.requestId, fix: captureFix(action.fix) } });
   }
   if (action.type === 'location-denied' || action.type === 'location-failed') {
-    if (action.requestId !== state.location.requestId || state.selectionOwner === 'explicit') return state;
+    if (action.requestId !== state.location.requestId) return state;
     return freeze({
       ...state,
       location: { phase: action.type === 'location-denied' ? 'denied' : 'failed', requestId: action.requestId },

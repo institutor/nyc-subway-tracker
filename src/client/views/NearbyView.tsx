@@ -1,6 +1,6 @@
-import type { BoardEnvelopeDto, CatalogComplexDto, NearbyEnvelopeDto } from '../api/client';
+import type { CatalogComplexDto, NearbyEnvelopeDto } from '../api/client';
 import type { StationChoice } from '../state/app-state';
-import { StationCard } from '../components/StationCard';
+import { StationCard, type NearbyBoardState, type StationSelection } from '../components/StationCard';
 import { StatusBanner } from '../components/StatusBanner';
 
 export function NearbyView({
@@ -18,12 +18,12 @@ export function NearbyView({
 }: {
   readonly phase: 'idle' | 'loading' | 'ready' | 'error';
   readonly response?: NearbyEnvelopeDto;
-  readonly boards: ReadonlyMap<string, BoardEnvelopeDto>;
+  readonly boards: ReadonlyMap<string, NearbyBoardState>;
   readonly savedChoices: readonly StationChoice[];
   readonly pickerChoices: readonly CatalogComplexDto[];
   readonly fallback?: 'denied' | 'failed';
   readonly pickerOpen: boolean;
-  readonly onSelect: (station: StationChoice) => void;
+  readonly onSelect: StationSelection;
   readonly onRetryLocation: () => void;
   readonly onOpenPicker: () => void;
   readonly onRefresh: () => void;
@@ -42,11 +42,13 @@ export function NearbyView({
       {fallback ? (
         <StatusBanner tone="warning" actions={(
           <>
-            <button type="button" onClick={onRetryLocation}>Try location again</button>
+            {fallback === 'failed' ? <button type="button" onClick={onRetryLocation}>Try location again</button> : null}
             <button type="button" onClick={onOpenPicker}>Choose a station</button>
           </>
         )}>
-          <p>{fallback === 'failed' ? 'Location is unavailable. Choose a saved station or try again.' : 'Location access is off. Choose a station to continue.'}</p>
+          <p>{fallback === 'failed'
+            ? 'Location is unavailable. Choose a saved station or try again.'
+            : 'Location permission is off. Enable it in your device settings, or choose a station.'}</p>
         </StatusBanner>
       ) : null}
 
@@ -66,7 +68,7 @@ export function NearbyView({
 
       {showPicker ? (
         <section className="station-picker" aria-labelledby="station-picker-heading">
-          <h2 id="station-picker-heading">Choose a station</h2>
+          <h3 id="station-picker-heading">Choose a station</h3>
           <p>Location is optional. Pick a station without typing.</p>
           <div className="choice-list">
             {pickerChoices.flatMap((complex) => complex.constituents.map((constituent) => (
@@ -88,7 +90,7 @@ export function NearbyView({
         <NearbyResults phase={phase} response={response} boards={boards} pickerChoices={pickerChoices} onSelect={onSelect} />
       ) : null}
       <div className="context-dock nearby-context-dock" role="toolbar" aria-label="Nearby controls">
-        <button type="button" aria-label="Refresh nearby stations" onClick={onRefresh}>
+        <button type="button" aria-label="Refresh nearby stations" onClick={onRefresh} disabled={fallback === 'denied'}>
           <span aria-hidden="true">↻</span><span>Refresh</span>
         </button>
         <button type="button" onClick={onOpenPicker}>
@@ -108,9 +110,9 @@ function NearbyResults({
 }: {
   readonly phase: 'idle' | 'loading' | 'ready' | 'error';
   readonly response?: NearbyEnvelopeDto;
-  readonly boards: ReadonlyMap<string, BoardEnvelopeDto>;
+  readonly boards: ReadonlyMap<string, NearbyBoardState>;
   readonly pickerChoices: readonly CatalogComplexDto[];
-  readonly onSelect: (station: StationChoice) => void;
+  readonly onSelect: StationSelection;
 }) {
   if (!response && (phase === 'idle' || phase === 'loading')) return <NearbySkeleton />;
   if (!response || phase === 'error') {
@@ -122,7 +124,7 @@ function NearbyResults({
   if (response.data.kind === 'picker') {
     return (
       <section className="station-picker" aria-labelledby="walk-picker-heading">
-        <h2 id="walk-picker-heading">Choose a station</h2>
+        <h3 id="walk-picker-heading">Choose a station</h3>
         <p>Comparable walking information is unavailable, so no station was ranked automatically.</p>
         <div className="choice-list">
           {response.data.picker.options.flatMap((option) => {

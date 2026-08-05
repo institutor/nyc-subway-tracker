@@ -4,7 +4,7 @@ import { describe, expect, test, vi } from 'vitest';
 import { App } from '../../src/client/App';
 import { LAST_USED_STATION_KEY } from '../../src/client/state/app-state';
 import { SAVED_STORE_KEY } from '../../src/client/storage/browser-store';
-import type { BootstrapEnvelopeDto } from '../../src/client/api/client';
+import type { BoardEnvelopeDto, BootstrapEnvelopeDto, NearbyEnvelopeDto } from '../../src/client/api/client';
 import {
   ControlledGeolocation,
   MemoryStorage,
@@ -44,6 +44,96 @@ describe('zero-tap Nearby rider view', () => {
     expect(within(cards[0]).getByRole('heading', { name: 'Downtown / Southbound' })).toBeTruthy();
   });
 
+  test.each([false, true])('opens the exact platform board even when Nearby directions are reordered (%s)', async (reversed) => {
+    const geolocation = new ControlledGeolocation();
+    const sourceDirection = rankedNearbyData().cards[0].directions[0];
+    const northbound = {
+      ...sourceDirection,
+      constituentId: 'CX-LOWER',
+      constituentPublicName: 'Lower level',
+      directionalStopId: 'CX-LOWERN',
+      direction: 'northbound' as const,
+      actualDestination: 'Jamaica–179 St',
+      routeIds: ['F'],
+    };
+    const southbound = {
+      ...sourceDirection,
+      constituentId: 'CX-UPPER',
+      constituentPublicName: 'Upper level',
+      directionalStopId: 'CX-UPPERS',
+      direction: 'southbound' as const,
+      actualDestination: 'Coney Island–Stillwell Av',
+      routeIds: ['F'],
+    };
+    const response: NearbyEnvelopeDto = {
+      ...nearbyEnvelope,
+      responseIdentity: `response:nearby:platform-order:${reversed}`,
+      data: {
+        kind: 'ranked',
+        cards: [{
+          complexId: 'CX',
+          complexName: 'Transfer Hub',
+          rankingRange: { minimumSeconds: 60, maximumSeconds: 90 },
+          directions: reversed ? [southbound, northbound] : [northbound, southbound],
+          stationDetailAvailable: true,
+        }],
+        picker: { required: false, bottomAnchored: true, options: [] },
+      },
+    };
+    const board = vi.fn(async (stationId: string) => boardEnvelope(stationId, 'Transfer Hub', ['F']));
+    render(<App api={createClientApi({ nearby: async () => response, board })} geolocation={geolocation} storage={new MemoryStorage()} />);
+    await waitFor(() => expect(geolocation.requests).toHaveLength(1));
+    await act(async () => geolocation.succeed(0, 25));
+
+    const exactAction = await screen.findByRole('button', {
+      name: 'Open Uptown / Northbound board for Transfer Hub — Lower level',
+    });
+    expect(screen.queryByRole('button', { name: 'Full board' })).toBeNull();
+    fireEvent.click(exactAction);
+
+    await waitFor(() => expect(board.mock.calls.at(-1)).toEqual([
+      'CX-LOWER',
+      { routeIds: ['F'], direction: 'northbound' },
+      expect.any(AbortSignal),
+    ]));
+  });
+
+  test('settles one rejected exact platform as unavailable while sibling arrivals remain useful', async () => {
+    const geolocation = new ControlledGeolocation();
+    const board = vi.fn(async (stationId: string, filters?: { readonly direction?: 'northbound' | 'southbound' }) => {
+      if (stationId === 'R20' && filters?.direction === 'northbound') throw new Error('one platform failed');
+      return boardEnvelope(stationId);
+    });
+    render(<App api={createClientApi({ board })} geolocation={geolocation} storage={new MemoryStorage()} />);
+    await waitFor(() => expect(geolocation.requests).toHaveLength(1));
+    await act(async () => geolocation.succeed(0, 25));
+
+    const canal = (await screen.findAllByTestId('nearby-station-card'))[0];
+    const northbound = within(canal).getByRole('region', { name: 'Uptown / Northbound nearby service' });
+    const southbound = within(canal).getByRole('region', { name: 'Downtown / Southbound nearby service' });
+    expect(await within(northbound).findByText('Arrival information is unavailable for this exact platform.')).toBeTruthy();
+    expect(within(northbound).queryByLabelText('Uptown / Northbound arrivals loading')).toBeNull();
+    expect(await within(southbound).findByTestId('primary-arrival')).toBeTruthy();
+  });
+
+  test('renders resolved sibling platforms without waiting for another exact board request', async () => {
+    const geolocation = new ControlledGeolocation();
+    const pending = new Promise<BoardEnvelopeDto>(() => undefined);
+    const board = vi.fn(async (stationId: string, filters?: { readonly direction?: 'northbound' | 'southbound' }) => {
+      if (stationId === 'R20' && filters?.direction === 'northbound') return pending;
+      return boardEnvelope(stationId);
+    });
+    render(<App api={createClientApi({ board })} geolocation={geolocation} storage={new MemoryStorage()} />);
+    await waitFor(() => expect(geolocation.requests).toHaveLength(1));
+    await act(async () => geolocation.succeed(0, 25));
+
+    const canal = (await screen.findAllByTestId('nearby-station-card'))[0];
+    const northbound = within(canal).getByRole('region', { name: 'Uptown / Northbound nearby service' });
+    const southbound = within(canal).getByRole('region', { name: 'Downtown / Southbound nearby service' });
+    expect(within(northbound).getByLabelText('Uptown / Northbound arrivals loading')).toBeTruthy();
+    expect(await within(southbound).findByTestId('primary-arrival')).toBeTruthy();
+  });
+
   test('uses last-used station before saved choices when location is denied', async () => {
     const storage = new MemoryStorage();
     storage.setItem(LAST_USED_STATION_KEY, JSON.stringify({ complexId: 'A12', constituentId: 'A12', name: '125 St' }));
@@ -57,6 +147,9 @@ describe('zero-tap Nearby rider view', () => {
     await act(async () => geolocation.fail(0, 1));
 
     expect(await screen.findByRole('heading', { name: '125 St', level: 2 })).toBeTruthy();
+    expect(screen.getByText('Location unavailable. Showing your last station.')).toBeTruthy();
+    expect(screen.getByText(/enable location in your device settings/i)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Try location again' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Canal St saved station' })).toBeNull();
   });
 
@@ -81,7 +174,7 @@ describe('zero-tap Nearby rider view', () => {
     render(<App api={createClientApi()} geolocation={emptyLocation} storage={new MemoryStorage()} />);
     await waitFor(() => expect(emptyLocation.requests).toHaveLength(1));
     await act(async () => emptyLocation.fail(0, 1));
-    expect(await screen.findByRole('heading', { name: 'Choose a station' })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'Choose a station', level: 3 })).toBeTruthy();
     expect(screen.queryByRole('textbox')).toBeNull();
     expect(document.activeElement).toBe(document.body);
   });
@@ -140,7 +233,53 @@ describe('zero-tap Nearby rider view', () => {
     await act(async () => geolocation.fail(1, 2));
 
     expect(screen.getByRole('heading', { name: 'Canal St', level: 2 })).toBeTruthy();
+    expect(screen.getByText('Location unavailable. Showing your last station.')).toBeTruthy();
     expect(screen.queryByRole('heading', { name: 'Choose a station' })).toBeNull();
+  });
+
+  test('refreshes Nearby suggestions after an explicit-station retry without replacing that station', async () => {
+    const nearby = vi.fn(async () => nearbyEnvelope);
+    const geolocation = new ControlledGeolocation();
+    render(<App api={createClientApi({ nearby })} geolocation={geolocation} storage={new MemoryStorage()} />);
+    await waitFor(() => expect(geolocation.requests).toHaveLength(1));
+    await act(async () => geolocation.fail(0, 2));
+    fireEvent.click(await screen.findByRole('button', { name: /^Canal St\b/ }));
+    expect(await screen.findByRole('heading', { name: 'Canal St', level: 2 })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Try location again' }));
+    await waitFor(() => expect(geolocation.requests).toHaveLength(2));
+    await act(async () => geolocation.succeed(1, 50));
+
+    await waitFor(() => expect(nearby).toHaveBeenCalledTimes(1));
+    expect(screen.getByRole('heading', { name: 'Canal St', level: 2 })).toBeTruthy();
+    fireEvent.click(within(screen.getByRole('navigation', { name: 'Primary' })).getByRole('button', { name: 'Nearby' }));
+    expect(await screen.findAllByTestId('nearby-station-card')).toHaveLength(3);
+  });
+
+  test('does not re-prompt from denial controls and instead gives device-settings guidance', async () => {
+    const geolocation = new ControlledGeolocation();
+    render(<App api={createClientApi()} geolocation={geolocation} storage={new MemoryStorage()} />);
+    await waitFor(() => expect(geolocation.requests).toHaveLength(1));
+    await act(async () => geolocation.fail(0, 1));
+
+    expect(await screen.findByText(/enable it in your device settings/i)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Try location again' })).toBeNull();
+    const refresh = screen.getByRole('button', { name: 'Refresh nearby stations' }) as HTMLButtonElement;
+    expect(refresh.disabled).toBe(true);
+    fireEvent.click(refresh);
+    expect(geolocation.requests).toHaveLength(1);
+  });
+
+  test('does not post Nearby coordinates when the app unmounts before a location callback', async () => {
+    const nearby = vi.fn(async () => nearbyEnvelope);
+    const geolocation = new ControlledGeolocation();
+    const view = render(<App api={createClientApi({ nearby })} geolocation={geolocation} storage={new MemoryStorage()} />);
+    await waitFor(() => expect(geolocation.requests).toHaveLength(1));
+
+    view.unmount();
+    act(() => geolocation.succeed(0, 25));
+
+    expect(nearby).not.toHaveBeenCalled();
   });
 
   test('keeps the four frequent destinations in the specified bottom-navigation order', async () => {
@@ -217,10 +356,16 @@ describe('zero-tap Nearby rider view', () => {
     await waitFor(() => expect(geolocation.requests).toHaveLength(1));
     await act(async () => geolocation.succeed(0, 25));
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Transfer Hub — Upper level' }));
+    expect(await screen.findByRole('heading', { name: 'Choose a station', level: 3 })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Transfer Hub — Upper level' }));
 
     await waitFor(() => expect(board).toHaveBeenCalled());
     expect(board.mock.calls.at(-1)?.[0]).toBe('CX-UPPER');
     expect(board.mock.calls.some(([stationId]) => stationId === 'CX')).toBe(false);
   });
 });
+
+function rankedNearbyData(): Extract<NearbyEnvelopeDto['data'], { readonly kind: 'ranked' }> {
+  if (nearbyEnvelope.data?.kind !== 'ranked') throw new Error('Expected ranked Nearby fixture.');
+  return nearbyEnvelope.data;
+}

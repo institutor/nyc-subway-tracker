@@ -193,6 +193,58 @@ describe('transit API client boundary', () => {
     await expect(client.board('A12', { routeIds: ['A'] })).rejects.toThrow('Transit information is unavailable.');
   });
 
+  test('accepts expected and holding rows when every row agrees on direction and clock boundary', async () => {
+    const coherent = boardWithEveryArrivalShape();
+    const client = createTransitApiClient(async () => jsonResponse(coherent));
+
+    const result = await client.board('A12');
+
+    expect(result.data?.directions[0].primary[0].kind).toBe('expected');
+    expect(result.data?.directions[0].secondary[0].kind).toBe('holding');
+    expect(result.data?.directions[1].primary[0].direction).toBe('southbound');
+  });
+
+  test.each([
+    ['primary', (value: any) => { value.data.directions[0].primary[0].direction = 'southbound'; }],
+    ['secondary', (value: any) => { value.data.directions[0].secondary[0].direction = 'southbound'; }],
+  ])('rejects a %s row that contradicts its owning direction', async (_kind, contradict) => {
+    const mismatched = boardWithEveryArrivalShape();
+    contradict(mismatched);
+    const client = createTransitApiClient(async () => jsonResponse(mismatched));
+
+    await expect(client.board('A12')).rejects.toThrow('Transit information is unavailable.');
+  });
+
+  test('rejects a row/container direction contradiction on an exact filtered request', async () => {
+    const mismatched = boardWithEveryArrivalShape();
+    mismatched.data.directions = [mismatched.data.directions[0]];
+    mismatched.data.directions[0].secondary[0].direction = 'southbound';
+    const client = createTransitApiClient(async () => jsonResponse(mismatched));
+
+    await expect(client.board('A12', { routeIds: ['A'], direction: 'northbound' }))
+      .rejects.toThrow('Transit information is unavailable.');
+  });
+
+  test('rejects competing valid-through boundaries across the displayed board', async () => {
+    const mismatched = boardWithEveryArrivalShape();
+    mismatched.data.directions[1].primary[0].validThrough = '2026-08-04T12:01:31.000Z';
+    const client = createTransitApiClient(async () => jsonResponse(mismatched));
+
+    await expect(client.board('A12')).rejects.toThrow('Transit information is unavailable.');
+  });
+
+  test('rejects a shared valid-through boundary that predates server time', async () => {
+    const expired = boardWithEveryArrivalShape();
+    for (const direction of expired.data.directions) {
+      for (const row of [...direction.primary, ...direction.secondary]) {
+        row.validThrough = '2026-08-04T11:59:59.000Z';
+      }
+    }
+    const client = createTransitApiClient(async () => jsonResponse(expired));
+
+    await expect(client.board('A12')).rejects.toThrow('Transit information is unavailable.');
+  });
+
   test('captures monotonic receipt time before a board reaches the render queue', async () => {
     const clock = vi.spyOn(performance, 'now').mockReturnValue(4_321);
     const client = createTransitApiClient(async () => jsonResponse(boardEnvelope));
@@ -209,4 +261,40 @@ function jsonResponse(value: unknown): Response {
     status: 200,
     headers: { 'content-type': 'application/json' },
   });
+}
+
+function boardWithEveryArrivalShape(): any {
+  const value = structuredClone(boardEnvelope) as any;
+  value.responseIdentity = 'response:board:all-arrival-shapes';
+  const live = value.data.directions[0].primary[0];
+  const common = {
+    route: live.route,
+    direction: 'northbound',
+    destination: live.destination,
+    validThrough: live.validThrough,
+    demonstrationLabel: live.demonstrationLabel,
+    provenance: live.provenance,
+  };
+  value.data.directions[0].primary = [{
+    ...common,
+    id: 'train-expected',
+    kind: 'expected',
+    displayAuthority: 'range',
+    estimateAt: '2026-08-04T12:06:00.000Z',
+    range: { startsAt: '2026-08-04T12:05:00.000Z', endsAt: '2026-08-04T12:07:00.000Z' },
+  }];
+  value.data.directions[0].secondary = [{
+    ...common,
+    id: 'train-holding',
+    kind: 'holding',
+    displayAuthority: 'status-only',
+    lastSupportedAt: '2026-08-04T11:58:30.000Z',
+  }];
+  value.data.directions.push({
+    direction: 'southbound',
+    primary: [{ ...live, id: 'train-south', direction: 'southbound' }],
+    secondary: [],
+    explanations: [],
+  });
+  return value;
 }

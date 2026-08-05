@@ -472,6 +472,7 @@ function parseBoard(
   const base = dynamicBase(root);
   const data = root.data === null ? null : parseBoardData(root.data);
   if ((base.runtime.availability === 'locked') !== (data === null)) invalid();
+  assertBoardClockBoundary(data, base.serverTime);
   if (data?.station && data.station.id !== request.stationId) invalid();
   if (request.direction && data?.directions.some(({ direction }) => direction !== request.direction)) invalid();
   if (request.routeIds.length > 0 && data?.directions.some(({ primary, secondary }) =>
@@ -499,11 +500,22 @@ function parseStation(value: unknown) {
 
 function parseBoardDirection(value: unknown): BoardDirectionDto {
   const row = strictRecord(value, ['direction', 'primary', 'secondary', 'explanations']);
+  const direction = parseDirection(row.direction);
+  const primary = boundedArray(row.primary, 3).map(parsePrimaryArrival);
+  const secondary = boundedArray(row.secondary, 64).map(parseSecondaryArrival);
+  if ([...primary, ...secondary].some((arrival) => arrival.direction !== direction)) invalid();
   return {
-    direction: parseDirection(row.direction), primary: boundedArray(row.primary, 3).map(parsePrimaryArrival),
-    secondary: boundedArray(row.secondary, 64).map(parseSecondaryArrival),
+    direction, primary, secondary,
     explanations: boundedArray(row.explanations, 128).map(parseExplanation),
   };
+}
+
+function assertBoardClockBoundary(data: BoardDataDto | null, serverTime: string): void {
+  if (data === null) return;
+  const boundaries = data.directions.flatMap(({ primary, secondary }) =>
+    [...primary, ...secondary].map(({ validThrough }) => validThrough));
+  if (boundaries.length === 0) return;
+  if (new Set(boundaries).size !== 1 || Date.parse(boundaries[0]) < Date.parse(serverTime)) invalid();
 }
 
 function parsePrimaryArrival(value: unknown): PrimaryArrivalDto {

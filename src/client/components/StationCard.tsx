@@ -5,6 +5,16 @@ import { directionLabel, DirectionTrack } from './DirectionTrack';
 import { RouteToken } from './RouteToken';
 import { sourceLabel } from './ArrivalRow';
 
+export type NearbyBoardState =
+  | { readonly phase: 'loading' }
+  | { readonly phase: 'ready'; readonly board: BoardEnvelopeDto }
+  | { readonly phase: 'unavailable' };
+
+export type StationSelection = (
+  station: StationChoice,
+  filters?: { readonly routeIds: readonly string[]; readonly direction: NearbyDirectionDto['direction'] },
+) => void;
+
 export function boardRequestKey(direction: NearbyDirectionDto): string {
   return `${direction.constituentId}\u0000${direction.direction}\u0000${direction.routeIds.join('\u0000')}`;
 }
@@ -15,10 +25,9 @@ export function StationCard({
   onSelect,
 }: {
   readonly card: NearbyStationCardDto;
-  readonly boards: ReadonlyMap<string, BoardEnvelopeDto>;
-  readonly onSelect: (station: StationChoice) => void;
+  readonly boards: ReadonlyMap<string, NearbyBoardState>;
+  readonly onSelect: StationSelection;
 }) {
-  const first = card.directions[0];
   return (
     <article className="station-card" data-testid="nearby-station-card">
       <header className="station-card__header">
@@ -27,29 +36,36 @@ export function StationCard({
           <h2>{card.complexName}</h2>
           {card.walkComparison ? <p className="quiet-copy">{card.walkComparison}</p> : null}
         </div>
-        {first ? (
-          <button
-            className="text-action"
-            type="button"
-            onClick={() => onSelect({ complexId: card.complexId, constituentId: first.constituentId, name: card.complexName })}
-          >
-            Full board
-          </button>
-        ) : null}
       </header>
       <div className="station-card__spine" aria-hidden="true" />
       {card.directions.map((direction) => (
         <NearbyDirection
           key={boardRequestKey(direction)}
+          complexId={card.complexId}
+          complexName={card.complexName}
           direction={direction}
-          board={boards.get(boardRequestKey(direction))}
+          boardState={boards.get(boardRequestKey(direction))}
+          onSelect={onSelect}
         />
       ))}
     </article>
   );
 }
 
-function NearbyDirection({ direction, board }: { readonly direction: NearbyDirectionDto; readonly board?: BoardEnvelopeDto }) {
+function NearbyDirection({
+  complexId,
+  complexName,
+  direction,
+  boardState,
+  onSelect,
+}: {
+  readonly complexId: string;
+  readonly complexName: string;
+  readonly direction: NearbyDirectionDto;
+  readonly boardState?: NearbyBoardState;
+  readonly onSelect: StationSelection;
+}) {
+  const board = boardState?.phase === 'ready' ? boardState.board : undefined;
   const exactDirection = board?.data?.station?.id === direction.constituentId
     ? board.data.directions.find((candidate) => candidate.direction === direction.direction)
     : undefined;
@@ -67,9 +83,22 @@ function NearbyDirection({ direction, board }: { readonly direction: NearbyDirec
         <p><strong>To {direction.actualDestination}</strong></p>
         <p className="entrance-copy">Enter at {direction.selectedEntrance.publicDescription}</p>
         <p className="quiet-copy">{formatWalkRange(direction.selectedEntrance.walkRange)} walk to this service</p>
+        <button
+          className="text-action"
+          type="button"
+          aria-label={`Open ${directionLabel(direction.direction)} board for ${complexName} — ${direction.constituentPublicName}`}
+          onClick={() => onSelect(
+            { complexId, constituentId: direction.constituentId, name: complexName },
+            { routeIds: direction.routeIds, direction: direction.direction },
+          )}
+        >
+          Open this board
+        </button>
       </div>
       {direction.arrivalState === 'unavailable' ? <p className="unavailable-copy">Arrival information is unavailable.</p>
-        : !board ? <DirectionSkeleton label={directionLabel(direction.direction)} />
+        : boardState?.phase === 'unavailable'
+          ? <p className="unavailable-copy">Arrival information is unavailable for this exact platform.</p>
+          : !board ? <DirectionSkeleton label={directionLabel(direction.direction)} />
           : board.runtime.availability === 'locked' || board.data === null
             ? <p className="unavailable-copy">Live arrivals are not released yet.</p>
             : exactDirection ? <DirectionTrack direction={exactDirection} reading={reading} />
