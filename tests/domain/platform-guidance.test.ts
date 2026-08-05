@@ -69,6 +69,10 @@ describe('immutable platform guidance', () => {
     expect(resolvePlatformGuidance([record()], { ...request, exposure: approved })).toBeUndefined();
   });
 
+  test('rejects reuse of a genuine guidance exposure after its validity window', () => {
+    expect(resolvePlatformGuidance([record()], { ...request, now: new Date('2027-07-30T23:59:59.001Z') })).toBeUndefined();
+  });
+
   test('returns an immutable resolved validation exposure identity', () => {
     expect(Object.isFrozen(validationGuidanceExposure)).toBe(true);
     expect(() => { (validationGuidanceExposure as { packageVersion: string }).packageVersion = 'forged'; }).toThrow();

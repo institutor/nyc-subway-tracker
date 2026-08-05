@@ -30,6 +30,7 @@ export function resolvedPath(pathId: string, status: 'eligible' | 'ineligible' =
   return assessAccessiblePath(item, {
     stationId: 'A12', routeId: 'A', direction: 'northbound', platformId: status === 'eligible' ? 'A12N' : 'A12S',
     equipmentSourceScopeId: 'nyc-equipment', equipmentSourceVersion: 'equipment-v1', equipment: {}, exposure,
+    decisionTime: new Date('2026-08-01T00:00:00.000Z'),
   });
 }
 

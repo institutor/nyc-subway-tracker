@@ -4,6 +4,8 @@ export type ExposureSurface = 'validation' | 'public';
 
 export interface ExposureRoleReview {
   readonly reviewId: string;
+  readonly parentDecisionId: string;
+  readonly parentDecisionVersion: string;
   readonly role: EvidenceRole;
   readonly decision: 'approve';
   readonly packageVersion: string;
@@ -12,6 +14,8 @@ export interface ExposureRoleReview {
 
 export interface ExposureReleaseDecision {
   readonly releaseDecisionId: string;
+  readonly parentDecisionId: string;
+  readonly parentDecisionVersion: string;
   readonly owner: EvidenceOwner;
   readonly packageVersion: string;
   readonly status: 'pending' | 'approved';
@@ -42,6 +46,9 @@ export interface ResolvedExposureDecision<Owner extends EvidenceOwner> {
   readonly releaseDecisionId: string;
   readonly releaseStatus: 'pending' | 'approved';
   readonly acceptedAt: string;
+  readonly validFrom: string;
+  readonly validThrough: string;
+  readonly resolvedAt: string;
 }
 export type ResolvedAccessibilityExposure = ResolvedExposureDecision<'accessibility'>;
 export type ResolvedGuidanceExposure = ResolvedExposureDecision<'guidance'>;
@@ -89,8 +96,15 @@ export function exposureAllowsEvaluation(
   decision: ResolvedAccessibilityExposure | ResolvedGuidanceExposure | null | undefined,
   packageVersion: string,
   owner: EvidenceOwner,
+  decisionTime: Date,
+  surface?: ExposureSurface,
 ): boolean {
-  return Boolean(decision && resolvedDecisions.has(decision) && decision.owner === owner && decision.packageVersion === packageVersion);
+  const decisionMs = decisionTime instanceof Date ? decisionTime.getTime() : Number.NaN;
+  return Boolean(decision && resolvedDecisions.has(decision) && decision.owner === owner
+    && decision.packageVersion === packageVersion && (!surface || decision.surface === surface)
+    && Number.isFinite(decisionMs) && decisionMs >= Date.parse(decision.validFrom)
+    && decisionMs <= Date.parse(decision.validThrough) && decisionMs >= Date.parse(decision.acceptedAt)
+    && decisionMs >= Date.parse(decision.resolvedAt));
 }
 
 export function validateExposureDecisionRegistry(raw: readonly unknown[]): readonly ExposureDecisionRecord[] {
@@ -116,7 +130,7 @@ export function validateExposureDecisionRegistry(raw: readonly unknown[]): reado
     if (!Array.isArray(root.reviews) || root.reviews.length !== 5) throw new Error('Exposure decision requires the complete five-role review package');
     const roles = new Set<EvidenceRole>();
     const reviews = root.reviews.map((reviewValue) => {
-      const review = strictRecord(reviewValue, ['reviewId', 'role', 'decision', 'packageVersion', 'decidedAt'], 'exposure role review');
+      const review = strictRecord(reviewValue, ['reviewId', 'parentDecisionId', 'parentDecisionVersion', 'role', 'decision', 'packageVersion', 'decidedAt'], 'exposure role review');
       const reviewId = identity(review.reviewId, 'review identity');
       if (reviewIds.has(reviewId)) throw new Error(`Duplicate review identity: ${reviewId}`);
       reviewIds.add(reviewId);
@@ -124,19 +138,23 @@ export function validateExposureDecisionRegistry(raw: readonly unknown[]): reado
       if (roles.has(role)) throw new Error(`Duplicate review role: ${role}`);
       roles.add(role);
       if (review.decision !== 'approve') throw new Error('Every exposure role must explicitly approve');
+      if (review.parentDecisionId !== decisionId || review.parentDecisionVersion !== decisionVersion) throw new Error('Review parent decision linkage does not match decision');
       if (review.packageVersion !== packageVersion) throw new Error('Review package version does not match decision');
       return {
         reviewId,
+        parentDecisionId: decisionId,
+        parentDecisionVersion: decisionVersion,
         role,
         decision: 'approve' as const,
         packageVersion,
         decidedAt: instant(review.decidedAt, 'review decision'),
       };
     });
-    const releaseRoot = strictRecord(root.release, ['releaseDecisionId', 'owner', 'packageVersion', 'status', 'decidedAt'], 'release decision');
+    const releaseRoot = strictRecord(root.release, ['releaseDecisionId', 'parentDecisionId', 'parentDecisionVersion', 'owner', 'packageVersion', 'status', 'decidedAt'], 'release decision');
     const releaseDecisionId = identity(releaseRoot.releaseDecisionId, 'release decision identity');
     if (releaseIds.has(releaseDecisionId)) throw new Error(`Duplicate release identity: ${releaseDecisionId}`);
     releaseIds.add(releaseDecisionId);
+    if (releaseRoot.parentDecisionId !== decisionId || releaseRoot.parentDecisionVersion !== decisionVersion) throw new Error('Release parent decision linkage does not match decision');
     if (releaseRoot.owner !== owner || releaseRoot.packageVersion !== packageVersion) throw new Error('Release owner or package version does not match decision');
     const releaseStatus = enumeration(releaseRoot.status, ['pending', 'approved'] as const, 'release status');
     if (surface === 'public' && releaseStatus !== 'approved') throw new Error('Public exposure requires an approved release decision');
@@ -157,6 +175,8 @@ export function validateExposureDecisionRegistry(raw: readonly unknown[]): reado
       reviews,
       release: {
         releaseDecisionId,
+        parentDecisionId: decisionId,
+        parentDecisionVersion: decisionVersion,
         owner,
         packageVersion,
         status: releaseStatus,
@@ -190,6 +210,9 @@ function resolveExposure(
     releaseDecisionId: record.release.releaseDecisionId,
     releaseStatus: record.release.status,
     acceptedAt: record.acceptedAt,
+    validFrom: record.validFrom,
+    validThrough: record.validThrough,
+    resolvedAt: new Date(nowMs).toISOString(),
   }) as ResolvedAccessibilityExposure | ResolvedGuidanceExposure;
   resolvedDecisions.add(resolved);
   return resolved;
@@ -245,6 +268,8 @@ function fixtureDecision(
 ): ExposureDecisionRecord {
   const reviews = (['product', 'accessibility', 'data-quality', 'content', 'operations'] as const).map((role, index) => ({
     reviewId: `${decisionId}-${role}`,
+    parentDecisionId: decisionId,
+    parentDecisionVersion: 'decision-v1',
     role,
     decision: 'approve' as const,
     packageVersion,
@@ -262,6 +287,8 @@ function fixtureDecision(
     reviews,
     release: {
       releaseDecisionId,
+      parentDecisionId: decisionId,
+      parentDecisionVersion: 'decision-v1',
       owner,
       packageVersion,
       status: 'pending',

@@ -5,6 +5,7 @@ import {
   VALIDATION_EXPOSURE_REGISTRY,
   resolveAccessibilityExposure,
   resolveGuidanceExposure,
+  exposureAllowsEvaluation,
   validateExposureDecisionRegistry,
   type ExposureDecisionRecord,
   type ExposureDecisionRegistry,
@@ -66,6 +67,33 @@ describe('app-owned exposure decision registries', () => {
     )).toBeUndefined();
   });
 
+  test('expires a genuine resolved token at every later evaluation boundary and enforces surface', () => {
+    const token = resolveAccessibilityExposure(
+      VALIDATION_EXPOSURE_REGISTRY,
+      'validation-accessibility-coverage-v1',
+      'coverage-v1',
+      now,
+    )!;
+    expect(token).toMatchObject({
+      surface: 'validation',
+      validFrom: '2026-07-30T15:10:00.000Z',
+      validThrough: '2027-07-30T23:59:59.000Z',
+      resolvedAt: '2026-08-01T00:00:00.000Z',
+    });
+    expect(exposureAllowsEvaluation(token, 'coverage-v1', 'accessibility', new Date('2027-07-30T23:59:59.000Z'), 'validation')).toBe(true);
+    expect(exposureAllowsEvaluation(token, 'coverage-v1', 'accessibility', new Date('2027-07-30T23:59:59.001Z'), 'validation')).toBe(false);
+    expect(exposureAllowsEvaluation(token, 'coverage-v1', 'accessibility', now, 'public')).toBe(false);
+  });
+
+  test.each([
+    ['review parent decision id', (record: ExposureDecisionRecord) => ({ ...record, reviews: record.reviews.map((review, index) => ({ ...review, parentDecisionId: index === 0 ? 'wrong-parent' : record.decisionId, parentDecisionVersion: record.decisionVersion })) })],
+    ['review parent decision version', (record: ExposureDecisionRecord) => ({ ...record, reviews: record.reviews.map((review, index) => ({ ...review, parentDecisionId: record.decisionId, parentDecisionVersion: index === 0 ? 'wrong-version' : record.decisionVersion })) })],
+    ['release parent decision id', (record: ExposureDecisionRecord) => ({ ...record, reviews: withParents(record), release: { ...record.release, parentDecisionId: 'wrong-parent', parentDecisionVersion: record.decisionVersion } })],
+    ['release parent decision version', (record: ExposureDecisionRecord) => ({ ...record, reviews: withParents(record), release: { ...record.release, parentDecisionId: record.decisionId, parentDecisionVersion: 'wrong-version' } })],
+  ])('rejects wrong %s linkage', (_name, mutate) => {
+    expect(() => validateExposureDecisionRegistry([mutate(cloneRecord(VALIDATION_EXPOSURE_REGISTRY.records[0]!))])).toThrow(/parent/i);
+  });
+
   test('rejects duplicate decision and release identities', () => {
     const record = cloneRecord(VALIDATION_EXPOSURE_REGISTRY.records[0]!);
     expect(() => validateExposureDecisionRegistry([record, cloneRecord(record)])).toThrow(/duplicate decision/i);
@@ -98,4 +126,8 @@ function cloneRecord(record: ExposureDecisionRecord): ExposureDecisionRecord {
     reviews: record.reviews.map((review) => ({ ...review })),
     release: { ...record.release },
   };
+}
+
+function withParents(record: ExposureDecisionRecord) {
+  return record.reviews.map((review) => ({ ...review, parentDecisionId: record.decisionId, parentDecisionVersion: record.decisionVersion }));
 }

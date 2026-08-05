@@ -68,7 +68,7 @@ function equipment(overrides: { targetEquipmentId?: string; snapshotScope?: stri
   });
 }
 
-const equipmentEvidence = { equipmentSourceScopeId: 'nyc-equipment', equipmentSourceVersion: 'equipment-v1' } as const;
+const equipmentEvidence = { equipmentSourceScopeId: 'nyc-equipment', equipmentSourceVersion: 'equipment-v1', decisionTime: at('2026-08-01T00:00:00Z') } as const;
 
 const validationAccessibilityExposure = resolveAccessibilityExposure(
   VALIDATION_EXPOSURE_REGISTRY,
@@ -180,6 +180,14 @@ describe('complete accessible path evidence', () => {
     const wrongVersion = resolveAccessibilityExposure(VALIDATION_EXPOSURE_REGISTRY, 'validation-accessibility-coverage-v1', 'wrong-v2', at('2026-08-01T00:00:00Z'));
     expect(assessAccessiblePath(packageFixture(), { ...evidence, exposure: publicExposure }).status).toBe('unknown');
     expect(assessAccessiblePath(packageFixture(), { ...evidence, exposure: wrongVersion }).status).toBe('unknown');
+  });
+
+  test('rejects reuse of a genuine exposure token after its validity window', () => {
+    expect(assessAccessiblePath(packageFixture(), {
+      stationId: 'A12', routeId: 'A', direction: 'northbound', platformId: 'A12N',
+      equipment: { 'EL-A12-01': equipment() }, exposure: validationAccessibilityExposure, ...equipmentEvidence,
+      decisionTime: at('2027-07-30T23:59:59.001Z'),
+    }).status).toBe('unknown');
   });
 
   test('rejects a caller-authored same-version approved public accessibility object', () => {
