@@ -289,6 +289,26 @@ export function accessiblePathDecisionAllowsUse(value: unknown, decisionTime: Da
     && dependencies!.every((decision) => equipmentDecisionAllowsUse(decision, decisionTime));
 }
 
+export function accessiblePathDecisionSupportsImpact(
+  value: unknown,
+  decisionTime: Date,
+): value is ResolvedAccessiblePathDecision {
+  const time = decisionTime instanceof Date ? decisionTime.getTime() : Number.NaN;
+  const dependencies = value && typeof value === 'object' ? resolvedPathEquipmentDependencies.get(value) : undefined;
+  return isResolvedAccessiblePathDecision(value) && Number.isFinite(time) && Boolean(dependencies)
+    && value.status === 'eligible' && time >= Date.parse(value.evaluatedAt);
+}
+
+export function accessiblePathEquipmentDependenciesPostdate(
+  value: unknown,
+  adverseAssessment: Date,
+): value is ResolvedAccessiblePathDecision {
+  const cutoff = adverseAssessment instanceof Date ? adverseAssessment.getTime() : Number.NaN;
+  const dependencies = value && typeof value === 'object' ? resolvedPathEquipmentDependencies.get(value) : undefined;
+  return isResolvedAccessiblePathDecision(value) && Number.isFinite(cutoff) && Boolean(dependencies)
+    && dependencies!.every((decision) => Date.parse(decision.assessedAt) > cutoff);
+}
+
 function resolvedPathDecision(
   item: AccessibilityPackage,
   request: AccessiblePathAssessmentRequest,

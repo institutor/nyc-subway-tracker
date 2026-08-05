@@ -6,6 +6,7 @@ import {
   acceptEquipmentRestoration,
   assessEquipmentStatus,
   equipmentDecisionAllowsUse,
+  equipmentDecisionSupportsAdverseImpact,
   type AcceptedEquipmentHistory,
   type AcceptedEquipmentInventory,
   type EquipmentHistoryEvidenceInput,
@@ -14,6 +15,12 @@ import {
 } from '../../src/shared/domain/equipment-status';
 
 const at = (value: string) => new Date(value);
+
+function withInheritedField<T extends Record<string, unknown>, K extends keyof T>(value: T, field: K): T {
+  const own = { ...value };
+  delete own[field];
+  return Object.assign(Object.create({ [field]: value[field] }), own, { unexpectedOwnField: true }) as T;
+}
 
 function inventory(overrides: Record<string, unknown> = {}) {
   return acceptEquipmentInventory({
@@ -122,6 +129,45 @@ describe('accepted equipment evidence', () => {
       .toThrow(/canonical accepted ledger/i);
   });
 
+  test('accepts an exact-prefix extension as the next state of the same canonical ledger', () => {
+    const acceptedInventory = inventory();
+    const first = snapshot({ snapshotId: 'healthy-first' });
+    history(acceptedInventory, [first]);
+    const extended = history(acceptedInventory, [
+      first,
+      adverse({ snapshotId: 'new-adverse', sourceTimestamp: '2026-07-30T12:02:00.000Z', acceptedAt: '2026-07-30T12:02:05.000Z' }),
+    ]);
+
+    expect(assess({ inventory: acceptedInventory, history: extended, decisionTime: '2026-07-30T12:03:00.000Z' }))
+      .toMatchObject({ snapshotId: 'new-adverse', state: 'out-of-service' });
+  });
+
+  test('revokes an earlier healthy decision as soon as its ledger accepts a newer adverse observation', () => {
+    const acceptedInventory = inventory();
+    const first = snapshot({ snapshotId: 'healthy-first' });
+    const initial = history(acceptedInventory, [first]);
+    const earlier = assess({ inventory: acceptedInventory, history: initial, decisionTime: '2026-07-30T12:01:00.000Z' });
+    history(acceptedInventory, [
+      first,
+      adverse({ snapshotId: 'new-adverse', sourceTimestamp: '2026-07-30T12:02:00.000Z', acceptedAt: '2026-07-30T12:02:05.000Z' }),
+    ]);
+
+    expect(equipmentDecisionAllowsUse(earlier, at('2026-07-30T12:03:00.000Z'))).toBe(false);
+  });
+
+  test('rejects a relabelled or non-prefix extension of an accepted ledger', () => {
+    const acceptedInventory = inventory();
+    const first = snapshot({ snapshotId: 'healthy-first' });
+    history(acceptedInventory, [first]);
+    const changedPrefix = snapshot({ snapshotId: 'healthy-first', records: [] });
+    const next = adverse({ snapshotId: 'new-adverse', sourceTimestamp: '2026-07-30T12:02:00.000Z', acceptedAt: '2026-07-30T12:02:05.000Z' });
+
+    expect(() => history(acceptedInventory, [first, next], { historyId: 'relabelled-ledger' }))
+      .toThrow(/canonical accepted ledger/i);
+    expect(() => history(acceptedInventory, [changedPrefix, next]))
+      .toThrow(/prefix|canonical accepted ledger/i);
+  });
+
   test.each([
     ['out-of-order ordinal', { sequenceOrdinal: 3 }],
     ['wrong predecessor', { predecessorSnapshotId: 'not-the-prior-snapshot' }],
@@ -199,6 +245,28 @@ describe('accepted equipment evidence', () => {
       .toMatchObject({ state: 'out-of-service', adverseRecordId: 'current-outage', anomaly: true });
   });
 
+  test('retains the latest exact outage as rechecking one millisecond beyond the current boundary', () => {
+    expect(assess({
+      snapshots: [adverse()],
+      decisionTime: '2026-07-30T12:05:00.001Z',
+    })).toMatchObject({
+      health: 'degraded',
+      state: 'out-of-service-rechecking',
+      adverseRecordId: 'outage-1',
+      restored: false,
+    });
+  });
+
+  test('retains an unrestored latest outage and permits only adverse-impact use beyond the unavailable boundary', () => {
+    const decisionTime = at('2026-07-30T12:15:00.001Z');
+    const decision = assess({ snapshots: [adverse()], decisionTime: decisionTime.toISOString() });
+    expect(decision).toMatchObject({
+      health: 'unavailable', state: 'out-of-service-rechecking', adverseRecordId: 'outage-1', restored: false,
+    });
+    expect(equipmentDecisionAllowsUse(decision, decisionTime)).toBe(false);
+    expect(equipmentDecisionSupportsAdverseImpact(decision, decisionTime)).toBe(true);
+  });
+
   test('uses the union of bad record identities so overlapping duplicate and unmatched evidence is counted once', () => {
     const acceptedInventory = inventory();
     const records = [
@@ -222,10 +290,89 @@ describe('accepted equipment evidence', () => {
     expect(assess({ inventory: anotherInventory, snapshots: [previousAbove, above] }).health).toBe('degraded');
   });
 
+  test('detects a same-size wholesale replacement of accepted record and equipment identities', () => {
+    const acceptedInventory = inventory();
+    const population = (prefix: string, equipmentOffset: number) => Array.from({ length: 4 }, (_, index) => ({
+      recordId: `${prefix}-${index}`,
+      equipmentId: `EL-X${equipmentOffset + index}`,
+      state: 'planned-outage',
+    }));
+    const previous = snapshot({
+      snapshotId: 'previous-identities', sourceTimestamp: '2026-07-30T11:59:00.000Z', acceptedAt: '2026-07-30T11:59:05.000Z',
+      records: population('prior', 0),
+    });
+    const replacement = snapshot({ records: population('replacement', 10) });
+
+    expect(assess({ inventory: acceptedInventory, snapshots: [previous, replacement] }))
+      .toMatchObject({ health: 'degraded', anomaly: true });
+  });
+
+  test('keeps exact fifty-percent identity disappearance non-anomalous and degrades only above it', () => {
+    const acceptedInventory = inventory();
+    const record = (id: number) => ({ recordId: `out-${id}`, equipmentId: `EL-X${id}`, state: 'planned-outage' });
+    const previous = snapshot({
+      snapshotId: 'previous-identities', sourceTimestamp: '2026-07-30T11:59:00.000Z', acceptedAt: '2026-07-30T11:59:05.000Z',
+      records: [record(0), record(1), record(2), record(3)],
+    });
+    const exactHalf = snapshot({ records: [record(0), record(1), record(10), record(11)] });
+    expect(assess({ inventory: acceptedInventory, snapshots: [previous, exactHalf] }))
+      .toMatchObject({ health: 'current', anomaly: false });
+
+    const anotherInventory = inventory();
+    const previousFive = snapshot({
+      snapshotId: 'previous-five', sourceTimestamp: '2026-07-30T11:59:00.000Z', acceptedAt: '2026-07-30T11:59:05.000Z',
+      records: [record(0), record(1), record(2), record(3), record(4)],
+    });
+    const aboveHalf = snapshot({ records: [record(0), record(1), record(10), record(11), record(12)] });
+    expect(assess({ inventory: anotherInventory, snapshots: [previousFive, aboveHalf] }))
+      .toMatchObject({ health: 'degraded', anomaly: true });
+  });
+
   test('expires even genuine positive equipment decisions at the five-minute source boundary', () => {
     const decision = assess({ decisionTime: '2026-07-30T12:01:00.000Z' });
     expect(equipmentDecisionAllowsUse(decision, at('2026-07-30T12:05:00.000Z'))).toBe(true);
     expect(equipmentDecisionAllowsUse(decision, at('2026-07-30T12:05:00.001Z'))).toBe(false);
+  });
+});
+
+describe('equipment evidence own-key schemas', () => {
+  test('rejects an inventory whose required owner is inherited beside an extra own field', () => {
+    const raw = withInheritedField({
+      inventoryId: 'inventory-v1', evidenceOwner: 'official-equipment-inventory', sourceScopeId: 'nyc-equipment',
+      sourceVersion: 'inventory-v1', acceptedAt: '2026-07-30T00:00:00.000Z', equipmentIds: ['EL-1'],
+    }, 'evidenceOwner');
+    expect(() => acceptEquipmentInventory(raw as never)).toThrow(/exact schema/i);
+  });
+
+  test('rejects a history whose required owner is inherited beside an extra own field', () => {
+    const acceptedInventory = inventory();
+    const raw = withInheritedField({
+      historyId: 'equipment-history-v1', evidenceOwner: 'official-equipment-status', sourceScopeId: 'nyc-equipment',
+      sourceVersion: 'equipment-v1', inventoryVersion: 'inventory-v1', snapshots: [snapshot()],
+    }, 'evidenceOwner');
+    expect(() => acceptEquipmentHistory(raw as never, acceptedInventory)).toThrow(/exact schema/i);
+  });
+
+  test('rejects a snapshot whose required owner is inherited beside an extra own field', () => {
+    const acceptedInventory = inventory();
+    const inherited = withInheritedField(snapshot() as unknown as Record<string, unknown>, 'evidenceOwner');
+    expect(() => acceptEquipmentHistory({
+      historyId: 'equipment-history-v1', evidenceOwner: 'official-equipment-status', sourceScopeId: 'nyc-equipment',
+      sourceVersion: 'equipment-v1', inventoryVersion: 'inventory-v1', snapshots: [inherited as never],
+    }, acceptedInventory)).toThrow(/exact schema/i);
+  });
+
+  test('rejects a restoration whose required owner is inherited beside an extra own field', () => {
+    const raw = withInheritedField({
+      restorationId: 'restore-1', evidenceOwner: 'official-equipment-status', sourceScopeId: 'nyc-equipment', sourceVersion: 'equipment-v1',
+      equipmentId: 'EL-1', outageRecordId: 'outage-1', restoredAt: '2026-07-30T12:02:00.000Z', acceptedAt: '2026-07-30T12:02:05.000Z',
+    }, 'evidenceOwner');
+    expect(() => acceptEquipmentRestoration(raw as never)).toThrow(/exact schema/i);
+  });
+
+  test('does not accept an outage record whose state is inherited beside an extra own field', () => {
+    const inherited = withInheritedField({ recordId: 'outage-1', equipmentId: 'EL-1', state: 'out-of-service' }, 'state');
+    expect(assess({ snapshots: [snapshot({ records: [inherited] })] }).state).not.toBe('out-of-service');
   });
 });
 
@@ -237,7 +384,13 @@ describe('restoration evidence', () => {
       restorationId: 'restore-1', evidenceOwner: 'official-equipment-status', sourceScopeId: 'nyc-equipment', sourceVersion: 'equipment-v1',
       equipmentId: 'EL-1', outageRecordId: 'outage-1', restoredAt: '2026-07-30T12:02:00.000Z', acceptedAt: '2026-07-30T12:02:05.000Z',
     });
-    expect(assess({ inventory: acceptedInventory, snapshots: [adverse(), currentSnapshot], restorationRecords: [restoration], decisionTime: '2026-07-30T12:04:00.000Z' }))
+    const outageWithStablePopulation = adverse({
+      records: [
+        { recordId: 'outage-1', equipmentId: 'EL-1', state: 'out-of-service' },
+        { recordId: 'out-2', equipmentId: 'EL-2', state: 'out-of-service' },
+      ],
+    });
+    expect(assess({ inventory: acceptedInventory, snapshots: [outageWithStablePopulation, currentSnapshot], restorationRecords: [restoration], decisionTime: '2026-07-30T12:04:00.000Z' }))
       .toMatchObject({ restored: true, state: 'no-official-outage-reported' });
   });
 

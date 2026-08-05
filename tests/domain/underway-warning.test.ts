@@ -147,6 +147,21 @@ describe('underway accessibility warning', () => {
     expect(transitionAccessibilityWarning(context.warning, { type: 'owner-resolved', pathDecision: laterOwner }, new Date('2026-08-01T00:05:00.000Z')).active).toBe(false);
   });
 
+  test('does not clear from a later path evaluation whose required equipment decisions predate the triggering adverse assessment', () => {
+    const context = warningContext();
+    const staleEvidenceOwner = resolvedPath('selected', 'eligible', {
+      equipmentIds: ['EL-1'], destinationIntent: '168 St',
+      decisionTime: transitionTime.toISOString(),
+      equipmentDecisionTime: '2026-08-01T00:01:00.000Z',
+    });
+
+    expect(transitionAccessibilityWarning(
+      context.warning,
+      { type: 'owner-resolved', pathDecision: staleEvidenceOwner },
+      transitionTime,
+    ).active).toBe(true);
+  });
+
   test('rejects scalar clearing assertions and caller-authored warnings', () => {
     const active = warning();
     expect(transitionAccessibilityWarning(active, { type: 'owner-resolved', freshFullPathPassed: true } as never, transitionTime).active).toBe(true);

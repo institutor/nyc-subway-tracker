@@ -4,7 +4,11 @@ import {
   type ResolvedAccessibilityAlternativeOffer,
   type ResolvedAccessibilityAlternativeSelection,
 } from './accessibility-alternatives';
-import { accessiblePathDecisionAllowsUse, type ResolvedAccessiblePathDecision } from './accessible-path';
+import {
+  accessiblePathDecisionAllowsUse,
+  accessiblePathEquipmentDependenciesPostdate,
+  type ResolvedAccessiblePathDecision,
+} from './accessible-path';
 import {
   impactDecisionAllowsUse,
   isResolvedPathImpactDecision,
@@ -51,6 +55,7 @@ export interface AccessibilityWarning {
   readonly exposureDecisionId: string | null;
   readonly changedEquipmentId: string;
   readonly changedEquipmentState: ResolvedPathImpactDecision['changedEquipmentState'];
+  readonly changedEquipmentAssessedAt: string;
   readonly originIntent: string;
   readonly destinationIntent: string;
   readonly createdAt: string;
@@ -161,6 +166,7 @@ export function createAccessibilityWarning(input: {
     exposureDecisionId: input.impactDecision.exposureDecisionId,
     changedEquipmentId: input.impactDecision.changedEquipmentId,
     changedEquipmentState: input.impactDecision.changedEquipmentState,
+    changedEquipmentAssessedAt: input.impactDecision.changedEquipmentAssessedAt,
     originIntent: input.impactDecision.originIntent,
     destinationIntent: input.impactDecision.destinationIntent,
     createdAt,
@@ -274,6 +280,7 @@ function replacementReevaluationPasses(
 ): boolean {
   return accessiblePathDecisionAllowsUse(path, decisionTime) && path.status === 'eligible'
     && Date.parse(path.evaluatedAt) > Date.parse(warning.createdAt)
+    && accessiblePathEquipmentDependenciesPostdate(path, new Date(warning.changedEquipmentAssessedAt))
     && path.pathId === offer.pathId && path.packageVersion === offer.pathPackageVersion
     && path.stationComplexId === offer.stationComplexId && path.constituentStationId === offer.constituentStationId
     && path.originIntent === offer.originIntent && path.destinationIntent === offer.destinationIntent
@@ -290,6 +297,7 @@ function ownerReevaluationPasses(
 ): boolean {
   return accessiblePathDecisionAllowsUse(path, decisionTime) && path.status === 'eligible'
     && Date.parse(path.evaluatedAt) > Date.parse(warning.createdAt)
+    && accessiblePathEquipmentDependenciesPostdate(path, new Date(warning.changedEquipmentAssessedAt))
     && path.pathId === warning.selectedPathId && path.packageVersion === warning.selectedPathPackageVersion
     && path.stationComplexId === warning.stationComplexId && path.constituentStationId === warning.constituentStationId
     && path.originIntent === warning.originIntent && path.destinationIntent === warning.destinationIntent

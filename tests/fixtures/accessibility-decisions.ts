@@ -2,7 +2,12 @@ import { assessAccessiblePath, type AccessibilityPackage, type StationDirectionC
 import type { Direction } from '../../src/shared/domain/types';
 import { resolveAccessibilityExposure, VALIDATION_EXPOSURE_REGISTRY } from '../../src/shared/domain/exposure-decision';
 import { acceptAccessibilityAlternativeRegistry, chooseAccessibilityAlternative } from '../../src/shared/domain/accessibility-alternatives';
-import { acceptEquipmentHistory, acceptEquipmentInventory, assessEquipmentStatus } from '../../src/shared/domain/equipment-status';
+import {
+  acceptEquipmentHistory,
+  acceptEquipmentInventory,
+  assessEquipmentStatus,
+  type EquipmentStatusDecision,
+} from '../../src/shared/domain/equipment-status';
 import { classifyPathImpact } from '../../src/shared/domain/path-impact';
 import { createAccessibilityWarning, deriveLastAccessibleDecisionPoint } from '../../src/shared/domain/underway-warning';
 
@@ -22,7 +27,9 @@ export function resolvedPath(
     readonly direction?: Direction;
     readonly platformId?: string;
     readonly equipmentIds?: readonly string[];
+    readonly equipmentDecisions?: Readonly<Record<string, EquipmentStatusDecision>>;
     readonly decisionTime?: string;
+    readonly equipmentDecisionTime?: string;
   } = {},
 ) {
   const stationComplexId = overrides.stationComplexId ?? 'A12';
@@ -73,7 +80,8 @@ export function resolvedPath(
   };
   const decisionTime = new Date(overrides.decisionTime ?? '2026-08-01T00:00:00.000Z');
   const exposure = resolveAccessibilityExposure(VALIDATION_EXPOSURE_REGISTRY, 'validation-accessibility-coverage-v1', 'coverage-v1', decisionTime)!;
-  const equipment = equipmentIds.length ? healthyEquipment(equipmentIds, decisionTime) : {};
+  const equipmentDecisionTime = new Date(overrides.equipmentDecisionTime ?? decisionTime.toISOString());
+  const equipment = overrides.equipmentDecisions ?? (equipmentIds.length ? healthyEquipment(equipmentIds, equipmentDecisionTime) : {});
   return assessAccessiblePath(item, {
     stationId: constituentStationId, routeId, direction, platformId: status === 'eligible' ? platformId : `${platformId}:wrong`,
     originIntent: overrides.originIntent ?? 'origin-street', destinationIntent: overrides.destinationIntent ?? 'destination-street',

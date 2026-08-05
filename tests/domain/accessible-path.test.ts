@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 
 import {
+  accessiblePathDecisionAllowsUse,
   assessAccessiblePath,
   orderAccessiblePaths,
   validateAccessibilityRegistry,
@@ -83,6 +84,36 @@ function equipment(overrides: { targetEquipmentId?: string; snapshotScope?: stri
   return assessEquipmentStatus({
     targetEquipmentId: overrides.targetEquipmentId ?? 'EL-A12-01', decisionTime: at('2026-08-01T00:00:00Z'), inventory, history,
   });
+}
+
+function supersessionContext() {
+  const inventory = acceptEquipmentInventory({
+    inventoryId: 'supersession-inventory', evidenceOwner: 'official-equipment-inventory', sourceScopeId: 'nyc-equipment',
+    sourceVersion: 'inventory-v1', acceptedAt: '2026-07-31T23:00:00.000Z', equipmentIds: ['EL-A12-01', 'EL-OTHER'],
+  });
+  const first = {
+    snapshotId: 'healthy-first', sequenceOrdinal: 1, predecessorSnapshotId: null,
+    evidenceOwner: 'official-equipment-status' as const, sourceScopeId: 'nyc-equipment', sourceVersion: 'equipment-v1', inventoryVersion: 'inventory-v1',
+    sourceTimestamp: '2026-08-01T00:00:00.000Z', acceptedAt: '2026-08-01T00:00:01.000Z', declaredRecordCount: 1,
+    records: [{ recordId: 'out-other', equipmentId: 'EL-OTHER', state: 'out-of-service' }],
+  };
+  const initial = acceptEquipmentHistory({
+    historyId: 'supersession-history', evidenceOwner: 'official-equipment-status', sourceScopeId: 'nyc-equipment',
+    sourceVersion: 'equipment-v1', inventoryVersion: 'inventory-v1', snapshots: [first],
+  }, inventory);
+  const machine = assessEquipmentStatus({
+    targetEquipmentId: 'EL-A12-01', decisionTime: at('2026-08-01T00:01:00.000Z'), inventory, history: initial,
+  });
+  const extend = () => acceptEquipmentHistory({
+    historyId: 'supersession-history', evidenceOwner: 'official-equipment-status', sourceScopeId: 'nyc-equipment',
+    sourceVersion: 'equipment-v1', inventoryVersion: 'inventory-v1', snapshots: [first, {
+      snapshotId: 'new-adverse', sequenceOrdinal: 2, predecessorSnapshotId: 'healthy-first',
+      evidenceOwner: 'official-equipment-status', sourceScopeId: 'nyc-equipment', sourceVersion: 'equipment-v1', inventoryVersion: 'inventory-v1',
+      sourceTimestamp: '2026-08-01T00:02:00.000Z', acceptedAt: '2026-08-01T00:02:01.000Z', declaredRecordCount: 1,
+      records: [{ recordId: 'new-outage', equipmentId: 'EL-A12-01', state: 'out-of-service' }],
+    }],
+  }, inventory);
+  return { machine, extend };
 }
 
 const equipmentEvidence = {
@@ -315,6 +346,28 @@ describe('complete accessible path evidence', () => {
       equipment: { 'EL-A12-01': equipment() }, exposure: validationAccessibilityExposure, ...equipmentEvidence,
       decisionTime: at('2026-08-01T00:04:00.001Z'),
     }).status).toBe('unknown');
+  });
+
+  test('rejects a still-time-valid positive decision after its ledger accepts a newer outage', () => {
+    const context = supersessionContext();
+    context.extend();
+    expect(assessAccessiblePath(packageFixture(), {
+      stationId: 'A12', routeId: 'A', direction: 'northbound', platformId: 'A12N',
+      equipment: { 'EL-A12-01': context.machine }, exposure: validationAccessibilityExposure, ...equipmentEvidence,
+      decisionTime: at('2026-08-01T00:03:00.000Z'),
+    }).status).toBe('unknown');
+  });
+
+  test('revokes an earlier eligible path when a dependency ledger accepts a newer outage', () => {
+    const context = supersessionContext();
+    const path = assessAccessiblePath(packageFixture(), {
+      stationId: 'A12', routeId: 'A', direction: 'northbound', platformId: 'A12N',
+      equipment: { 'EL-A12-01': context.machine }, exposure: validationAccessibilityExposure, ...equipmentEvidence,
+      decisionTime: at('2026-08-01T00:01:00.000Z'),
+    });
+    expect(path.status).toBe('eligible');
+    context.extend();
+    expect(accessiblePathDecisionAllowsUse(path, at('2026-08-01T00:03:00.000Z'))).toBe(false);
   });
 
   test('keeps public accessibility locked while pending and rejects wrong-version exposure', () => {

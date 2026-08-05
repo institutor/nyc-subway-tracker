@@ -126,10 +126,22 @@ export interface EquipmentStatusAssessmentInput {
 const acceptedInventories = new WeakSet<object>();
 const acceptedSnapshots = new WeakSet<object>();
 const acceptedHistories = new WeakSet<object>();
-const canonicalEquipmentHistories = new WeakMap<object, readonly AcceptedEquipmentSnapshot[]>();
-const equipmentStreamsByInventory = new WeakMap<object, Set<string>>();
+interface EquipmentLedgerState {
+  readonly historyId: string;
+  readonly sourceScopeId: string;
+  readonly sourceVersion: string;
+  readonly inventoryVersion: string;
+  readonly snapshots: AcceptedEquipmentSnapshot[];
+}
+interface EquipmentDecisionEvidence {
+  readonly ledger: EquipmentLedgerState;
+  readonly snapshotId: string;
+}
+const canonicalEquipmentHistories = new WeakMap<object, EquipmentLedgerState>();
+const equipmentStreamsByInventory = new WeakMap<object, Map<string, EquipmentLedgerState>>();
 const acceptedRestorations = new WeakSet<object>();
 const resolvedEquipmentDecisions = new WeakSet<object>();
+const resolvedEquipmentDecisionEvidence = new WeakMap<object, EquipmentDecisionEvidence>();
 const MINUTE = 60_000;
 const DAY = 24 * 60 * MINUTE;
 
@@ -167,8 +179,8 @@ export function acceptEquipmentHistory(
   }
   if (!Array.isArray(root.snapshots) || root.snapshots.length === 0) throw new Error('Equipment history snapshots are required');
   const streamKey = `${sourceScopeId}\u0000${sourceVersion}\u0000${inventoryVersion}`;
-  const acceptedStreams = equipmentStreamsByInventory.get(inventory) ?? new Set<string>();
-  if (acceptedStreams.has(streamKey)) throw new Error('Equipment history stream already has a canonical accepted ledger');
+  const acceptedStreams = equipmentStreamsByInventory.get(inventory) ?? new Map<string, EquipmentLedgerState>();
+  const existingLedger = acceptedStreams.get(streamKey);
   const snapshots = root.snapshots.map((value) => parseEquipmentSnapshot(value, inventory));
   const snapshotIds = new Set<string>();
   for (const [index, snapshot] of snapshots.entries()) {
@@ -189,7 +201,26 @@ export function acceptEquipmentHistory(
     }
     if (Date.parse(inventory.acceptedAt) > Date.parse(snapshot.acceptedAt)) throw new Error('Equipment history predates its inventory');
   }
-  for (const snapshot of snapshots) acceptedSnapshots.add(snapshot);
+  let ledger: EquipmentLedgerState;
+  if (existingLedger) {
+    if (historyId !== existingLedger.historyId || snapshots.length <= existingLedger.snapshots.length) {
+      throw new Error('Equipment history stream already has a canonical accepted ledger; only an exact-prefix extension is allowed');
+    }
+    for (let index = 0; index < existingLedger.snapshots.length; index += 1) {
+      if (!sameEquipmentSnapshot(existingLedger.snapshots[index], snapshots[index])) {
+        throw new Error('Equipment history extension does not preserve the canonical accepted prefix');
+      }
+    }
+    const appended = snapshots.slice(existingLedger.snapshots.length);
+    for (const snapshot of appended) acceptedSnapshots.add(snapshot);
+    existingLedger.snapshots.push(...appended);
+    ledger = existingLedger;
+  } else {
+    for (const snapshot of snapshots) acceptedSnapshots.add(snapshot);
+    ledger = { historyId, sourceScopeId, sourceVersion, inventoryVersion, snapshots: [...snapshots] };
+    acceptedStreams.set(streamKey, ledger);
+    equipmentStreamsByInventory.set(inventory, acceptedStreams);
+  }
   const accepted = deepFreeze({
     [historyBrand]: true as const,
     historyId,
@@ -198,10 +229,8 @@ export function acceptEquipmentHistory(
     sourceVersion,
     inventoryVersion,
   });
-  acceptedStreams.add(streamKey);
-  equipmentStreamsByInventory.set(inventory, acceptedStreams);
   acceptedHistories.add(accepted);
-  canonicalEquipmentHistories.set(accepted, snapshots);
+  canonicalEquipmentHistories.set(accepted, ledger);
   return accepted;
 }
 
@@ -277,10 +306,13 @@ export function assessEquipmentStatus(input: EquipmentStatusAssessmentInput): Eq
   const inventory = input.inventory;
   const assessedAt = canonicalDate(input.decisionTime, 'equipment assessment');
   const targetEquipmentId = identity(input.targetEquipmentId, 'target equipment');
-  const canonicalHistory = canonicalEquipmentHistories.get(history);
+  const ledger = canonicalEquipmentHistories.get(history);
+  const canonicalHistory = ledger?.snapshots;
   const trustedHistory = acceptedHistories.has(history) && acceptedInventories.has(inventory)
     && history.sourceScopeId === inventory.sourceScopeId && history.inventoryVersion === inventory.sourceVersion
-    && Boolean(canonicalHistory);
+    && Boolean(ledger) && ledger?.historyId === history.historyId
+    && ledger?.sourceScopeId === history.sourceScopeId && ledger?.sourceVersion === history.sourceVersion
+    && ledger?.inventoryVersion === history.inventoryVersion;
   const acceptedByDecision = trustedHistory && canonicalHistory
     ? canonicalHistory.filter((candidate) => acceptedSnapshots.has(candidate) && Date.parse(candidate.acceptedAt) <= Date.parse(assessedAt))
     : [];
@@ -292,8 +324,14 @@ export function assessEquipmentStatus(input: EquipmentStatusAssessmentInput): Eq
   const inventoryReview = inventoryAge >= 7 * DAY ? 'expired' : inventoryAge > DAY ? 'overdue' : 'current';
   const badRatio = trusted && snapshot.declaredRecordCount > 0 ? snapshot.badRecordCount / snapshot.declaredRecordCount : 0;
   const previous = acceptedByDecision.at(-2);
-  const disappearanceRatio = previous?.coherent && snapshot.coherent && previous.declaredRecordCount > 0
-    ? (previous.declaredRecordCount - snapshot.declaredRecordCount) / previous.declaredRecordCount
+  const acceptedInventoryIds = new Set(inventory.equipmentIds);
+  const previousRecords = previous?.records.filter((record) => acceptedInventoryIds.has(record.equipmentId)) ?? [];
+  const currentRecords = snapshot.records.filter((record) => acceptedInventoryIds.has(record.equipmentId));
+  const disappearanceRatio = previous?.coherent && snapshot.coherent
+    ? Math.max(
+      setDisappearanceRatio(previousRecords.map((record) => record.recordId), currentRecords.map((record) => record.recordId)),
+      setDisappearanceRatio(previousRecords.map((record) => record.equipmentId), currentRecords.map((record) => record.equipmentId)),
+    )
     : 0;
   const anomaly = badRatio > 0.1 || disappearanceRatio > 0.5;
   const joined = trusted && inventory.sourceScopeId === snapshot.sourceScopeId
@@ -304,8 +342,8 @@ export function assessEquipmentStatus(input: EquipmentStatusAssessmentInput): Eq
   const target = snapshot.records.find((record) => record.equipmentId === targetEquipmentId);
   const currentExactAdverse = trusted && joined && snapshot.coherent && age >= 0 && age <= 5 * MINUTE
     && (target?.state === 'out-of-service' || target?.state === 'planned-outage');
-  const priorAdverse = latestPriorAdverse(acceptedByDecision, targetEquipmentId);
-  const restored = !currentExactAdverse && health === 'current' && restorationPasses(input, acceptedByDecision, priorAdverse);
+  const latestAdverse = latestAcceptedAdverse(acceptedByDecision, targetEquipmentId);
+  const restored = !currentExactAdverse && health === 'current' && restorationPasses(input, acceptedByDecision, latestAdverse);
   const confirmedEmpty = health === 'current' && snapshot.records.length === 0
     && omissionPairPasses(acceptedByDecision, targetEquipmentId, undefined, true);
   const provisionalEmpty = health === 'current' && snapshot.records.length === 0 && !restored && !confirmedEmpty;
@@ -315,7 +353,7 @@ export function assessEquipmentStatus(input: EquipmentStatusAssessmentInput): Eq
     state = 'out-of-service'; reason = 'A current official outage record matches the exact equipment identity.';
   } else if (currentExactAdverse && target?.state === 'planned-outage') {
     state = 'planned-outage'; reason = 'A current official planned outage matches the exact equipment identity.';
-  } else if (priorAdverse && !restored) {
+  } else if (latestAdverse && !restored) {
     state = 'out-of-service-rechecking'; reason = 'A prior official outage awaits qualifying restoration evidence.';
   } else if (health === 'current' && restored) {
     state = 'no-official-outage-reported'; reason = 'Accepted exact-machine restoration evidence passed.';
@@ -338,7 +376,10 @@ export function assessEquipmentStatus(input: EquipmentStatusAssessmentInput): Eq
     provisionalEmpty,
     restored,
     reason,
-    ...(currentExactAdverse && target ? { adverseRecordId: target.recordId } : {}),
+    ledger: ledger!,
+    ...((currentExactAdverse && target) || (latestAdverse && !restored)
+      ? { adverseRecordId: (target ?? latestAdverse!.record).recordId }
+      : {}),
   });
 }
 
@@ -347,9 +388,12 @@ export function isResolvedEquipmentStatusDecision(value: unknown): value is Equi
 }
 
 export function equipmentDecisionAllowsUse(value: unknown, decisionTime: Date): value is EquipmentStatusDecision {
-  if (!isResolvedEquipmentStatusDecision(value) || !(decisionTime instanceof Date) || !Number.isFinite(decisionTime.getTime())) return false;
-  const instant = decisionTime.getTime();
-  return value.health === 'current' && instant >= Date.parse(value.validFrom) && instant <= Date.parse(value.validThrough);
+  return equipmentDecisionMatchesLatestObservation(value, decisionTime) && value.health === 'current';
+}
+
+export function equipmentDecisionSupportsAdverseImpact(value: unknown, decisionTime: Date): value is EquipmentStatusDecision {
+  return equipmentDecisionMatchesLatestObservation(value, decisionTime)
+    && (value.state === 'out-of-service' || value.state === 'planned-outage' || value.state === 'out-of-service-rechecking');
 }
 
 interface PriorAdverse {
@@ -358,11 +402,11 @@ interface PriorAdverse {
   readonly record: EquipmentOutageRecord;
 }
 
-function latestPriorAdverse(
+function latestAcceptedAdverse(
   observations: readonly AcceptedEquipmentSnapshot[],
   targetEquipmentId: string,
 ): PriorAdverse | undefined {
-  for (let index = observations.length - 2; index >= 0; index -= 1) {
+  for (let index = observations.length - 1; index >= 0; index -= 1) {
     const record = observations[index].records.find((candidate) => candidate.equipmentId === targetEquipmentId);
     if (record) return { index, snapshot: observations[index], record };
   }
@@ -406,6 +450,52 @@ function omissionPairPasses(
     && Date.parse(second.sourceTimestamp) - Date.parse(first.sourceTimestamp) >= MINUTE);
 }
 
+function equipmentDecisionMatchesLatestObservation(
+  value: unknown,
+  decisionTime: Date,
+): value is EquipmentStatusDecision {
+  if (!isResolvedEquipmentStatusDecision(value) || !(decisionTime instanceof Date) || !Number.isFinite(decisionTime.getTime())) return false;
+  const instant = decisionTime.getTime();
+  if (instant < Date.parse(value.validFrom) || instant > Date.parse(value.validThrough)) return false;
+  const evidence = resolvedEquipmentDecisionEvidence.get(value);
+  if (!evidence) return false;
+  const latest = evidence.ledger.snapshots
+    .filter((snapshot) => acceptedSnapshots.has(snapshot) && Date.parse(snapshot.acceptedAt) <= instant)
+    .at(-1);
+  return latest?.snapshotId === evidence.snapshotId;
+}
+
+function setDisappearanceRatio(previousValues: readonly string[], currentValues: readonly string[]): number {
+  const previous = new Set(previousValues);
+  if (previous.size === 0) return 0;
+  const current = new Set(currentValues);
+  let disappeared = 0;
+  for (const value of previous) if (!current.has(value)) disappeared += 1;
+  return disappeared / previous.size;
+}
+
+function sameEquipmentSnapshot(left: AcceptedEquipmentSnapshot, right: AcceptedEquipmentSnapshot): boolean {
+  return left.snapshotId === right.snapshotId
+    && left.sequenceOrdinal === right.sequenceOrdinal
+    && left.predecessorSnapshotId === right.predecessorSnapshotId
+    && left.evidenceOwner === right.evidenceOwner
+    && left.sourceScopeId === right.sourceScopeId
+    && left.sourceVersion === right.sourceVersion
+    && left.inventoryVersion === right.inventoryVersion
+    && left.sourceTimestamp === right.sourceTimestamp
+    && left.acceptedAt === right.acceptedAt
+    && left.declaredRecordCount === right.declaredRecordCount
+    && left.malformedRecordCount === right.malformedRecordCount
+    && left.duplicateRecordCount === right.duplicateRecordCount
+    && left.unmatchedRecordCount === right.unmatchedRecordCount
+    && left.badRecordCount === right.badRecordCount
+    && left.coherent === right.coherent
+    && left.records.length === right.records.length
+    && left.records.every((record, index) => record.recordId === right.records[index].recordId
+      && record.equipmentId === right.records[index].equipmentId
+      && record.state === right.records[index].state);
+}
+
 function resolvedDecision(input: {
   readonly targetEquipmentId: string;
   readonly snapshot: AcceptedEquipmentSnapshot;
@@ -418,8 +508,14 @@ function resolvedDecision(input: {
   readonly provisionalEmpty: boolean;
   readonly restored: boolean;
   readonly reason: string;
+  readonly ledger: EquipmentLedgerState;
   readonly adverseRecordId?: string;
 }): EquipmentStatusDecision {
+  const validThrough = input.health === 'current'
+    ? Date.parse(input.snapshot.sourceTimestamp) + 5 * MINUTE
+    : input.health === 'degraded'
+      ? Date.parse(input.snapshot.sourceTimestamp) + 15 * MINUTE
+      : Date.parse(input.assessedAt);
   const decision = Object.freeze({
     [decisionBrand]: true as const,
     decisionId: `${input.snapshot.snapshotId}:${input.targetEquipmentId}`,
@@ -431,7 +527,7 @@ function resolvedDecision(input: {
     sourceTimestamp: input.snapshot.sourceTimestamp,
     assessedAt: input.assessedAt,
     validFrom: input.assessedAt,
-    validThrough: new Date(Date.parse(input.snapshot.sourceTimestamp) + 5 * MINUTE).toISOString(),
+    validThrough: new Date(Math.max(Date.parse(input.assessedAt), validThrough)).toISOString(),
     ...(input.adverseRecordId ? { adverseRecordId: input.adverseRecordId } : {}),
     health: input.health,
     state: input.state,
@@ -443,6 +539,7 @@ function resolvedDecision(input: {
     reason: input.reason,
   });
   resolvedEquipmentDecisions.add(decision);
+  resolvedEquipmentDecisionEvidence.set(decision, { ledger: input.ledger, snapshotId: input.snapshot.snapshotId });
   return decision;
 }
 
@@ -463,7 +560,12 @@ function parseOutageRecord(value: unknown): EquipmentOutageRecord | undefined {
 function strictRecord(value: unknown, fields: readonly string[], label: string): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(`${label} must be an object`);
   const root = value as Record<string, unknown>;
-  if (Object.keys(root).length !== fields.length || fields.some((field) => !(field in root))) throw new Error(`${label} must contain its exact schema`);
+  const ownKeys = Reflect.ownKeys(root);
+  if (ownKeys.length !== fields.length
+    || fields.some((field) => !Object.prototype.hasOwnProperty.call(root, field))
+    || ownKeys.some((field) => typeof field !== 'string' || !fields.includes(field))) {
+    throw new Error(`${label} must contain its exact schema`);
+  }
   return root;
 }
 function identity(value: unknown, label: string): string { if (typeof value !== 'string' || value.trim() !== value || !value || value.length > 160) throw new Error(`${label} is invalid`); return value; }

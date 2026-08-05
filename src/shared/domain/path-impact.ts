@@ -1,8 +1,13 @@
 import {
   accessiblePathDecisionAllowsUse,
+  accessiblePathDecisionSupportsImpact,
   type ResolvedAccessiblePathDecision,
 } from './accessible-path';
-import { equipmentDecisionAllowsUse, type EquipmentStatusDecision } from './equipment-status';
+import {
+  equipmentDecisionAllowsUse,
+  equipmentDecisionSupportsAdverseImpact,
+  type EquipmentStatusDecision,
+} from './equipment-status';
 
 const impactBrand: unique symbol = Symbol('resolved-path-impact');
 export type ResolvedPathImpactDecision = Readonly<({
@@ -51,9 +56,9 @@ export function classifyPathImpact(input: {
   readonly alternatePaths: readonly ResolvedAccessiblePathDecision[];
   readonly decisionTime: Date;
 }): ResolvedPathImpactDecision | undefined {
-  if (!equipmentDecisionAllowsUse(input.changedEquipment, input.decisionTime)
-    || !accessiblePathDecisionAllowsUse(input.selectedPath, input.decisionTime)
-    || input.selectedPath.status !== 'eligible'
+  if (!(equipmentDecisionAllowsUse(input.changedEquipment, input.decisionTime)
+      || equipmentDecisionSupportsAdverseImpact(input.changedEquipment, input.decisionTime))
+    || !accessiblePathDecisionSupportsImpact(input.selectedPath, input.decisionTime)
     || input.changedEquipment.sourceScopeId !== input.selectedPath.equipmentSourceScopeId
     || input.changedEquipment.sourceVersion !== input.selectedPath.equipmentSourceVersion
     || Date.parse(input.changedEquipment.assessedAt) < Date.parse(input.selectedPath.evaluatedAt)) return undefined;
@@ -120,7 +125,6 @@ function resolveImpact(
   const createdAt = decisionTime.toISOString();
   const validThrough = new Date(Math.min(
     Date.parse(equipment.validThrough),
-    Date.parse(selected.validThrough),
     ...(replacement ? [Date.parse(replacement.validThrough)] : []),
   )).toISOString();
   const decision = Object.freeze({
