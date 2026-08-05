@@ -1,4 +1,4 @@
-import { compareCanonicalIdentity, normalizeCanonicalIdentity } from './canonical';
+import { compareCanonicalIdentity, normalizeBoundedIdentity, normalizeCanonicalIdentity } from './canonical';
 import { equipmentDecisionAllowsUse, type EquipmentStatusDecision } from './equipment-status';
 import type { Direction } from './types';
 import { exposureAllowsEvaluation, type ResolvedAccessibilityExposure } from './exposure-decision';
@@ -26,7 +26,25 @@ export interface AccessiblePathEdge {
   readonly officialAccessiblePath: boolean; readonly restrictions: readonly string[]; readonly verificationDate: string;
   readonly evidenceReference: string; readonly reviewDisposition: 'approved' | 'rejected' | 'pending'; readonly canonicalPathIdentity: string;
 }
-export interface AccessibilityPackage { readonly packageId: string; readonly version: string; readonly canonicalPathIdentity: string; readonly coverage: StationDirectionCoverageRow; readonly edges: readonly AccessiblePathEdge[]; readonly approvedVersion: string }
+export interface AccessibilityPackageApprovalReceipt {
+  readonly receiptId: string;
+  readonly evidenceOwner: 'app-owned-accessibility-path-approvals';
+  readonly decision: 'approved';
+  readonly packageId: string;
+  readonly packageVersion: string;
+  readonly coverageRecordId: string;
+  readonly coverageRecordVersion: string;
+  readonly canonicalPathIdentity: string;
+  readonly approvedOn: string;
+}
+export interface AccessibilityPackage {
+  readonly packageId: string;
+  readonly version: string;
+  readonly canonicalPathIdentity: string;
+  readonly coverage: StationDirectionCoverageRow;
+  readonly edges: readonly AccessiblePathEdge[];
+  readonly approvalReceipt: AccessibilityPackageApprovalReceipt;
+}
 const accessiblePathDecisionBrand: unique symbol = Symbol('resolved-accessible-path-decision');
 export interface ResolvedAccessiblePathDecision {
   readonly [accessiblePathDecisionBrand]: true;
@@ -74,39 +92,120 @@ export interface AccessiblePathAssessmentRequest {
 
 const COVERAGE_FIELDS = ['coverageRecordId','coverageRecordVersion','stationComplex','constituentStation','routeOrLine','normalizedDirection','accessibleStreetEntrance','streetCorner','directionalPlatform','boardingArea','completePathId','orderedEdgeIds','equipmentIds','accessiblePathMembershipByEdge','operatingRestrictions','evidenceSources','evidenceReferences','verificationDate','verifier','productDecision','accessibilityDecision','dataQualityDecision','contentDecision','operationsDecision','structuralDisposition','unsupportedScope'] as const;
 const EDGE_EVIDENCE_FIELDS = ['movementType','start','routeId','direction','equipmentId','officialAccessiblePath','restrictions','verificationDate'] as const;
+const DIRECTIONS: readonly Direction[] = ['northbound', 'southbound', 'eastbound', 'westbound', 'inbound', 'outbound'];
+const MOVEMENT_TYPES: readonly AccessiblePathEdge['movementType'][] = ['elevator', 'compliant-ramp', 'level-path', 'stairs', 'escalator'];
+const REVIEW_FIELDS = ['decision', 'reviewer', 'date', 'recordVersion'] as const;
+const APPROVAL_FIELDS = ['receiptId', 'evidenceOwner', 'decision', 'packageId', 'packageVersion', 'coverageRecordId', 'coverageRecordVersion', 'canonicalPathIdentity', 'approvedOn'] as const;
 
 export function validateCoverageRow(raw: unknown): StationDirectionCoverageRow {
-  const row = exactRecord(raw, COVERAGE_FIELDS, '26-field station-direction coverage row');
-  const value = row as unknown as StationDirectionCoverageRow;
-  exactRecord(value.stationComplex, ['id', 'name'], 'station complex');
-  exactRecord(value.constituentStation, ['id', 'name'], 'constituent station');
-  exactRecord(value.accessibleStreetEntrance, ['id', 'description'], 'accessible street entrance');
-  exactRecord(value.verifier, ['name', 'role'], 'coverage verifier');
-  exactRecord(value.structuralDisposition, ['status', 'reason'], 'structural disposition');
-  exactRecord(value.unsupportedScope, ['lines','directions','entrances','platforms','servicePatterns','paths'], 'unsupported scope');
-  if (value.structuralDisposition.status !== 'accepted' || !value.orderedEdgeIds.length) throw new Error('Coverage row is not structurally accepted');
-  if (![value.coverageRecordId,value.coverageRecordVersion,value.stationComplex?.id,value.stationComplex?.name,value.constituentStation?.id,value.constituentStation?.name,value.routeOrLine,value.accessibleStreetEntrance?.id,value.accessibleStreetEntrance?.description,value.streetCorner,value.directionalPlatform,value.boardingArea,value.completePathId,value.verificationDate,value.verifier?.name,value.verifier?.role].every(nonEmpty)) throw new Error('Coverage row contains incomplete nested identity, scope, or verification evidence');
-  if (!value.operatingRestrictions.length || !value.evidenceSources.length || !value.evidenceReferences.length || !Number.isFinite(Date.parse(`${value.verificationDate}T00:00:00Z`))) throw new Error('Coverage row restrictions, evidence, or verification are incomplete');
-  const unsupportedKeys = ['lines','directions','entrances','platforms','servicePatterns','paths'] as const;
-  if (!value.unsupportedScope || unsupportedKeys.some((key) => !Array.isArray(value.unsupportedScope[key]))) throw new Error('Coverage row explicitly unsupported scope is incomplete');
-  if (value.orderedEdgeIds.some((id) => value.accessiblePathMembershipByEdge[id] !== true)) throw new Error('Coverage row official accessible-path membership is incomplete');
-  for (const decision of [value.productDecision, value.accessibilityDecision, value.dataQualityDecision, value.contentDecision, value.operationsDecision]) {
-    exactRecord(decision, ['decision', 'reviewer', 'date', 'recordVersion'], 'coverage review decision');
-    if (decision.decision !== 'approve' || decision.recordVersion !== value.coverageRecordVersion || !decision.reviewer || !decision.date) throw new Error('Coverage reviews must approve the same immutable version');
+  const root = exactRecord(raw, COVERAGE_FIELDS, '26-field station-direction coverage row');
+  const coverageRecordId = canonicalIdentifier(root.coverageRecordId, 'coverage record');
+  const coverageRecordVersion = canonicalIdentifier(root.coverageRecordVersion, 'coverage record version');
+  const stationComplex = namedIdentity(root.stationComplex, 'station complex');
+  const constituentStation = namedIdentity(root.constituentStation, 'constituent station');
+  const entranceRoot = exactRecord(root.accessibleStreetEntrance, ['id', 'description'], 'accessible street entrance');
+  const accessibleStreetEntrance = {
+    id: canonicalIdentifier(entranceRoot.id, 'accessible entrance'),
+    description: canonicalText(entranceRoot.description, 'accessible entrance description'),
+  };
+  const verifierRoot = exactRecord(root.verifier, ['name', 'role'], 'coverage verifier');
+  const verifier = {
+    name: canonicalText(verifierRoot.name, 'coverage verifier name'),
+    role: canonicalText(verifierRoot.role, 'coverage verifier role'),
+  };
+  const orderedEdgeIds = canonicalStringArray(root.orderedEdgeIds, 'ordered edge identities', canonicalIdentifier, true);
+  const equipmentIds = canonicalStringArray(root.equipmentIds, 'route-critical equipment identities', canonicalIdentifier, false);
+  const membershipRoot = exactRecord(root.accessiblePathMembershipByEdge, orderedEdgeIds, 'official accessible-path membership');
+  const accessiblePathMembershipByEdge = Object.fromEntries(orderedEdgeIds.map((edgeId) => {
+    if (membershipRoot[edgeId] !== true) throw new Error('Coverage row official accessible-path membership values must be true');
+    return [edgeId, true] as const;
+  }));
+  const structuralRoot = exactRecord(root.structuralDisposition, ['status', 'reason'], 'structural disposition');
+  if (structuralRoot.status !== 'accepted') throw new Error('Coverage row is not structurally accepted');
+  const unsupportedRoot = exactRecord(root.unsupportedScope, ['lines','directions','entrances','platforms','servicePatterns','paths'], 'unsupported scope');
+  const unsupportedScope = {
+    lines: canonicalStringArray(unsupportedRoot.lines, 'unsupported lines', canonicalIdentifier, false),
+    directions: directionArray(unsupportedRoot.directions, 'unsupported directions'),
+    entrances: canonicalStringArray(unsupportedRoot.entrances, 'unsupported entrances', canonicalIdentifier, false),
+    platforms: canonicalStringArray(unsupportedRoot.platforms, 'unsupported platforms', canonicalIdentifier, false),
+    servicePatterns: canonicalStringArray(unsupportedRoot.servicePatterns, 'unsupported service patterns', canonicalIdentifier, false),
+    paths: canonicalStringArray(unsupportedRoot.paths, 'unsupported paths', canonicalIdentifier, false),
+  };
+  const normalizedDirection = direction(root.normalizedDirection, 'coverage direction');
+  const routeOrLine = canonicalIdentifier(root.routeOrLine, 'coverage route');
+  const directionalPlatform = canonicalIdentifier(root.directionalPlatform, 'directional platform');
+  const completePathId = canonicalIdentifier(root.completePathId, 'complete path');
+  if (unsupportedScope.lines.includes(routeOrLine)
+    || unsupportedScope.directions.includes(normalizedDirection)
+    || unsupportedScope.entrances.includes(accessibleStreetEntrance.id)
+    || unsupportedScope.platforms.includes(directionalPlatform)
+    || unsupportedScope.paths.includes(completePathId)) {
+    throw new Error('Unsupported scope contradicts a supported coverage fact');
   }
+  const reviews = {
+    productDecision: reviewDecision(root.productDecision, coverageRecordVersion, 'product coverage review'),
+    accessibilityDecision: reviewDecision(root.accessibilityDecision, coverageRecordVersion, 'accessibility coverage review'),
+    dataQualityDecision: reviewDecision(root.dataQualityDecision, coverageRecordVersion, 'data-quality coverage review'),
+    contentDecision: reviewDecision(root.contentDecision, coverageRecordVersion, 'content coverage review'),
+    operationsDecision: reviewDecision(root.operationsDecision, coverageRecordVersion, 'operations coverage review'),
+  };
+  const value: StationDirectionCoverageRow = {
+    coverageRecordId,
+    coverageRecordVersion,
+    stationComplex,
+    constituentStation,
+    routeOrLine,
+    normalizedDirection,
+    accessibleStreetEntrance,
+    streetCorner: canonicalText(root.streetCorner, 'street corner'),
+    directionalPlatform,
+    boardingArea: canonicalIdentifier(root.boardingArea, 'boarding area'),
+    completePathId,
+    orderedEdgeIds,
+    equipmentIds,
+    accessiblePathMembershipByEdge,
+    operatingRestrictions: canonicalStringArray(root.operatingRestrictions, 'operating restrictions', canonicalText, true),
+    evidenceSources: canonicalStringArray(root.evidenceSources, 'coverage evidence sources', canonicalText, true),
+    evidenceReferences: canonicalStringArray(root.evidenceReferences, 'coverage evidence references', canonicalText, true),
+    verificationDate: canonicalDay(root.verificationDate, 'coverage verification date'),
+    verifier,
+    ...reviews,
+    structuralDisposition: { status: 'accepted', reason: canonicalText(structuralRoot.reason, 'structural disposition reason') },
+    unsupportedScope,
+  };
   return deepFreeze(value);
 }
 
 export function validateAccessibilityPackage(raw: unknown): AccessibilityPackage {
-  const root = exactRecord(raw, ['packageId', 'version', 'canonicalPathIdentity', 'coverage', 'edges', 'approvedVersion'], 'accessibility package');
+  const root = exactRecord(raw, ['packageId', 'version', 'canonicalPathIdentity', 'coverage', 'edges', 'approvalReceipt'], 'accessibility package');
+  const packageId = canonicalIdentifier(root.packageId, 'accessibility package');
+  const version = canonicalIdentifier(root.version, 'accessibility package version');
+  const canonicalPathIdentity = canonicalIdentifier(root.canonicalPathIdentity, 'canonical path');
   const coverage = validateCoverageRow(root.coverage);
   if (!Array.isArray(root.edges)) throw new Error('Accessibility package edges are required');
   const edges = root.edges.map(validateEdge).sort((a, b) => a.order - b.order);
-  const value = { ...root, coverage, edges } as unknown as AccessibilityPackage;
-  if (!value.packageId || !value.version || !value.approvedVersion || !value.canonicalPathIdentity) throw new Error('Immutable path package identity and version are required');
-  normalizeCanonicalIdentity(value.canonicalPathIdentity);
-  if (value.version !== coverage.coverageRecordVersion || value.approvedVersion !== value.version) throw new Error('Path package and approvals must use the same version');
+  if (!edges.length) throw new Error('Accessibility package edges are required');
+  if (new Set(edges.map((edge) => edge.id)).size !== edges.length) throw new Error('Duplicate path edge identity');
+  const approvalReceipt = approval(root.approvalReceipt);
+  const value: AccessibilityPackage = { packageId, version, canonicalPathIdentity, coverage, edges, approvalReceipt };
+  if (version !== coverage.coverageRecordVersion) throw new Error('Path package and coverage must use the same version');
   if (coverage.completePathId !== value.canonicalPathIdentity) throw new Error('Coverage path identity does not match package identity');
+  if (approvalReceipt.packageId !== packageId
+    || approvalReceipt.packageVersion !== version
+    || approvalReceipt.coverageRecordId !== coverage.coverageRecordId
+    || approvalReceipt.coverageRecordVersion !== coverage.coverageRecordVersion
+    || approvalReceipt.canonicalPathIdentity !== canonicalPathIdentity) {
+    throw new Error('Approval receipt does not join to the exact path package, coverage row, version, and identity');
+  }
+  const latestReviewDate = Math.max(
+    Date.parse(`${coverage.verificationDate}T00:00:00.000Z`),
+    ...edges.map((edge) => Date.parse(`${edge.verificationDate}T00:00:00.000Z`)),
+    ...[coverage.productDecision, coverage.accessibilityDecision, coverage.dataQualityDecision, coverage.contentDecision, coverage.operationsDecision]
+      .map((decision) => Date.parse(`${decision.date}T00:00:00.000Z`)),
+  );
+  if (Date.parse(`${approvalReceipt.approvedOn}T00:00:00.000Z`) < latestReviewDate) {
+    throw new Error('Approval receipt predates package verification or review evidence');
+  }
   if (edges.length !== coverage.orderedEdgeIds.length || edges.some((edge, index) => edge.id !== coverage.orderedEdgeIds[index] || edge.order !== index + 1)) throw new Error('Ordered edge IDs do not match complete chain');
   for (let index = 1; index < edges.length; index += 1) if (edges[index - 1].end.id !== edges[index].start.id || edges[index - 1].end.level !== edges[index].start.level) throw new Error('Ordered path edge endpoints are discontinuous');
   for (const edge of edges) {
@@ -120,8 +219,24 @@ export function validateAccessibilityPackage(raw: unknown): AccessibilityPackage
 }
 
 export function validateAccessibilityRegistry(raw: readonly unknown[]): readonly AccessibilityPackage[] {
-  const values = raw.map(validateAccessibilityPackage); const identities = new Set<string>();
-  for (const value of values) { const identity = normalizeCanonicalIdentity(value.canonicalPathIdentity); if (identities.has(identity)) throw new Error(`Duplicate canonical path identity: ${identity}`); identities.add(identity); }
+  if (!Array.isArray(raw)) throw new Error('Accessibility registry must be an array');
+  const values = raw.map(validateAccessibilityPackage);
+  const identities = new Set<string>();
+  const packages = new Set<string>();
+  const coverageRows = new Set<string>();
+  const receipts = new Set<string>();
+  for (const value of values) {
+    const identity = normalizeCanonicalIdentity(value.canonicalPathIdentity);
+    if (identities.has(identity)) throw new Error(`Duplicate canonical path identity: ${identity}`);
+    const packageIdentityVersion = `${value.packageId}\u0000${value.version}`;
+    if (packages.has(packageIdentityVersion)) throw new Error('Duplicate accessibility package identity and version');
+    if (coverageRows.has(value.coverage.coverageRecordId)) throw new Error('Duplicate accessibility coverage record identity');
+    if (receipts.has(value.approvalReceipt.receiptId)) throw new Error('Duplicate accessibility approval receipt identity');
+    identities.add(identity);
+    packages.add(packageIdentityVersion);
+    coverageRows.add(value.coverage.coverageRecordId);
+    receipts.add(value.approvalReceipt.receiptId);
+  }
   return deepFreeze(values);
 }
 export function orderAccessiblePaths(paths: readonly AccessibilityPackage[]): readonly AccessibilityPackage[] { return Object.freeze([...paths].sort((a,b) => compareCanonicalIdentity(a.canonicalPathIdentity,b.canonicalPathIdentity))); }
@@ -230,26 +345,123 @@ function resolvedPathDecision(
 }
 
 function validateEdge(raw: unknown): AccessiblePathEdge {
-  const edge = exactRecord(raw, ['id','order',...EDGE_EVIDENCE_FIELDS,'end','platformId','evidenceReference','reviewDisposition','canonicalPathIdentity'], 'path edge');
-  const value = edge as unknown as AccessiblePathEdge;
-  exactRecord(value.start, ['id', 'level'], 'path edge start');
-  exactRecord(value.end, ['id', 'level'], 'path edge end');
-  if (!Number.isInteger(value.order) || value.order < 1) throw new Error('Path edge order is invalid');
-  if (![value.id,value.start?.id,value.start?.level,value.end?.id,value.end?.level,value.routeId,value.platformId,value.verificationDate,value.evidenceReference,value.canonicalPathIdentity].every(nonEmpty)) throw new Error('Path edge endpoints, levels, scope, evidence, or verification are incomplete');
-  if (value.movementType === 'stairs' || value.movementType === 'escalator') throw new Error('Path edge is not wheelchair-accessible');
-  if (value.movementType === 'elevator' && !value.equipmentId) throw new Error('Path edge equipmentId is required');
-  if (!value.officialAccessiblePath || value.reviewDisposition !== 'approved' || !value.verificationDate || !value.restrictions.length || value.restrictions.includes('staff-only')) throw new Error('Path edge evidence is not approved for rider use');
+  const root = exactRecord(raw, ['id','order',...EDGE_EVIDENCE_FIELDS,'end','platformId','evidenceReference','reviewDisposition','canonicalPathIdentity'], 'path edge');
+  const startRoot = exactRecord(root.start, ['id', 'level'], 'path edge start');
+  const endRoot = exactRecord(root.end, ['id', 'level'], 'path edge end');
+  if (!Number.isInteger(root.order) || Number(root.order) < 1) throw new Error('Path edge order is invalid');
+  const movementType = enumValue(root.movementType, MOVEMENT_TYPES, 'Path edge movement type is invalid');
+  const edgeDirection = direction(root.direction, 'edge direction');
+  if (root.officialAccessiblePath !== true) throw new Error('Official accessible-path membership must be the boolean true');
+  if (root.reviewDisposition !== 'approved') throw new Error('Path edge review disposition is not approved');
+  const equipmentId = root.equipmentId === null ? null : canonicalIdentifier(root.equipmentId, 'path edge equipment');
+  if (movementType === 'elevator' && equipmentId === null) throw new Error('Path edge equipmentId is required for an elevator');
+  if (movementType !== 'elevator' && equipmentId !== null) throw new Error('Only elevator edges may name route-critical equipment');
+  if (movementType === 'stairs' || movementType === 'escalator') throw new Error('Path edge is not wheelchair-accessible');
+  const restrictions = canonicalStringArray(root.restrictions, 'path edge restrictions', canonicalText, true);
+  if (restrictions.includes('staff-only')) throw new Error('Path edge evidence is not approved for rider use');
+  const value: AccessiblePathEdge = {
+    id: canonicalIdentifier(root.id, 'path edge'),
+    order: Number(root.order),
+    movementType,
+    start: { id: canonicalIdentifier(startRoot.id, 'path edge start'), level: canonicalText(startRoot.level, 'path edge start level') },
+    end: { id: canonicalIdentifier(endRoot.id, 'path edge end'), level: canonicalText(endRoot.level, 'path edge end level') },
+    routeId: canonicalIdentifier(root.routeId, 'path edge route'),
+    direction: edgeDirection,
+    platformId: canonicalIdentifier(root.platformId, 'path edge platform'),
+    equipmentId,
+    officialAccessiblePath: true,
+    restrictions,
+    verificationDate: canonicalDay(root.verificationDate, 'path edge verification date'),
+    evidenceReference: canonicalText(root.evidenceReference, 'path edge evidence reference'),
+    reviewDisposition: 'approved',
+    canonicalPathIdentity: canonicalIdentifier(root.canonicalPathIdentity, 'path edge canonical path'),
+  };
+  if (value.start.id === value.end.id && value.start.level === value.end.level) throw new Error('Path edge endpoints must describe movement');
   return deepFreeze(value);
+}
+function approval(raw: unknown): AccessibilityPackageApprovalReceipt {
+  const root = exactRecord(raw, APPROVAL_FIELDS, 'accessibility package approval receipt');
+  if (root.evidenceOwner !== 'app-owned-accessibility-path-approvals' || root.decision !== 'approved') {
+    throw new Error('Accessibility package approval receipt owner or decision is invalid');
+  }
+  return deepFreeze({
+    receiptId: canonicalIdentifier(root.receiptId, 'approval receipt'),
+    evidenceOwner: 'app-owned-accessibility-path-approvals' as const,
+    decision: 'approved' as const,
+    packageId: canonicalIdentifier(root.packageId, 'approved package'),
+    packageVersion: canonicalIdentifier(root.packageVersion, 'approved package version'),
+    coverageRecordId: canonicalIdentifier(root.coverageRecordId, 'approved coverage record'),
+    coverageRecordVersion: canonicalIdentifier(root.coverageRecordVersion, 'approved coverage version'),
+    canonicalPathIdentity: canonicalIdentifier(root.canonicalPathIdentity, 'approved canonical path'),
+    approvedOn: canonicalDay(root.approvedOn, 'approval receipt date'),
+  });
+}
+function reviewDecision(raw: unknown, recordVersion: string, label: string): ReviewDecision {
+  const root = exactRecord(raw, REVIEW_FIELDS, label);
+  if (root.decision !== 'approve') throw new Error(`${label} must approve the immutable coverage row`);
+  const parsed: ReviewDecision = {
+    decision: 'approve',
+    reviewer: canonicalText(root.reviewer, `${label} reviewer`),
+    date: canonicalDay(root.date, `${label} date`),
+    recordVersion: canonicalIdentifier(root.recordVersion, `${label} version`),
+  };
+  if (parsed.recordVersion !== recordVersion) throw new Error('Coverage reviews must approve the same immutable version');
+  return parsed;
+}
+function namedIdentity(raw: unknown, label: string): { readonly id: string; readonly name: string } {
+  const root = exactRecord(raw, ['id', 'name'], label);
+  return { id: canonicalIdentifier(root.id, `${label} identity`), name: canonicalText(root.name, `${label} name`) };
+}
+function direction(value: unknown, label: string): Direction {
+  if (typeof value !== 'string' || !DIRECTIONS.includes(value as Direction)) throw new Error(`${label} is invalid`);
+  return value as Direction;
+}
+function directionArray(value: unknown, label: string): readonly Direction[] {
+  if (!Array.isArray(value)) throw new Error(`${label} must be an array`);
+  const parsed = value.map((entry) => direction(entry, label));
+  if (new Set(parsed).size !== parsed.length) throw new Error(`${label} contains a duplicate value`);
+  return parsed;
+}
+function enumValue<T extends string>(value: unknown, allowed: readonly T[], error: string): T {
+  if (typeof value !== 'string' || !allowed.includes(value as T)) throw new Error(error);
+  return value as T;
+}
+function canonicalStringArray(
+  value: unknown,
+  label: string,
+  parse: (entry: unknown, label: string) => string,
+  required: boolean,
+): readonly string[] {
+  if (!Array.isArray(value) || (required && value.length === 0)) throw new Error(`${label} must be a${required ? ' non-empty' : 'n'} array`);
+  const parsed = value.map((entry) => parse(entry, label));
+  if (new Set(parsed).size !== parsed.length) throw new Error(`${label} contains a duplicate value`);
+  return parsed;
+}
+function canonicalIdentifier(value: unknown, label: string): string {
+  if (typeof value !== 'string') throw new Error(`${label} identity is invalid`);
+  const normalized = normalizeBoundedIdentity(value, label);
+  if (normalized !== value || ['__proto__', 'prototype', 'constructor'].includes(value)) throw new Error(`${label} identity is not canonical`);
+  return value;
+}
+function canonicalText(value: unknown, label: string): string {
+  if (typeof value !== 'string' || value.trim() !== value || !value || [...value].length > 500 || /\p{C}/u.test(value)) throw new Error(`${label} is invalid`);
+  if (normalizeCanonicalIdentity(value) !== value) throw new Error(`${label} is not canonical`);
+  return value;
+}
+function canonicalDay(value: unknown, label: string): string {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) throw new Error(`${label} must be a canonical YYYY-MM-DD date`);
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+  if (!Number.isFinite(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== value) throw new Error(`${label} must be a real canonical YYYY-MM-DD date`);
+  return value;
 }
 function asRecord(value: unknown, name: string): Record<string, unknown> { if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(`${name} must be an object`); return value as Record<string, unknown>; }
 function intent(value: unknown, name: string): string { if (typeof value !== 'string' || value.trim() !== value || !value || value.length > 240) throw new Error(`${name} is invalid`); return value; }
 function exactRecord(value: unknown, fields: readonly string[], name: string): Record<string, unknown> {
   const record = asRecord(value, name);
-  const missing = fields.filter((field) => !(field in record));
+  const missing = fields.filter((field) => !Object.prototype.hasOwnProperty.call(record, field));
   const unexpected = Object.keys(record).filter((field) => !fields.includes(field));
   if (missing.length || unexpected.length) throw new Error(`${name} must contain its exact schema; missing: ${missing.join(',') || 'none'}; unexpected: ${unexpected.join(',') || 'none'}`);
   return record;
 }
-function nonEmpty(value: unknown): boolean { return typeof value === 'string' && value.trim().length > 0; }
 function canonicalDate(value: Date, label: string): string { if (!(value instanceof Date) || !Number.isFinite(value.getTime())) throw new Error(`${label} is invalid`); return value.toISOString(); }
 function deepFreeze<T>(value: T): T { if (value && typeof value === 'object' && !Object.isFrozen(value)) { Object.freeze(value); for (const child of Object.values(value)) deepFreeze(child); } return value; }

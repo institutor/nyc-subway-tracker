@@ -59,7 +59,17 @@ export function resolvedPath(
   const item: AccessibilityPackage = {
     packageId: `package:${pathId}`, version: 'coverage-v1', canonicalPathIdentity: pathId, coverage,
     edges,
-    approvedVersion: 'coverage-v1',
+    approvalReceipt: {
+      receiptId: `approval:package:${pathId}`,
+      evidenceOwner: 'app-owned-accessibility-path-approvals',
+      decision: 'approved',
+      packageId: `package:${pathId}`,
+      packageVersion: 'coverage-v1',
+      coverageRecordId: `coverage:${pathId}`,
+      coverageRecordVersion: 'coverage-v1',
+      canonicalPathIdentity: pathId,
+      approvedOn: '2026-07-30',
+    },
   };
   const decisionTime = new Date(overrides.decisionTime ?? '2026-08-01T00:00:00.000Z');
   const exposure = resolveAccessibilityExposure(VALIDATION_EXPOSURE_REGISTRY, 'validation-accessibility-coverage-v1', 'coverage-v1', decisionTime)!;

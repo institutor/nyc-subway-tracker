@@ -41,14 +41,27 @@ function review(role: string) {
 }
 
 function packageFixture(overrides: Partial<AccessibilityPackage> = {}): AccessibilityPackage {
-  return {
+  const base = {
     packageId: 'package-a12-v1', version: 'coverage-v1', canonicalPathIdentity: 'path:a12:north:a', coverage: coverage(),
     edges: [
       { id: 'edge-1', order: 1, movementType: 'elevator', start: { id: 'street', level: 'street' }, end: { id: 'mezz', level: 'mezzanine' }, routeId: 'A', direction: 'northbound', platformId: 'A12N', equipmentId: 'EL-A12-01', officialAccessiblePath: true, restrictions: ['none'], verificationDate: '2026-07-30', evidenceReference: 'evidence/edge-1.json', reviewDisposition: 'approved', canonicalPathIdentity: 'path:a12:north:a' },
       { id: 'edge-2', order: 2, movementType: 'level-path', start: { id: 'mezz', level: 'mezzanine' }, end: { id: 'platform', level: 'platform' }, routeId: 'A', direction: 'northbound', platformId: 'A12N', equipmentId: null, officialAccessiblePath: true, restrictions: ['none'], verificationDate: '2026-07-30', evidenceReference: 'evidence/edge-2.json', reviewDisposition: 'approved', canonicalPathIdentity: 'path:a12:north:a' },
     ],
-    approvedVersion: 'coverage-v1',
-    ...overrides,
+  };
+  const merged = { ...base, ...overrides } as Omit<AccessibilityPackage, 'approvalReceipt'> & Partial<Pick<AccessibilityPackage, 'approvalReceipt'>>;
+  return {
+    ...merged,
+    approvalReceipt: overrides.approvalReceipt ?? {
+      receiptId: `approval:${merged.packageId}`,
+      evidenceOwner: 'app-owned-accessibility-path-approvals',
+      decision: 'approved',
+      packageId: merged.packageId,
+      packageVersion: merged.version,
+      coverageRecordId: merged.coverage.coverageRecordId,
+      coverageRecordVersion: merged.coverage.coverageRecordVersion,
+      canonicalPathIdentity: merged.canonicalPathIdentity,
+      approvedOn: '2026-07-30',
+    },
   };
 }
 
@@ -133,6 +146,103 @@ describe('complete accessible path evidence', () => {
     for (const candidate of candidates) expect(() => loadPathEvidence([candidate])).toThrow(/exact schema/i);
   });
 
+  test('rejects an unknown normalized direction at the atomic coverage-row boundary', () => {
+    expect(() => loadStationAccessibility([{ ...coverage(), normalizedDirection: 'sideways' }])).toThrow(/coverage direction is invalid/i);
+  });
+
+  test('rejects an unknown edge direction as an enum violation before package scope comparison', () => {
+    const fixture = packageFixture();
+    const candidate = { ...fixture, edges: [{ ...fixture.edges[0], direction: 'sideways' }, fixture.edges[1]] };
+    expect(() => loadPathEvidence([candidate])).toThrow(/edge direction is invalid/i);
+  });
+
+  test.each([
+    ['unknown movement enum', () => {
+      const fixture = packageFixture();
+      return { ...fixture, edges: [{ ...fixture.edges[0], movementType: 'teleport' }, fixture.edges[1]] };
+    }],
+    ['a string in place of a restrictions array', () => {
+      const fixture = packageFixture();
+      return { ...fixture, edges: [{ ...fixture.edges[0], restrictions: 'none' }, fixture.edges[1]] };
+    }],
+    ['a non-canonical review date', () => {
+      const fixture = packageFixture();
+      return { ...fixture, coverage: { ...fixture.coverage, productDecision: { ...fixture.coverage.productDecision, date: 'tomorrow' } } };
+    }],
+    ['a non-canonical verification date', () => {
+      const fixture = packageFixture();
+      return { ...fixture, coverage: { ...fixture.coverage, verificationDate: '2026-02-30' } };
+    }],
+    ['a supported route inside unsupported scope', () => {
+      const fixture = packageFixture();
+      return { ...fixture, coverage: { ...fixture.coverage, unsupportedScope: { ...fixture.coverage.unsupportedScope, lines: ['A'] } } };
+    }],
+    ['an extra path-membership key', () => {
+      const fixture = packageFixture();
+      return { ...fixture, coverage: { ...fixture.coverage, accessiblePathMembershipByEdge: { ...fixture.coverage.accessiblePathMembershipByEdge, 'edge-extra': true } } };
+    }],
+    ['duplicate route-critical equipment identities', () => {
+      const fixture = packageFixture();
+      const second = { ...fixture.edges[1], movementType: 'elevator', equipmentId: 'EL-A12-01' };
+      return { ...fixture, coverage: { ...fixture.coverage, equipmentIds: ['EL-A12-01', 'EL-A12-01'] }, edges: [fixture.edges[0], second] };
+    }],
+    ['duplicate ordered edge identities', () => {
+      const fixture = packageFixture();
+      const second = { ...fixture.edges[1], id: 'edge-1' };
+      return {
+        ...fixture,
+        coverage: { ...fixture.coverage, orderedEdgeIds: ['edge-1', 'edge-1'], accessiblePathMembershipByEdge: { 'edge-1': true } },
+        edges: [fixture.edges[0], second],
+      };
+    }],
+    ['a string boolean in official path membership', () => {
+      const fixture = packageFixture();
+      return { ...fixture, edges: [{ ...fixture.edges[0], officialAccessiblePath: 'true' }, fixture.edges[1]] };
+    }],
+    ['a non-string evidence-array member', () => {
+      const fixture = packageFixture();
+      return { ...fixture, coverage: { ...fixture.coverage, evidenceSources: [7] } };
+    }],
+    ['an endpoint whose required fields are inherited instead of owned', () => {
+      const fixture = packageFixture();
+      const inheritedEndpoint = Object.create({ id: 'street', level: 'street' }) as { id: string; level: string };
+      return { ...fixture, edges: [{ ...fixture.edges[0], start: inheritedEndpoint }, fixture.edges[1]] };
+    }],
+  ])('rejects value-permissive path evidence: %s', (_label, candidate) => {
+    expect(() => loadPathEvidence([candidate()])).toThrow();
+  });
+
+  test('requires a structured approval receipt joined to the exact package, coverage row, version, and path', () => {
+    const fixture = packageFixture();
+    const { approvalReceipt: _receipt, ...withoutReceipt } = fixture;
+    expect(() => loadPathEvidence([fixture])).not.toThrow();
+    expect(() => loadPathEvidence([{ ...withoutReceipt, approvedVersion: fixture.version }])).toThrow(/approvalReceipt|approval receipt/i);
+    expect(() => loadPathEvidence([{ ...fixture, packageId: 'package-other' }])).toThrow(/approval receipt/i);
+  });
+
+  test('rejects an approval receipt that predates any edge verification in the approved package', () => {
+    const fixture = packageFixture();
+    const changedEdge = { ...fixture.edges[1], verificationDate: '2026-07-31' };
+    expect(() => loadPathEvidence([{ ...fixture, edges: [fixture.edges[0], changedEdge] }])).toThrow(/approval.*predates/i);
+  });
+
+  test('rejects reuse of one package identity and version for a different canonical path', () => {
+    const first = packageFixture();
+    const secondCoverage = coverage({
+      coverageRecordId: 'coverage:a12:north:a:other',
+      completePathId: 'path:a12:north:a:other',
+    });
+    const secondBase = packageFixture({
+      packageId: first.packageId,
+      version: first.version,
+      canonicalPathIdentity: 'path:a12:north:a:other',
+      coverage: secondCoverage,
+      edges: first.edges.map((edge) => ({ ...edge, canonicalPathIdentity: 'path:a12:north:a:other' })),
+    });
+    const second = { ...secondBase, approvalReceipt: { ...secondBase.approvalReceipt, receiptId: 'approval:package-a12-v1:other' } };
+    expect(() => loadPathEvidence([first, second])).toThrow(/duplicate.*package/i);
+  });
+
   test('rejects crowding fields from the accessibility package schema', () => {
     expect(() => loadPathEvidence([{ ...packageFixture(), crowding: { carLoad: 'low' } }])).toThrow(/crowding/i);
   });
@@ -158,7 +268,7 @@ describe('complete accessible path evidence', () => {
       packageFixture({ coverage: coverage({ normalizedDirection: 'southbound' }) }),
       packageFixture({ coverage: coverage({ directionalPlatform: 'A12-REROUTE' }) }),
       packageFixture({ edges: [{ ...packageFixture().edges[0], restrictions: ['staff-only'] }, packageFixture().edges[1]] }),
-      packageFixture({ approvedVersion: 'coverage-v2' }),
+      packageFixture({ approvalReceipt: { ...packageFixture().approvalReceipt, packageVersion: 'coverage-v2' } }),
     ];
     for (const candidate of cases) expect(() => loadPathEvidence([candidate])).toThrow();
   });
