@@ -159,3 +159,57 @@ All round-one findings are repaired. Accessibility claims now cross public domai
 ### Release posture
 
 This remains a deterministic validation candidate, not public accessibility evidence or a release approval. Real reviewed same-version path, equipment, guidance, five-role review, and release records are still required before either independent public gate can open.
+
+---
+
+## Fix round 2 — accepted review repairs (2026-08-05)
+
+### Outcome
+
+Round two closes findings 1–7 and 9. Finding 8 was already closed by the controller and required no change. Every accepted decision now owns the complete immutable evidence needed for its claim, exact schemas reconstruct canonical data rather than trusting caller objects, and recovery or replacement evidence cannot revive expired, copied, stale, mismatched, or superseded accessibility facts. Production registries remain empty and both public exposure gates remain locked.
+
+### Repairs
+
+1. Exposure approval is now valid only while every linked review, release, and exposure fact is current at evaluation time. Expired or superseded linked evidence fails closed even when a copied decision object still exists.
+2. Accessibility recovery no longer restores unreleased claims. The active-trip and reconnection boundaries retain rider-owned preferences while refusing inaccessible legacy or unapproved accessibility state.
+3. Equipment decisions now own canonical inventory and snapshot history, enforce exact population arithmetic and chronology, prioritize current adverse evidence, reject stale or copied path decisions, and require a coherent accepted recovery sequence.
+4. Path-impact and alternative decisions own exact path, equipment, request, and route facts. Genuine decisions for another path, scope, alternative, or version cannot be replayed, and a healthy member does not erase another member's path impact.
+5. Underway warnings own their impact, selection, decision point, path package, offered alternatives, and lifecycle chronology. They survive expiry of the original evidence until a fresh owner reevaluation proves a safe transition; copied or wrong-path warning inputs are omitted by the component.
+6. Accessible-path packages now use exact reconstructed schemas for directions, movements, identities, strings, booleans, dates, endpoints, levels, membership, equipment joins, coverage, versions, and approval receipts. Unsupported claims, duplicate rows, extra membership, invalid chronology, and copied approvals are rejected.
+7. Platform-guidance records now use exact reconstructed schemas for the complex, constituent, service scope, platform, orientation, objective, path, position, five role reviews, reverification, disposition, release, and provenance. Supported and unsupported scope facts cannot collide; geometry, position, and zone benefit must agree; release and provenance must join the same package/version and valid chronology. The documented old-verification-date plus explicit-current behavior is preserved without inventing an expiry.
+9. Negative mismatch coverage was expanded across path impact, alternatives, warnings, path packages, platform guidance, and UI consumption so independently genuine but wrong-scope evidence cannot satisfy another claim.
+
+### RED/GREEN evidence
+
+- Exposure lifetime: 5 focused exposure failures and 3 evaluator-expansion failures were captured before the repair; the final combined matrix passed **3 files, 76/76 tests**.
+- Recovery boundary: **2/13** focused recovery cases and **1/6** public-component cases failed before release ownership was enforced; the final boundary matrix passed **6 files, 112/112 tests**.
+- Equipment history: the initial audit produced **4/36** expected failures, the chronology expansion produced **1/41**, and the stale path-decision expansion produced **1/49**; the controller matrix passed **6 files, 117/117 tests**.
+- Path impact and alternatives: the first audit produced **3/12** expected failures and the healthy-member expansion produced **1/7**; the domain matrix passed **67/67**, the warning expansion passed **79/79**, and the UI/guidance slice passed **16/16**.
+- Underway warnings: the first audit produced **4/15** expected failures and the component expansion produced **2/9**; the final warning matrix passed **43/43** and the controller slice passed **93/93**.
+- Accessible-path schemas: the governing audit produced **14/64** expected failures and the receipt chronology/package-identity expansion produced **2/66**; the final path suite passed **66/66** and the dependent accessibility matrix passed **6 files, 150/150 tests**.
+- Platform-guidance schemas: the governing audit produced **11/21** expected failures; the strengthened final suite passed **31/31 tests**.
+- Full Task 13 dependent matrix after all repairs: **13 files, 296/296 tests passed**, including exposure, equipment, path, impact, alternatives, warnings, guidance, UI, active-trip/reconnection, API, and crowding-negative boundaries.
+
+### Final verification
+
+- Full Vitest regression: **58 files, 954/954 tests passed**.
+- TypeScript: `tsc --noEmit` passed with zero diagnostics.
+- Production build: Vite transformed **66 modules** and completed successfully.
+- Browser acceptance in installed Chrome: **4/4 tests passed**, covering the recursive no-crowding public boundary, device-held offline references, historical cached-board treatment, and ordered owner restoration.
+- Diff hygiene: `git diff --check` passed; repository line-ending notices were non-failing.
+
+### Fix commits
+
+| Commit | Lowercase subject | Review area |
+|---|---|---|
+| `004b8fd` | `expire linked exposure decisions` | exposure lifetime and linked-evidence validity |
+| `f5e5aad` | `lock unreleased accessibility recovery` | recovery and legacy claim boundary |
+| `5d46352` | `own canonical equipment history` | equipment population, chronology, restoration, and identity |
+| `d9085ef` | `own path and alternative facts` | path impact, alternatives, and mismatch ownership |
+| `38a1afa` | `bind underway warnings to owned evidence` | warning creation, persistence, clearing, and rendering |
+| `f668d22` | `enforce exact accessibility path packages` | exact path, coverage, and approval schemas |
+| `78b0d95` | `enforce exact platform guidance records` | exact guidance, review, release, and provenance schemas |
+
+### Release posture
+
+This remains a deterministic validation candidate, not public accessibility evidence or a release approval. Public accessibility and platform guidance stay unavailable until real, reviewed, exact-scope, same-version evidence satisfies their independent app-owned gates.
