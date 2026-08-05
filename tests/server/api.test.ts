@@ -772,6 +772,39 @@ describe('versioned subway API', () => {
     });
   });
 
+  test('keeps rerouted route alerts when the associated station does not statically serve that route', async () => {
+    const alert = (id: string, routeIds: string[], stationIds: string[], directions = ['northbound']) => ({
+      id, text: id, activeFrom: new Date('2026-08-04T11:45:00.000Z'), routeIds, stationIds,
+      directions, provenance: boardDecision.alerts[0].provenance,
+    });
+    const rerouted = structuredClone(boardDecision) as any;
+    rerouted.station = { id: 'E01', name: 'E-only station', complexId: 'E01', routeIds: ['E'] };
+    rerouted.directions = [];
+    rerouted.explanations = [];
+    rerouted.alerts = [
+      alert('reroute-f-at-e', ['F'], ['E01']),
+      alert('reroute-f-other-target', ['F'], ['X99']),
+      alert('route-c-at-e', ['C'], ['E01']),
+      alert('f-southbound', ['F'], ['E01'], ['southbound']),
+      alert('station-wide-e', [], ['E01']),
+      alert('systemwide', [], []),
+    ];
+    const snapshot = {
+      ...operationalSnapshot,
+      boards: [{ decision: rerouted, validThrough: '2026-08-04T12:01:30.000Z' }],
+    };
+    const dependencies = createProductionDependencies({
+      dataDirectory: '.data-test-do-not-read', mode: 'validation', sources: {},
+    }, { clock: createFixedClock(DECIDED_AT), snapshotProvider: { capture: () => snapshot } });
+
+    await withApi(createApp(dependencies), async ({ request }) => {
+      const body = await (await request('/api/v1/status?routes=F&direction=northbound')).json();
+      expect(body.data.alerts.map(({ id }: { id: string }) => id)).toEqual([
+        'reroute-f-at-e', 'reroute-f-other-target', 'systemwide',
+      ]);
+    });
+  });
+
   test('returns scoped service status without train rows and preserves route-filtered warnings', async () => {
     const dependencies = createProductionDependencies({
       dataDirectory: '.data-test-do-not-read', mode: 'validation', sources: {},

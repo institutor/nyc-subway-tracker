@@ -52,11 +52,13 @@ export function buildStatusDto(
   const selected = stationId === undefined ? boards : boards.filter((board) => board.station.id === stationId);
   const scoped = stationId === undefined && routeIds.length > 0
     ? [
+        ...selected.flatMap((board) => board.alerts.filter((alert) => alert.routeIds.length > 0
+          && alert.routeIds.some((routeId) => routeIds.includes(routeId))
+          && matchesDirection(alert, direction))),
         ...selected
           .filter((board) => board.station.routeIds.some((routeId) => routeIds.includes(routeId)))
           .flatMap((board) => relevantAlerts(board.alerts, board.station, direction)
-            .filter((alert) => alert.routeIds.length === 0
-              || alert.routeIds.some((routeId) => routeIds.includes(routeId)))),
+            .filter((alert) => alert.routeIds.length === 0 && alert.stationIds.length > 0)),
         ...selected.flatMap((board) => relevantAlerts(board.alerts, board.station, direction)
           .filter((alert) => alert.routeIds.length === 0 && alert.stationIds.length === 0)),
       ]
@@ -129,7 +131,13 @@ function relevantAlerts(alerts: readonly Alert[], station: Station, direction?: 
     (alert.stationIds.length > 0
       ? alert.stationIds.includes(station.id)
       : alert.routeIds.length === 0 || alert.routeIds.some((routeId) => station.routeIds.includes(routeId)))
-    && (direction === undefined || alert.directions.length === 0 || alert.directions.includes(direction as Alert['directions'][number])));
+    && matchesDirection(alert, direction));
+}
+
+function matchesDirection(alert: Alert, direction?: string): boolean {
+  return direction === undefined
+    || alert.directions.length === 0
+    || alert.directions.includes(direction as Alert['directions'][number]);
 }
 
 function projectAlerts(alerts: readonly Alert[]) {
