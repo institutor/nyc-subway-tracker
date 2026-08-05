@@ -58,7 +58,7 @@ export function NearbyView({
           <p>Choose which station to open.</p>
           <div className="choice-list">
             {savedChoices.map((station) => (
-              <button key={`${station.complexId}:${station.constituentId}`} type="button" aria-label={`${station.name} saved station`} onClick={() => onSelect(station)}>
+              <button key={`${station.complexId}:${station.constituentId}`} type="button" aria-label={`${station.name} saved station`} onClick={() => onSelect(station, { routeIds: [] })}>
                 <strong>{station.name}</strong><span>Open board</span>
               </button>
             ))}
@@ -76,7 +76,7 @@ export function NearbyView({
                   key={`${complex.id}:${constituent.id}`}
                   type="button"
                   aria-label={stationChoiceLabel(complex.name, constituent.name)}
-                  onClick={() => onSelect({ complexId: complex.id, constituentId: constituent.id, name: complex.name })}
+                  onClick={() => onSelect({ complexId: complex.id, constituentId: constituent.id, name: complex.name }, { routeIds: [] })}
                 >
                   <strong>{complex.name}</strong>
                   <span>{constituent.name === complex.name ? complex.routeIds.join(' · ') || 'Subway station' : constituent.name}</span>
@@ -135,7 +135,10 @@ function NearbyResults({
                 key={`${option.complexId}:${constituent.id}`}
                 type="button"
                 aria-label={stationChoiceLabel(option.complexName, constituent.name)}
-                onClick={() => onSelect({ complexId: option.complexId, constituentId: constituent.id, name: option.complexName })}
+                onClick={() => onSelect(
+                  { complexId: option.complexId, constituentId: constituent.id, name: option.complexName },
+                  { routeIds: [] },
+                )}
               >
                 <strong>{option.complexName}</strong>
                 <span>{option.entranceAvailability === 'confirmed'

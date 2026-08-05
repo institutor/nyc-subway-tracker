@@ -9,7 +9,7 @@ describe('rider-owned application state', () => {
   test('never lets a late location result replace an explicit station choice', () => {
     let state = createInitialAppState({ lastUsedStation: lastStation, savedStations: [] });
     state = appReducer(state, { type: 'location-requested', requestId: 1 });
-    state = appReducer(state, { type: 'station-selected', station: chosenStation, owner: 'explicit' });
+    state = appReducer(state, { type: 'station-selected', station: chosenStation, owner: 'explicit', filters: { routeIds: [] } });
     state = appReducer(state, {
       type: 'location-resolved', requestId: 1,
       fix: { coordinate: { latitude: 40.7, longitude: -74 }, accuracyMeters: 5 },
@@ -25,7 +25,7 @@ describe('rider-owned application state', () => {
 
   test('finishes a successful location retry without surrendering an explicit station', () => {
     let state = createInitialAppState({ savedStations: [] });
-    state = appReducer(state, { type: 'station-selected', station: chosenStation, owner: 'explicit' });
+    state = appReducer(state, { type: 'station-selected', station: chosenStation, owner: 'explicit', filters: { routeIds: [] } });
     state = appReducer(state, { type: 'location-requested', requestId: 2 });
     state = appReducer(state, {
       type: 'location-resolved', requestId: 2,
@@ -45,7 +45,7 @@ describe('rider-owned application state', () => {
     ['location-failed', 'failed'],
   ] as const)('finishes an unsuccessful explicit-station retry as %s', (type, phase) => {
     let state = createInitialAppState({ savedStations: [] });
-    state = appReducer(state, { type: 'station-selected', station: chosenStation, owner: 'explicit' });
+    state = appReducer(state, { type: 'station-selected', station: chosenStation, owner: 'explicit', filters: { routeIds: [] } });
     state = appReducer(state, { type: 'location-requested', requestId: 3 });
     state = appReducer(state, { type, requestId: 3 });
 
@@ -67,7 +67,7 @@ describe('rider-owned application state', () => {
 
   test('refresh preserves station ownership, route and direction filters, and warnings', () => {
     let state = createInitialAppState({ lastUsedStation: lastStation, savedStations: [] });
-    state = appReducer(state, { type: 'station-selected', station: lastStation, owner: 'explicit' });
+    state = appReducer(state, { type: 'station-selected', station: lastStation, owner: 'explicit', filters: { routeIds: [] } });
     state = appReducer(state, { type: 'filters-changed', routeIds: ['A'], direction: 'northbound' });
     state = appReducer(state, { type: 'warning-added', warning: 'A trains are delayed.' });
     state = appReducer(state, { type: 'refresh-requested', requestId: 4 });
@@ -77,5 +77,19 @@ describe('rider-owned application state', () => {
     expect(state.filters).toEqual({ routeIds: ['A'], direction: 'northbound' });
     expect(state.warnings).toEqual(['A trains are delayed.']);
     expect(state.refresh).toEqual({ phase: 'loading', requestId: 4 });
+  });
+
+  test.each([
+    [{ routeIds: [] }],
+    [{ routeIds: ['F'], direction: 'northbound' as const }],
+  ])('station selection atomically replaces filters with the new owner\'s %j', (filters) => {
+    let state = createInitialAppState({ savedStations: [] });
+    state = appReducer(state, { type: 'filters-changed', routeIds: ['A'], direction: 'southbound' });
+    const selection = { type: 'station-selected' as const, station: chosenStation, owner: 'explicit' as const, filters };
+
+    state = appReducer(state, selection);
+
+    expect(state.selectedStation).toEqual(chosenStation);
+    expect(state.filters).toEqual(filters);
   });
 });

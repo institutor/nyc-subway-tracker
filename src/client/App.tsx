@@ -189,18 +189,15 @@ export function App({ api, geolocation, storage: providedStorage }: AppProps = {
 
   const selectStation = useCallback((
     station: StationChoice,
-    exactFilters?: { readonly routeIds: readonly string[]; readonly direction: NonNullable<AppState['filters']['direction']> },
+    filters: AppState['filters'],
   ) => {
     nearbyAbort.current?.abort();
     nearbyGeneration.current += 1;
-    dispatch({ type: 'station-selected', station, owner: 'explicit' });
-    if (exactFilters) {
-      dispatch({ type: 'filters-changed', routeIds: exactFilters.routeIds, direction: exactFilters.direction });
-    }
+    dispatch({ type: 'station-selected', station, owner: 'explicit', filters });
     writeLastUsedStation(storage, station);
     setPickerOpen(false);
     setStationOpen(true);
-    runSelectedBoard(station, exactFilters ?? stateRef.current.filters);
+    runSelectedBoard(station, filters);
   }, [runSelectedBoard, storage]);
 
   const changeFilters = useCallback((filters: AppState['filters']) => {

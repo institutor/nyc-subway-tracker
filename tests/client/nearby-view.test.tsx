@@ -4,7 +4,8 @@ import { describe, expect, test, vi } from 'vitest';
 import { App } from '../../src/client/App';
 import { LAST_USED_STATION_KEY } from '../../src/client/state/app-state';
 import { SAVED_STORE_KEY } from '../../src/client/storage/browser-store';
-import type { BoardEnvelopeDto, BootstrapEnvelopeDto, NearbyEnvelopeDto } from '../../src/client/api/client';
+import { NearbyView } from '../../src/client/views/NearbyView';
+import type { BoardEnvelopeDto, BootstrapEnvelopeDto, NearbyEnvelopeDto, TransitApiClient } from '../../src/client/api/client';
 import {
   ControlledGeolocation,
   MemoryStorage,
@@ -94,6 +95,70 @@ describe('zero-tap Nearby rider view', () => {
     await waitFor(() => expect(board.mock.calls.at(-1)).toEqual([
       'CX-LOWER',
       { routeIds: ['F'], direction: 'northbound' },
+      expect.any(AbortSignal),
+    ]));
+  });
+
+  test('resets exact platform filters when the rider next opens an ordinary saved station', async () => {
+    const onSelect = vi.fn();
+    const saved = { complexId: 'R20', constituentId: 'R20', name: 'Canal St' } as const;
+    const common = {
+      phase: 'ready' as const,
+      response: transferHubNearbyEnvelope(),
+      boards: new Map(),
+      pickerChoices: catalogEnvelope.data.complexes,
+      pickerOpen: false,
+      onSelect,
+      onRetryLocation: vi.fn(),
+      onOpenPicker: vi.fn(),
+      onRefresh: vi.fn(),
+    };
+    const view = render(<NearbyView {...common} savedChoices={[]} />);
+    fireEvent.click(await screen.findByRole('button', {
+      name: 'Open Uptown / Northbound board for Transfer Hub — Lower level',
+    }));
+    expect(onSelect).toHaveBeenLastCalledWith(
+      { complexId: 'CX', constituentId: 'CX-LOWER', name: 'Transfer Hub' },
+      { routeIds: ['F'], direction: 'northbound' },
+    );
+
+    view.rerender(<NearbyView {...common} fallback="failed" savedChoices={[saved]} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Canal St saved station' }));
+
+    expect(onSelect).toHaveBeenLastCalledWith(saved, { routeIds: [] });
+  });
+
+  test('resets exact platform filters when the rider next opens an ordinary picker station', async () => {
+    const geolocation = new ControlledGeolocation();
+    const board = vi.fn(async (stationId: string, filters?: Parameters<TransitApiClient['board']>[1]) => {
+      const full = boardEnvelope(
+        stationId,
+        stationId === 'R20' ? 'Canal St' : 'Transfer Hub',
+        stationId === 'R20' ? ['N', 'Q'] : ['F'],
+      );
+      if (stationId !== 'R20' || (!filters?.direction && (filters?.routeIds?.length ?? 0) === 0)) return full;
+      return { ...full, data: full.data ? { ...full.data, directions: [] } : null };
+    });
+    render(<App
+      api={createClientApi({ nearby: async () => transferHubNearbyEnvelope(), board })}
+      geolocation={geolocation}
+      storage={new MemoryStorage()}
+    />);
+    await waitFor(() => expect(geolocation.requests).toHaveLength(1));
+    await act(async () => geolocation.succeed(0, 25));
+    fireEvent.click(await screen.findByRole('button', {
+      name: 'Open Uptown / Northbound board for Transfer Hub — Lower level',
+    }));
+    expect(await screen.findByRole('heading', { name: 'Transfer Hub', level: 2 })).toBeTruthy();
+
+    fireEvent.click(within(screen.getByRole('navigation', { name: 'Primary' })).getByRole('button', { name: 'Nearby' }));
+    fireEvent.click(within(screen.getByRole('toolbar', { name: 'Nearby controls' })).getByRole('button', { name: 'Choose a station' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Canal St' }));
+
+    expect(await screen.findByRole('heading', { name: 'Downtown / Southbound' })).toBeTruthy();
+    await waitFor(() => expect(board.mock.calls.at(-1)).toEqual([
+      'R20',
+      { routeIds: [] },
       expect.any(AbortSignal),
     ]));
   });
@@ -368,4 +433,42 @@ describe('zero-tap Nearby rider view', () => {
 function rankedNearbyData(): Extract<NearbyEnvelopeDto['data'], { readonly kind: 'ranked' }> {
   if (nearbyEnvelope.data?.kind !== 'ranked') throw new Error('Expected ranked Nearby fixture.');
   return nearbyEnvelope.data;
+}
+
+function transferHubNearbyEnvelope(): NearbyEnvelopeDto {
+  const sourceDirection = rankedNearbyData().cards[0].directions[0];
+  return {
+    ...nearbyEnvelope,
+    responseIdentity: 'response:nearby:transfer-hub',
+    data: {
+      kind: 'ranked',
+      cards: [{
+        complexId: 'CX',
+        complexName: 'Transfer Hub',
+        rankingRange: { minimumSeconds: 60, maximumSeconds: 90 },
+        directions: [
+          {
+            ...sourceDirection,
+            constituentId: 'CX-LOWER',
+            constituentPublicName: 'Lower level',
+            directionalStopId: 'CX-LOWERN',
+            direction: 'northbound',
+            actualDestination: 'Jamaica–179 St',
+            routeIds: ['F'],
+          },
+          {
+            ...sourceDirection,
+            constituentId: 'CX-UPPER',
+            constituentPublicName: 'Upper level',
+            directionalStopId: 'CX-UPPERS',
+            direction: 'southbound',
+            actualDestination: 'Coney Island–Stillwell Av',
+            routeIds: ['F'],
+          },
+        ],
+        stationDetailAvailable: true,
+      }],
+      picker: { required: false, bottomAnchored: true, options: [] },
+    },
+  };
 }

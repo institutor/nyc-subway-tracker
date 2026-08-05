@@ -39,7 +39,12 @@ export type AppAction =
   | { readonly type: 'location-resolved'; readonly requestId: number; readonly fix: LocationFixDto }
   | { readonly type: 'location-denied'; readonly requestId: number }
   | { readonly type: 'location-failed'; readonly requestId: number }
-  | { readonly type: 'station-selected'; readonly station: StationChoice; readonly owner: 'fallback' | 'explicit' }
+  | {
+      readonly type: 'station-selected';
+      readonly station: StationChoice;
+      readonly owner: 'fallback' | 'explicit';
+      readonly filters: AppState['filters'];
+    }
   | { readonly type: 'nearby-requested'; readonly requestId: number }
   | { readonly type: 'nearby-resolved'; readonly requestId: number; readonly responseIdentity: string; readonly response?: NearbyEnvelopeDto }
   | { readonly type: 'nearby-failed'; readonly requestId: number }
@@ -82,7 +87,12 @@ export function appReducer(state: AppState, action: AppAction): AppState {
     });
   }
   if (action.type === 'station-selected') {
-    return freeze({ ...state, selectedStation: captureStation(action.station), selectionOwner: action.owner });
+    return freeze({
+      ...state,
+      selectedStation: captureStation(action.station),
+      selectionOwner: action.owner,
+      filters: captureFilters(action.filters),
+    });
   }
   if (action.type === 'nearby-requested') {
     return freeze({ ...state, nearby: { ...state.nearby, phase: 'loading', requestId: requestId(action.requestId) } });
@@ -102,7 +112,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
     return freeze({ ...state, nearby: { phase: 'error', requestId: action.requestId } });
   }
   if (action.type === 'filters-changed') {
-    return freeze({ ...state, filters: { routeIds: unique(action.routeIds), ...(action.direction ? { direction: action.direction } : {}) } });
+    return freeze({ ...state, filters: captureFilters(action) });
   }
   if (action.type === 'warning-added') {
     const warning = display(action.warning);
@@ -170,6 +180,10 @@ function captureFix(value: LocationFixDto): LocationFixDto {
 
 function captureStation(value: StationChoice): StationChoice {
   return { complexId: identity(value.complexId), constituentId: identity(value.constituentId), name: display(value.name) };
+}
+
+function captureFilters(value: AppState['filters']): AppState['filters'] {
+  return { routeIds: unique(value.routeIds), ...(value.direction ? { direction: value.direction } : {}) };
 }
 
 function identity(value: unknown): string {

@@ -12,7 +12,7 @@ export type NearbyBoardState =
 
 export type StationSelection = (
   station: StationChoice,
-  filters?: { readonly routeIds: readonly string[]; readonly direction: NearbyDirectionDto['direction'] },
+  filters: { readonly routeIds: readonly string[]; readonly direction?: NearbyDirectionDto['direction'] },
 ) => void;
 
 export function boardRequestKey(direction: NearbyDirectionDto): string {
