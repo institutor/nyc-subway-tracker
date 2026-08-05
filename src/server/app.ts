@@ -7,7 +7,7 @@ import { catalogHandler, searchHandler } from './routes/stations';
 import { nearbyHandler } from './routes/nearby';
 import { statusHandler } from './routes/status';
 import { mapOverlayHandler, mapReferenceHandler } from './routes/maps';
-import { journeyHandler } from './routes/journeys';
+import { journeyHandler, journeyReferenceHandler } from './routes/journeys';
 import {
   createApiErrorHandler,
   enforceUrlLimit,
@@ -30,6 +30,7 @@ export function createApp(dependencies: AppDependencies) {
   app.get('/api/v1/status', statusHandler(dependencies));
   app.get('/api/v1/maps/:theme/reference/:contentVersion', mapReferenceHandler(dependencies));
   app.get('/api/v1/maps/:theme/overlay', mapOverlayHandler(dependencies));
+  app.get('/api/v1/journeys/reference/:contentVersion', journeyReferenceHandler(dependencies));
   app.post('/api/v1/journeys', requireOperationalJson, parseOperationalJson, journeyHandler(dependencies));
   app.get('/api/v1/stations/:stationId/board', boardHandler(dependencies));
   app.all('/api/v1/bootstrap', methodNotAllowed(['GET']));
@@ -39,6 +40,7 @@ export function createApp(dependencies: AppDependencies) {
   app.all('/api/v1/status', methodNotAllowed(['GET']));
   app.all('/api/v1/maps/:theme/reference/:contentVersion', methodNotAllowed(['GET']));
   app.all('/api/v1/maps/:theme/overlay', methodNotAllowed(['GET']));
+  app.all('/api/v1/journeys/reference/:contentVersion', methodNotAllowed(['GET']));
   app.all('/api/v1/journeys', methodNotAllowed(['POST']));
   app.all('/api/v1/stations/:stationId/board', methodNotAllowed(['GET']));
   app.use(notFound);

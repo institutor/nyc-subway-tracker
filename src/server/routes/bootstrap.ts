@@ -7,6 +7,7 @@ import { toProvenanceDtos, toSourceHealthDtos } from '../api/provenance-dto';
 import { createResponseIdentity } from '../api/response-identity';
 import type { AppDependencies } from '../bootstrap';
 import { assertExactQuery } from '../api/request-validation';
+import { createJourneyGraphReference } from '../services/journey-service';
 
 interface BootstrapData {
   readonly productName: 'NYC Subway Tracker';
@@ -17,6 +18,7 @@ interface BootstrapData {
       readonly day: string;
       readonly night: string;
     };
+    readonly journeyGraph: string;
   };
 }
 
@@ -32,6 +34,7 @@ export function bootstrapHandler(dependencies: AppDependencies) {
         day: dependencies.maps.get('day').contentVersion,
         night: dependencies.maps.get('night').contentVersion,
       },
+      journeyGraph: createJourneyGraphReference(snapshot.journeyGraph).contentVersion,
     };
     const sourceHealth = toSourceHealthDtos(snapshot.sourceHealth);
     const provenance = toProvenanceDtos(snapshot.provenance);

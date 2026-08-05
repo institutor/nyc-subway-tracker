@@ -878,6 +878,42 @@ describe('versioned subway API', () => {
     });
   });
 
+  test('owns an immutable structural journey graph through the exact bootstrap content version', async () => {
+    const dependencies = createProductionDependencies({
+      dataDirectory: '.data-test-do-not-read', mode: 'validation', sources: {},
+    }, {
+      clock: createFixedClock(DECIDED_AT),
+      snapshotProvider: { capture: () => journeySnapshot },
+    });
+
+    await withApi(createApp(dependencies), async ({ request }) => {
+      const bootstrap = await (await request('/api/v1/bootstrap')).json();
+      const contentVersion = bootstrap.data.contentVersions.journeyGraph;
+      expect(contentVersion).toMatch(/^journey-graph-/);
+
+      const response = await request(`/api/v1/journeys/reference/${contentVersion}`);
+      expect(response.status).toBe(200);
+      expect(response.headers.get('cache-control')).toMatch(/public/);
+      expect(response.headers.get('cache-control')).toMatch(/immutable/);
+      const body = await response.json();
+      expect(body).toMatchObject({
+        contentVersion,
+        data: {
+          contentVersion,
+          graph: {
+            patterns: [{
+              current: { status: 'missing', serviceDecision: 'unknown' },
+              future: [],
+              offline: { schedule: 'missing', serviceDecision: 'unknown' },
+            }],
+          },
+        },
+      });
+      expect(JSON.stringify(body.data.graph)).not.toMatch(/arrivalSeconds|current-supplemented|admitted/);
+      expect((await request('/api/v1/journeys/reference/not-this-version')).status).toBe(404);
+    });
+  });
+
   test.each([
     ['online-current', undefined, 'planned', undefined],
     ['online-future', '2026-08-08', 'planned', undefined],
@@ -1535,6 +1571,7 @@ describe('versioned subway API', () => {
       expect(bootstrap.data.contentVersions).toEqual({
         stationCatalog: 'catalog-empty-v1',
         maps: { day: 'map-day-empty-v1', night: 'map-night-empty-v1' },
+        journeyGraph: expect.stringMatching(/^journey-graph-/),
       });
     });
   });

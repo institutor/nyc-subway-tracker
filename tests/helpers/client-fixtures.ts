@@ -2,9 +2,12 @@ import type {
   BoardEnvelopeDto,
   BootstrapEnvelopeDto,
   CatalogEnvelopeDto,
+  JourneyGraphReferenceEnvelopeDto,
   NearbyEnvelopeDto,
   TransitApiClient,
 } from '../../src/client/api/client';
+import { createOfflineStructuralJourneyGraph } from '../../src/shared/domain/journey-router';
+import { journeyGraphFixture } from './journey-graph-fixture';
 
 export const disclosure = 'Demonstration data — not live' as const;
 
@@ -57,7 +60,19 @@ export const bootstrapEnvelope: BootstrapEnvelopeDto = {
     contentVersions: {
       stationCatalog: 'catalog-2026-08-04',
       maps: { day: 'map-day-2026-08-04', night: 'map-night-2026-08-04' },
+      journeyGraph: 'journey-graph-2026-08-04',
     },
+  },
+};
+
+export const journeyGraphReferenceEnvelope: JourneyGraphReferenceEnvelopeDto = {
+  apiVersion: 'v1',
+  schemaVersion: '2026-08-04',
+  contentVersion: bootstrapEnvelope.data.contentVersions.journeyGraph,
+  demonstrationLabel: disclosure,
+  data: {
+    contentVersion: bootstrapEnvelope.data.contentVersions.journeyGraph,
+    graph: createOfflineStructuralJourneyGraph(journeyGraphFixture),
   },
 };
 
@@ -201,6 +216,7 @@ export function createClientApi(overrides: Partial<TransitApiClient> = {}): Tran
     board: overrides.board ?? (async (stationId) => boardEnvelope(stationId)),
     searchStations: overrides.searchStations ?? (async () => { throw new Error('Station search fixture is not configured.'); }),
     mapReference: overrides.mapReference ?? (async () => { throw new Error('Map reference fixture is not configured.'); }),
+    journeyReference: overrides.journeyReference ?? (async () => journeyGraphReferenceEnvelope),
     mapOverlay: overrides.mapOverlay ?? (async () => { throw new Error('Map overlay fixture is not configured.'); }),
     planJourney: overrides.planJourney ?? (async () => { throw new Error('Journey fixture is not configured.'); }),
   };

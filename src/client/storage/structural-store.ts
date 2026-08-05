@@ -1,7 +1,7 @@
 import type { BootstrapDataDto, CatalogEnvelopeDto } from '../api/client';
 import type { BrowserStorage } from './browser-store';
 
-export const STRUCTURAL_STORE_KEY = 'nyc-subway-tracker:structural:v1';
+export const STRUCTURAL_STORE_KEY = 'nyc-subway-tracker:structural:v2';
 
 const MAX_BYTES = 2 * 1_024 * 1_024;
 
@@ -40,7 +40,7 @@ export function createBrowserStructuralStore(
       let serialized: string;
       try {
         captured = capture({ contentVersions, catalog });
-        serialized = JSON.stringify({ version: 1, ...captured });
+        serialized = JSON.stringify({ version: 2, ...captured });
         if (new TextEncoder().encode(serialized).byteLength > MAX_BYTES) return false;
       } catch {
         return false;
@@ -63,7 +63,7 @@ function decode(raw: string): StoredStructuralContent | undefined {
   try {
     if (new TextEncoder().encode(raw).byteLength > MAX_BYTES) return undefined;
     const root = strictRecord(JSON.parse(raw), ['version', 'contentVersions', 'catalog']);
-    if (root.version !== 1) return undefined;
+    if (root.version !== 2) return undefined;
     return capture({ contentVersions: root.contentVersions, catalog: root.catalog });
   } catch {
     return undefined;
@@ -79,11 +79,12 @@ function capture(value: unknown): StoredStructuralContent {
 }
 
 function captureVersions(value: unknown): BootstrapDataDto['contentVersions'] {
-  const root = strictRecord(value, ['stationCatalog', 'maps']);
+  const root = strictRecord(value, ['stationCatalog', 'maps', 'journeyGraph']);
   const maps = strictRecord(root.maps, ['day', 'night']);
   return deepFreeze({
     stationCatalog: identity(root.stationCatalog),
     maps: { day: identity(maps.day), night: identity(maps.night) },
+    journeyGraph: identity(root.journeyGraph),
   });
 }
 

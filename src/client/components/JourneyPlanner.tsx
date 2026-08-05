@@ -8,6 +8,7 @@ import type {
   TransitApiClient,
 } from '../api/client';
 import type { StationChoice } from '../state/app-state';
+import type { OfflineJourneyPlanner } from '../offline/plan-offline-journey';
 import { RouteToken } from './RouteToken';
 import { StationSearch } from './StationSearch';
 import { StatusBanner } from './StatusBanner';
@@ -20,6 +21,7 @@ export function JourneyPlanner({
   catalog,
   serviceMeaning,
   connected,
+  planOfflineJourney,
   onActivateTrip,
 }: {
   readonly api: TransitApiClient;
@@ -27,6 +29,7 @@ export function JourneyPlanner({
   readonly catalog: readonly CatalogComplexDto[];
   readonly serviceMeaning: MapServiceMeaning;
   readonly connected: boolean;
+  readonly planOfflineJourney?: OfflineJourneyPlanner;
   readonly onActivateTrip: (itinerary: JourneyItineraryDto, response: JourneyEnvelopeDto) => void;
 }) {
   const generation = useRef(0);
@@ -34,8 +37,11 @@ export function JourneyPlanner({
   const [destination, setDestination] = useState<StationChoice>();
   const [accessibleRouteOnly, setAccessibleRouteOnly] = useState(false);
   const [serviceDate, setServiceDate] = useState('');
-  const [phase, setPhase] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
-  const [response, setResponse] = useState<JourneyEnvelopeDto>();
+  const [result, setResult] = useState<{
+    readonly key: string;
+    readonly phase: 'idle' | 'loading' | 'ready' | 'error';
+    readonly response?: JourneyEnvelopeDto;
+  }>({ key: '', phase: 'idle' });
 
   useEffect(() => () => abort.current?.abort(), []);
 
@@ -44,6 +50,23 @@ export function JourneyPlanner({
     : 'offline-reference';
   const needsServiceDate = requestMode === 'online-future';
   const planLabel = requestMode === 'online-current' ? 'Plan current trip' : requestMode === 'online-future' ? 'Plan future trip' : 'Plan reference trip';
+  const requestKey = JSON.stringify({
+    origin: origin ? [origin.complexId, origin.constituentId] : null,
+    destination: destination ? [destination.complexId, destination.constituentId] : null,
+    mode: requestMode,
+    connected,
+    serviceDate: needsServiceDate ? serviceDate : null,
+    accessibleRouteOnly,
+  });
+  const requestKeyRef = useRef(requestKey);
+  requestKeyRef.current = requestKey;
+  const phase = result.key === requestKey ? result.phase : 'idle';
+  const response = result.key === requestKey ? result.response : undefined;
+
+  useEffect(() => {
+    abort.current?.abort();
+    generation.current += 1;
+  }, [requestKey]);
 
   const plan = () => {
     if (!origin || !destination || (needsServiceDate && !serviceDate)) return;
@@ -59,15 +82,20 @@ export function JourneyPlanner({
       accessibleRouteOnly,
       ...(needsServiceDate ? { serviceDate } : {}),
     };
-    setPhase('loading');
-    void api.planJourney(query, controller.signal).then((value) => {
-      if (controller.signal.aborted || requestId !== generation.current) return;
-      setResponse(value);
-      setPhase('ready');
+    const ownedKey = requestKey;
+    setResult({ key: ownedKey, phase: 'loading' });
+    const pending = connected
+      ? api.planJourney(query, controller.signal)
+      : planOfflineJourney
+        ? Promise.resolve().then(() => planOfflineJourney(query))
+        : Promise.reject(new Error('No device-held journey graph is available'));
+    void pending.then((value) => {
+      if (controller.signal.aborted || requestId !== generation.current || requestKeyRef.current !== ownedKey) return;
+      if (!journeyOwnsRequest(value, query)) throw new Error('Journey response does not own the exact request');
+      setResult({ key: ownedKey, phase: 'ready', response: value });
     }).catch((error: unknown) => {
-      if (isAbort(error) || controller.signal.aborted || requestId !== generation.current) return;
-      setResponse(undefined);
-      setPhase('error');
+      if (isAbort(error) || controller.signal.aborted || requestId !== generation.current || requestKeyRef.current !== ownedKey) return;
+      setResult({ key: ownedKey, phase: 'error' });
     });
   };
 
@@ -92,7 +120,12 @@ export function JourneyPlanner({
       <p className="station-search__status" aria-live="polite">{phase === 'loading' ? 'Planning with supported subway evidence…' : ''}</p>
       {phase === 'error' ? <StatusBanner tone="warning"><p>Journey planning is unavailable. Your origin and destination remain selected.</p></StatusBanner> : null}
       {phase === 'ready' && response ? (
-        <JourneyResults response={response} catalog={catalog} onActivateTrip={onActivateTrip} />
+        <JourneyResults
+          response={response}
+          catalog={catalog}
+          canActivate={connected && requestMode !== 'offline-reference'}
+          onActivateTrip={onActivateTrip}
+        />
       ) : null}
     </section>
   );
@@ -101,10 +134,12 @@ export function JourneyPlanner({
 function JourneyResults({
   response,
   catalog,
+  canActivate,
   onActivateTrip,
 }: {
   readonly response: JourneyEnvelopeDto;
   readonly catalog: readonly CatalogComplexDto[];
+  readonly canActivate: boolean;
   readonly onActivateTrip: (itinerary: JourneyItineraryDto, response: JourneyEnvelopeDto) => void;
 }) {
   if (response.runtime.availability === 'locked' || response.data === null) {
@@ -147,9 +182,11 @@ function JourneyResults({
                 );
               })}
             </ol>
-            <button type="button" onClick={() => onActivateTrip(itinerary, response)}>
-              Use {transfer ? 'transfer' : 'direct'} itinerary underground
-            </button>
+            {canActivate ? (
+              <button type="button" onClick={() => onActivateTrip(itinerary, response)}>
+                Use {transfer ? 'transfer' : 'direct'} itinerary underground
+              </button>
+            ) : null}
           </article>
         );
       })}
@@ -168,4 +205,14 @@ function titleDirection(value: string): string {
 
 function isAbort(error: unknown): boolean {
   return error instanceof DOMException && error.name === 'AbortError';
+}
+
+function journeyOwnsRequest(response: JourneyEnvelopeDto, request: JourneyRequestDto): boolean {
+  if (response.data === null) return true;
+  const { scope } = response.data;
+  return scope.mode === request.mode
+    && scope.originStationId === request.originStationId
+    && scope.destinationStationId === request.destinationStationId
+    && scope.accessibleRouteOnly === request.accessibleRouteOnly
+    && (scope.serviceDate ?? null) === (request.serviceDate ?? null);
 }

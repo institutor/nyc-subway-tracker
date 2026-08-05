@@ -56,7 +56,7 @@ describe('offline service-worker policy', () => {
     expect(worker.allPuts()).toEqual([]);
   });
 
-  test('cache-first stores only exact immutable station catalogs and map references', async () => {
+  test('cache-first stores only exact immutable station catalogs, map references, and versioned journey graphs', async () => {
     const worker = createWorker();
     worker.fetcher.mockResolvedValue(new Response('{"ok":true}', {
       status: 200,
@@ -65,10 +65,12 @@ describe('offline service-worker policy', () => {
 
     await worker.dispatchFetch(request('/api/v1/stations/catalog/catalog-v1'));
     await worker.dispatchFetch(request('/api/v1/maps/night/reference/map-v1'));
+    await worker.dispatchFetch(request('/api/v1/journeys/reference/journey-graph-v1'));
 
     expect(worker.cache('subway-first-structural-v2').puts.map(({ key }) => key)).toEqual([
       'https://subway.test/api/v1/stations/catalog/catalog-v1',
       'https://subway.test/api/v1/maps/night/reference/map-v1',
+      'https://subway.test/api/v1/journeys/reference/journey-graph-v1',
     ]);
     expect(worker.cache('subway-first-history-v2').puts).toEqual([]);
   });

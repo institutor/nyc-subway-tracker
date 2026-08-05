@@ -79,7 +79,8 @@ function classifyRequest(request) {
     || url.pathname === '/icons/app-icon.svg') return 'shell';
 
   if (/^\/api\/v1\/stations\/catalog\/[^/]+$/.test(url.pathname)
-    || /^\/api\/v1\/maps\/(?:day|night)\/reference\/[^/]+$/.test(url.pathname)) return 'structural';
+    || /^\/api\/v1\/maps\/(?:day|night)\/reference\/[^/]+$/.test(url.pathname)
+    || /^\/api\/v1\/journeys\/reference\/[^/]+$/.test(url.pathname)) return 'structural';
 
   if (/^\/api\/v1\/stations\/[^/]+\/board$/.test(url.pathname)
     || /^\/api\/v1\/maps\/(?:day|night)\/overlay$/.test(url.pathname)

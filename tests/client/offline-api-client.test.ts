@@ -1,6 +1,8 @@
 import { describe, expect, test, vi } from 'vitest';
 
 import { createTransitApiClient } from '../../src/client/api/client';
+import { journeyGraphFixture } from '../helpers/journey-graph-fixture';
+import { validateJourneyGraph } from '../../src/shared/domain/journey-router';
 
 const gate = { exposed: false, reasonCode: 'NEARBY_GATE_0_NOT_PASSED', decision: 'NO-GO — GATE 0 NOT PASSED' } as const;
 const dynamic = {
@@ -82,12 +84,31 @@ describe('offline tools API boundary', () => {
     expect(result.cacheState).toBe('historical');
   });
 
-  test('posts a coordinate-free owned journey request and accepts exact ordered station structure', async () => {
+  test('loads an immutable exact-version journey graph and rejects graph/version mismatch', async () => {
+    const envelope = {
+      apiVersion: 'v1', schemaVersion: '2026-08-04', contentVersion: 'journey-graph-7',
+      demonstrationLabel: 'Demonstration data \u2014 not live',
+      data: { contentVersion: 'journey-graph-7', graph: journeyGraphFixture },
+    } as const;
+    const fetcher = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => json(envelope));
+    const client = createTransitApiClient(fetcher);
+
+    const result = await client.journeyReference('journey-graph-7');
+
+    expect(result.data.graph).toEqual(validateJourneyGraph(journeyGraphFixture));
+    expect(fetcher.mock.calls[0]?.[0]).toBe('/api/v1/journeys/reference/journey-graph-7');
+    await expect(createTransitApiClient(async () => json({
+      ...envelope,
+      data: { ...envelope.data, contentVersion: 'another-graph' },
+    })).journeyReference('journey-graph-7')).rejects.toThrow('Transit information is unavailable.');
+  });
+
+  test('posts a coordinate-free owned online journey request and accepts exact ordered station structure', async () => {
     const fetcher = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => json({
       ...dynamic,
       data: {
-        kind: 'planned', label: 'Reference itinerary',
-        scope: { mode: 'offline-reference', originStationId: 'A12', destinationStationId: 'A15', accessibleRouteOnly: false },
+        kind: 'planned',
+        scope: { mode: 'online-current', originStationId: 'A12', destinationStationId: 'A15', accessibleRouteOnly: false },
         itineraries: [{
           id: 'journey-a', transferIds: [], transfers: 0, validity: 'valid', accessibility: 'eligible',
           risk: 'clear', timing: 'timed', arrivalSeconds: 600,
@@ -105,7 +126,7 @@ describe('offline tools API boundary', () => {
     const controller = new AbortController();
 
     const result = await client.planJourney({
-      mode: 'offline-reference', originStationId: 'A12', destinationStationId: 'A15', accessibleRouteOnly: false,
+      mode: 'online-current', originStationId: 'A12', destinationStationId: 'A15', accessibleRouteOnly: false,
     }, controller.signal);
 
     expect(result.data?.kind).toBe('planned');
@@ -114,7 +135,7 @@ describe('offline tools API boundary', () => {
     expect(fetcher.mock.calls[0][0]).toBe('/api/v1/journeys');
     expect(fetcher.mock.calls[0][1]).toMatchObject({ method: 'POST', signal: controller.signal });
     expect(JSON.parse(String(fetcher.mock.calls[0][1]?.body))).toEqual({
-      mode: 'offline-reference', originStationId: 'A12', destinationStationId: 'A15', accessibleRouteOnly: false,
+      mode: 'online-current', originStationId: 'A12', destinationStationId: 'A15', accessibleRouteOnly: false,
     });
     expect(JSON.stringify(fetcher.mock.calls)).not.toMatch(/latitude|longitude|coordinate|activeTrip|cursor/i);
   });

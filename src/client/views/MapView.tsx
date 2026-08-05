@@ -14,6 +14,7 @@ import { JourneyPlanner, type MapServiceMeaning } from '../components/JourneyPla
 import { StatusBanner } from '../components/StatusBanner';
 import { VectorNetworkMap, type MapViewport } from '../components/VectorNetworkMap';
 import type { StationChoice } from '../state/app-state';
+import type { OfflineJourneyPlanner } from '../offline/plan-offline-journey';
 
 export interface MapContext {
   readonly serviceMeaning: MapServiceMeaning;
@@ -33,6 +34,7 @@ export function MapView({
   origin,
   initialContext,
   onContextChange,
+  planOfflineJourney,
   onActivateTrip,
 }: {
   readonly api: TransitApiClient;
@@ -44,6 +46,7 @@ export function MapView({
   readonly origin?: StationChoice;
   readonly initialContext?: MapContext;
   readonly onContextChange: (context: MapContext) => void;
+  readonly planOfflineJourney?: OfflineJourneyPlanner;
   readonly onActivateTrip: (itinerary: JourneyItineraryDto, response: JourneyEnvelopeDto) => void;
 }) {
   const [context, setContext] = useState<MapContext>(() => initialContext ?? {
@@ -172,6 +175,7 @@ export function MapView({
           catalog={catalog}
           serviceMeaning={context.serviceMeaning}
           connected={connected}
+          planOfflineJourney={planOfflineJourney}
           onActivateTrip={onActivateTrip}
         />
       ) : null}

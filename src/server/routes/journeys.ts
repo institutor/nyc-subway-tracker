@@ -2,14 +2,34 @@ import type { Request, Response } from 'express';
 
 import { API_VERSION, DEMONSTRATION_LABEL, SCHEMA_VERSION } from '../api/contracts';
 import { captureDecisionSnapshot } from '../api/decision-snapshot';
-import { sendNoStoreJson } from '../api/http';
+import { sendImmutableJson, sendNoStoreJson } from '../api/http';
 import { toProvenanceDtos, toSourceHealthDtos } from '../api/provenance-dto';
 import { createResponseIdentity } from '../api/response-identity';
 import type { AppDependencies } from '../bootstrap';
-import { planJourney } from '../services/journey-service';
+import { createJourneyGraphReference, planJourney } from '../services/journey-service';
 import { captureNow } from './boards';
 import type { JourneyQuery } from '../../shared/domain/journey-router';
-import { parseJourneyRequest } from '../api/request-validation';
+import { assertExactQuery, parseApiIdentifier, parseJourneyRequest } from '../api/request-validation';
+
+export function journeyReferenceHandler(dependencies: AppDependencies) {
+  return (request: Request, response: Response): void => {
+    assertExactQuery(request, []);
+    const contentVersion = parseApiIdentifier(request.params.contentVersion, 'journey graph content version');
+    const snapshot = captureDecisionSnapshot(dependencies.snapshotProvider);
+    const reference = createJourneyGraphReference(snapshot.journeyGraph);
+    if (contentVersion !== reference.contentVersion) {
+      sendNoStoreJson(response, 404, { error: { code: 'not_found', message: 'Resource not found.' } });
+      return;
+    }
+    sendImmutableJson(request, response, {
+      apiVersion: API_VERSION,
+      schemaVersion: SCHEMA_VERSION,
+      contentVersion,
+      ...(dependencies.config.mode === 'validation' ? { demonstrationLabel: DEMONSTRATION_LABEL } : {}),
+      data: reference,
+    });
+  };
+}
 
 export function journeyHandler(dependencies: AppDependencies) {
   return (request: Request, response: Response): void => {

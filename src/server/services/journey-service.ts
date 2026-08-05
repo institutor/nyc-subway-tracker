@@ -1,10 +1,26 @@
 import {
   routeJourney,
+  createOfflineStructuralJourneyGraph,
   validateJourneyGraph,
   type JourneyGraph,
   type JourneyQuery,
   type RoutedJourney,
 } from '../../shared/domain/journey-router';
+import { createResponseIdentity } from '../api/response-identity';
+
+export interface JourneyGraphReference {
+  readonly contentVersion: string;
+  readonly graph: JourneyGraph;
+}
+
+export function createJourneyGraphReference(graph: JourneyGraph | undefined): JourneyGraphReference {
+  const structural = createOfflineStructuralJourneyGraph(
+    graph ?? { nodes: [], patterns: [], transfers: [] },
+  );
+  const digest = createResponseIdentity(['journey-graph-reference-v1', JSON.stringify(structural)])
+    .slice('response:'.length);
+  return deepFreeze({ contentVersion: `journey-graph-${digest}`, graph: structural });
+}
 
 export function planJourney(graph: JourneyGraph | undefined, query: JourneyQuery) {
   const scope = captureScope(query);

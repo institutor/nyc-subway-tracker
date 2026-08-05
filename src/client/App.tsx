@@ -9,6 +9,7 @@ import {
   type CatalogComplexDto,
   type CatalogEnvelopeDto,
   type JourneyEnvelopeDto,
+  type JourneyGraphReferenceDto,
   type JourneyItineraryDto,
   type LocationFixDto,
   type MapOverlayEnvelopeDto,
@@ -27,6 +28,7 @@ import {
   type UseConnectivityOptions,
 } from './hooks/use-connectivity';
 import { useLocation } from './hooks/use-location';
+import { createOfflineJourneyPlanner } from './offline/plan-offline-journey';
 import {
   createAppReconnectionStageLoader,
   type AppReconnectionArtifacts,
@@ -121,6 +123,7 @@ export function App({
   const [bootstrap, setBootstrap] = useState<BootstrapEnvelopeDto>();
   const [catalog, setCatalog] = useState<CatalogEnvelopeDto | undefined>(local.structural?.catalog);
   const [mapVersions, setMapVersions] = useState<BootstrapDataDto['contentVersions']['maps'] | undefined>(local.structural?.contentVersions.maps);
+  const [journeyReference, setJourneyReference] = useState<JourneyGraphReferenceDto>();
   const [savedRecords, setSavedRecords] = useState<readonly SavedRecord[]>(local.savedRecords);
   const [activeTrip, setActiveTrip] = useState<ActiveTripRecord | null>(local.activeTrip);
   const [activeTripOpen, setActiveTripOpen] = useState(offline);
@@ -155,10 +158,14 @@ export function App({
         if (!active) return;
         connectivity.reportRequestResult('accepted');
         setBootstrap(nextBootstrap);
-        const nextCatalog = await apiClient.catalog(nextBootstrap.data.contentVersions.stationCatalog, controller.signal);
+        const [nextCatalog, nextJourneyReference] = await Promise.all([
+          apiClient.catalog(nextBootstrap.data.contentVersions.stationCatalog, controller.signal),
+          apiClient.journeyReference(nextBootstrap.data.contentVersions.journeyGraph, controller.signal),
+        ]);
         if (!active) return;
         connectivity.reportRequestResult('accepted');
         setCatalog(nextCatalog);
+        setJourneyReference(nextJourneyReference.data);
         setMapVersions(nextBootstrap.data.contentVersions.maps);
         structuralStore.write(nextBootstrap.data.contentVersions, nextCatalog);
         void Promise.allSettled([
@@ -177,6 +184,18 @@ export function App({
       controller.abort();
     };
   }, [apiClient, connected, connectivity.reportRequestResult, structuralStore]);
+
+  useEffect(() => {
+    const contentVersion = local.structural?.contentVersions.journeyGraph;
+    if (connectivityState !== 'offline' || !contentVersion) return undefined;
+    const controller = new AbortController();
+    void apiClient.journeyReference(contentVersion, controller.signal).then((reference) => {
+      if (!controller.signal.aborted) setJourneyReference(reference.data);
+    }).catch(() => {
+      if (!controller.signal.aborted) setJourneyReference(undefined);
+    });
+    return () => controller.abort();
+  }, [apiClient, connectivityState, local.structural?.contentVersions.journeyGraph]);
 
   const runNearby = useCallback((fix: LocationFixDto) => {
     if (!connectedRef.current) return;
@@ -391,6 +410,10 @@ export function App({
   }, []);
 
   const savedChoices = useMemo(() => savedRecords.map((record) => stationChoice(record, catalog?.data.complexes ?? [])), [catalog, savedRecords]);
+  const offlineJourneyPlanner = useMemo(
+    () => journeyReference ? createOfflineJourneyPlanner(journeyReference) : undefined,
+    [journeyReference],
+  );
 
   const selectStation = useCallback((station: StationChoice, filters: AppState['filters']) => {
     nearbyAbort.current?.abort();
@@ -600,6 +623,7 @@ export function App({
               origin={state.selectedStation ?? state.lastUsedStation ?? savedChoices[0]}
               initialContext={mapContext}
               onContextChange={setMapContext}
+              planOfflineJourney={offlineJourneyPlanner}
               onActivateTrip={activateTrip}
             />
           ) : state.surface === 'saved' ? (

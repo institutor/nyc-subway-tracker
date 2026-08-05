@@ -90,12 +90,13 @@ describe('independent map service meaning', () => {
 });
 
 describe('journey planning and activation', () => {
-  test('renders direct and transfer itineraries in exact server order without client reranking', async () => {
+  test('routes offline through the injected local planner with zero journey requests and no offline activation', async () => {
     const response = journeyResponse();
+    const planOfflineJourney = vi.fn(() => response);
     const api = {
       ...mapApi(),
       searchStations: vi.fn(async () => ({ apiVersion: 'v1', schemaVersion: '2026-08-04', contentVersion: 'catalog-7', query: 'canal', results: [catalog[1]] })),
-      planJourney: vi.fn(async () => response),
+      planJourney: vi.fn(async () => { throw new Error('Offline planning must not use the API'); }),
     } as unknown as TransitApiClient;
     const onActivateTrip = vi.fn();
     render(<JourneyPlanner
@@ -104,6 +105,7 @@ describe('journey planning and activation', () => {
       catalog={catalog}
       serviceMeaning="typical-weekday"
       connected={false}
+      planOfflineJourney={planOfflineJourney}
       onActivateTrip={onActivateTrip}
     />);
 
@@ -114,18 +116,18 @@ describe('journey planning and activation', () => {
     fireEvent.keyDown(search, { key: 'Enter' });
     fireEvent.click(screen.getByRole('button', { name: 'Plan reference trip' }));
 
-    await waitFor(() => expect(screen.getByText('Reference itinerary')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('Untimed structural route')).toBeInTheDocument());
     const itineraries = screen.getAllByRole('article', { name: /itinerary/i });
     expect(itineraries).toHaveLength(2);
     expect(within(itineraries[0]).getByText('A toward Inwood–207 St')).toBeInTheDocument();
     expect(within(itineraries[1]).getByText('Transfer at 59 St')).toBeInTheDocument();
     expect(within(itineraries[1]).getByText('C toward Euclid Av')).toBeInTheDocument();
-    expect(api.planJourney).toHaveBeenCalledWith({
+    expect(planOfflineJourney).toHaveBeenCalledWith({
       mode: 'offline-reference', originStationId: 'A12', destinationStationId: 'R20', accessibleRouteOnly: false,
-    }, expect.any(AbortSignal));
-
-    fireEvent.click(within(itineraries[1]).getByRole('button', { name: 'Use transfer itinerary underground' }));
-    expect(onActivateTrip).toHaveBeenCalledWith(response.data && response.data.kind === 'planned' ? response.data.itineraries[1] : undefined, response);
+    });
+    expect(api.planJourney).not.toHaveBeenCalled();
+    expect(screen.queryByRole('button', { name: /Use .* itinerary underground/ })).not.toBeInTheDocument();
+    expect(onActivateTrip).not.toHaveBeenCalled();
   });
 
   test('keeps a locked journey surface honest and never fabricates an itinerary', async () => {
@@ -153,6 +155,37 @@ describe('journey planning and activation', () => {
     await waitFor(() => expect(screen.getByText('Journey planning is not released yet.')).toBeInTheDocument());
     expect(screen.queryByRole('article', { name: /itinerary/i })).not.toBeInTheDocument();
   });
+
+  test('rejects a late journey response after an exact request tuple input changes', async () => {
+    const pending = deferred<JourneyEnvelopeDto>();
+    const api = {
+      ...mapApi(),
+      searchStations: vi.fn(async () => ({ apiVersion: 'v1', schemaVersion: '2026-08-04', contentVersion: 'catalog-7', query: 'canal', results: [catalog[1]] })),
+      planJourney: vi.fn(async () => pending.promise),
+    } as unknown as TransitApiClient;
+    render(<JourneyPlanner
+      api={api}
+      origin={{ complexId: 'A12', constituentId: 'A12', name: '125 St' }}
+      catalog={catalog}
+      serviceMeaning="actual-now"
+      connected
+      onActivateTrip={vi.fn()}
+    />);
+
+    const search = screen.getByRole('combobox', { name: 'Destination station' });
+    fireEvent.change(search, { target: { value: 'canal' } });
+    await waitFor(() => expect(screen.getByRole('option', { name: /Canal St/ })).toBeInTheDocument());
+    fireEvent.keyDown(search, { key: 'ArrowDown' });
+    fireEvent.keyDown(search, { key: 'Enter' });
+    fireEvent.click(screen.getByRole('button', { name: 'Plan current trip' }));
+    expect(api.planJourney).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Accessible Route Only' }));
+    pending.resolve(onlineJourneyResponse());
+
+    await waitFor(() => expect(screen.queryByText('Current itinerary')).not.toBeInTheDocument());
+    expect(screen.queryByRole('article', { name: /itinerary/i })).not.toBeInTheDocument();
+  });
 });
 
 const dynamic = {
@@ -164,7 +197,7 @@ const dynamic = {
 
 const bootstrap = {
   ...dynamic,
-  data: { productName: 'NYC Subway Tracker', unofficial: true, contentVersions: { stationCatalog: 'catalog-7', maps: { day: 'map-day-7', night: 'map-night-7' } } },
+  data: { productName: 'NYC Subway Tracker', unofficial: true, contentVersions: { stationCatalog: 'catalog-7', maps: { day: 'map-day-7', night: 'map-night-7' }, journeyGraph: 'journey-graph-7' } },
 } as BootstrapEnvelopeDto;
 
 const catalog = [
@@ -197,7 +230,7 @@ function journeyResponse(): JourneyEnvelopeDto {
   return {
     ...dynamic,
     data: {
-      kind: 'planned', label: 'Reference itinerary',
+      kind: 'untimed', label: 'Untimed structural route',
       scope: { mode: 'offline-reference', originStationId: 'A12', destinationStationId: 'R20', accessibleRouteOnly: false },
       itineraries: [
         itinerary('direct', [{ routeId: 'A', routeLabel: 'A', direction: 'northbound', destination: 'Inwood–207 St', from: 'A12', to: 'R20' }], []),
@@ -210,6 +243,30 @@ function journeyResponse(): JourneyEnvelopeDto {
   };
 }
 
+function onlineJourneyResponse(): JourneyEnvelopeDto {
+  const response = journeyResponse();
+  if (!response.data || response.data.kind !== 'untimed') throw new Error('Expected offline fixture');
+  return {
+    ...response,
+    data: {
+      kind: 'planned',
+      scope: { ...response.data.scope, mode: 'online-current' },
+      itineraries: response.data.itineraries.map((value) => ({
+        ...value,
+        validity: 'valid',
+        risk: 'clear',
+        timing: 'timed',
+      })),
+    },
+  };
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((accept) => { resolve = accept; });
+  return { promise, resolve };
+}
+
 function itinerary(
   id: string,
   legs: readonly { routeId: string; routeLabel: string; direction: 'northbound' | 'southbound'; destination: string; from: string; to: string }[],
@@ -217,8 +274,7 @@ function itinerary(
 ) {
   return {
     id, transferIds: transfers.map(({ transferId }) => transferId), transfers: transfers.length,
-    validity: 'valid' as const, accessibility: 'eligible' as const, risk: 'clear' as const, timing: 'timed' as const,
-    arrivalSeconds: 600,
+    validity: 'limited' as const, accessibility: 'eligible' as const, risk: 'uncertain' as const, timing: 'untimed' as const,
     legs: legs.map((leg, index) => ({
       patternId: `pattern-${id}-${index}`, routeId: leg.routeId, routeLabel: leg.routeLabel, direction: leg.direction,
       actualDestination: leg.destination, fromOccurrenceId: `occ-${leg.from}`, toOccurrenceId: `occ-${leg.to}`,

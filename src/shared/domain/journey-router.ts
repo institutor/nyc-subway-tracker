@@ -184,9 +184,37 @@ export function validateJourneyGraph(rawGraph: JourneyGraph): JourneyGraph {
   return deepFreeze({ nodes, patterns, transfers });
 }
 
+export function createOfflineStructuralJourneyGraph(rawGraph: JourneyGraph): JourneyGraph {
+  const validated = validateJourneyGraph(rawGraph);
+  return validateJourneyGraph({
+    nodes: validated.nodes,
+    patterns: validated.patterns.map((pattern) => ({
+      ...pattern,
+      current: {
+        status: 'missing',
+        serviceDecision: 'unknown',
+        validity: 'limited',
+        risk: 'uncertain',
+      },
+      future: [],
+      offline: {
+        schedule: 'missing',
+        serviceDecision: 'unknown',
+        patternMatch: 'exact',
+        validity: 'limited',
+        risk: 'uncertain',
+      },
+    })),
+    transfers: validated.transfers.map((transfer) => ({
+      ...transfer,
+      evidence: { kind: 'structural-only' },
+    })),
+  });
+}
+
 export function routeJourney(rawGraph: JourneyGraph, rawQuery: JourneyQuery): JourneyRouteDecision {
   const graph = validateJourneyGraph(rawGraph);
-  const query = captureQuery(rawQuery);
+  const query = validateJourneyQuery(rawQuery);
   const nodesByOccurrence = new Map(graph.nodes.map((node) => [node.occurrenceId, node]));
   const rideEdges = new Map<string, RideEdge[]>();
   const patternDecisions = new Map<string, PatternDecision>();
@@ -261,6 +289,10 @@ export function routeJourney(rawGraph: JourneyGraph, rawQuery: JourneyQuery): Jo
     return deepFreeze({ kind: 'untimed', label: 'Untimed structural route', itineraries });
   }
   return deepFreeze({ kind: 'planned', itineraries });
+}
+
+export function validateJourneyQuery(rawQuery: JourneyQuery): JourneyQuery {
+  return captureQuery(rawQuery);
 }
 
 function captureNode(value: unknown): JourneyOccurrenceNode {

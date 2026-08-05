@@ -122,19 +122,47 @@ describe('explicit global Offline presentation', () => {
   });
 
   test('warms both app-owned vector references after structural versions are accepted online', async () => {
+    const storage = new MemoryStorage();
     const mapReference = vi.fn(async (theme: 'day' | 'night', contentVersion: string) => mapEnvelope(theme, contentVersion));
+    const journeyReference = vi.fn(createClientApi().journeyReference);
     render(
       <App
-        api={createClientApi({ mapReference })}
+        api={createClientApi({ journeyReference, mapReference })}
         geolocation={null}
-        storage={new MemoryStorage()}
+        storage={storage}
         connectivity="online"
       />,
     );
 
     await waitFor(() => expect(mapReference).toHaveBeenCalledTimes(2));
+    expect(journeyReference).toHaveBeenCalledWith(
+      bootstrapEnvelope.data.contentVersions.journeyGraph,
+      expect.any(AbortSignal),
+    );
     expect(mapReference).toHaveBeenCalledWith('day', bootstrapEnvelope.data.contentVersions.maps.day, expect.any(AbortSignal));
     expect(mapReference).toHaveBeenCalledWith('night', bootstrapEnvelope.data.contentVersions.maps.night, expect.any(AbortSignal));
+    expect(createBrowserStructuralStore(storage).read()).toEqual(expect.objectContaining({
+      kind: 'ready',
+      value: expect.objectContaining({
+        contentVersions: expect.objectContaining({ journeyGraph: bootstrapEnvelope.data.contentVersions.journeyGraph }),
+      }),
+    }));
+  });
+
+  test('does not persist graph readiness metadata when immutable graph bytes cannot be accepted', async () => {
+    const storage = new MemoryStorage();
+    const journeyReference = vi.fn(async () => { throw new Error('Graph bytes unavailable.'); });
+    render(
+      <App
+        api={createClientApi({ journeyReference })}
+        geolocation={null}
+        storage={storage}
+        connectivity="online"
+      />,
+    );
+
+    await waitFor(() => expect(journeyReference).toHaveBeenCalledTimes(1));
+    expect(createBrowserStructuralStore(storage).read()).toEqual({ kind: 'ready', value: null });
   });
 });
 

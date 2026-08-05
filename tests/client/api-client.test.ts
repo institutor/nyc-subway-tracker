@@ -103,7 +103,7 @@ describe('transit API client boundary', () => {
       gates, sourceHealth: [], provenance: [], demonstrationLabel: 'Demonstration data — not live',
       data: {
         productName: 'NYC Subway Tracker', unofficial: true,
-        contentVersions: { stationCatalog: 'catalog-7', maps: { day: 'day-7', night: 'night-7' } },
+        contentVersions: { stationCatalog: 'catalog-7', maps: { day: 'day-7', night: 'night-7' }, journeyGraph: 'journey-graph-7' },
       },
     };
     const duplicateCatalog = {

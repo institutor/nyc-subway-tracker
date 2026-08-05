@@ -1,4 +1,5 @@
 import type { Direction } from '../../shared/domain/types';
+import { validateJourneyGraph, type JourneyGraph } from '../../shared/domain/journey-router';
 
 const API_VERSION = 'v1';
 const SCHEMA_VERSION = '2026-08-04';
@@ -58,6 +59,7 @@ export interface BootstrapDataDto {
   readonly contentVersions: {
     readonly stationCatalog: string;
     readonly maps: { readonly day: string; readonly night: string };
+    readonly journeyGraph: string;
   };
 }
 
@@ -122,6 +124,19 @@ export type MapReferenceEnvelopeDto =
       readonly data: MapReferenceDto;
     }
   | (DynamicEnvelopeBase & { readonly data: null });
+
+export interface JourneyGraphReferenceDto {
+  readonly contentVersion: string;
+  readonly graph: JourneyGraph;
+}
+
+export interface JourneyGraphReferenceEnvelopeDto {
+  readonly apiVersion: typeof API_VERSION;
+  readonly schemaVersion: typeof SCHEMA_VERSION;
+  readonly contentVersion: string;
+  readonly demonstrationLabel?: typeof DEMONSTRATION_LABEL;
+  readonly data: JourneyGraphReferenceDto;
+}
 
 export interface MapOverlaySegmentDto {
   readonly id: string;
@@ -377,6 +392,7 @@ export interface TransitApiClient {
   catalog(contentVersion: string, signal?: AbortSignal): Promise<CatalogEnvelopeDto>;
   searchStations(query: string, limit?: number, signal?: AbortSignal): Promise<StationSearchEnvelopeDto>;
   mapReference(theme: MapThemeDto, contentVersion: string, signal?: AbortSignal): Promise<MapReferenceEnvelopeDto>;
+  journeyReference(contentVersion: string, signal?: AbortSignal): Promise<JourneyGraphReferenceEnvelopeDto>;
   mapOverlay(theme: MapThemeDto, signal?: AbortSignal): Promise<MapOverlayEnvelopeDto>;
   planJourney(query: JourneyRequestDto, signal?: AbortSignal): Promise<JourneyEnvelopeDto>;
   nearby(fix: LocationFixDto, accessibleRouteOnly: boolean, signal?: AbortSignal): Promise<NearbyEnvelopeDto>;
@@ -429,6 +445,13 @@ export function createTransitApiClient(fetcher: Fetcher = globalThis.fetch.bind(
       return parseMapReference(
         networkValue(await get(`/api/v1/maps/${capturedTheme}/reference/${encodeURIComponent(capturedVersion)}`, signal)),
         capturedTheme,
+        capturedVersion,
+      );
+    },
+    async journeyReference(contentVersion: string, signal?: AbortSignal) {
+      const capturedVersion = encodeIdentity(contentVersion);
+      return parseJourneyReference(
+        networkValue(await get(`/api/v1/journeys/reference/${encodeURIComponent(capturedVersion)}`, signal)),
         capturedVersion,
       );
     },
@@ -512,13 +535,17 @@ function parseBootstrap(value: unknown): BootstrapEnvelopeDto {
   const root = dynamicRoot(value, ['data']);
   const data = strictRecord(root.data, ['productName', 'unofficial', 'contentVersions']);
   if (data.productName !== 'NYC Subway Tracker' || data.unofficial !== true) invalid();
-  const versions = strictRecord(data.contentVersions, ['stationCatalog', 'maps']);
+  const versions = strictRecord(data.contentVersions, ['stationCatalog', 'maps', 'journeyGraph']);
   const maps = strictRecord(versions.maps, ['day', 'night']);
   return freeze({
     ...dynamicBase(root),
     data: {
       productName: 'NYC Subway Tracker', unofficial: true,
-      contentVersions: { stationCatalog: identity(versions.stationCatalog), maps: { day: identity(maps.day), night: identity(maps.night) } },
+      contentVersions: {
+        stationCatalog: identity(versions.stationCatalog),
+        maps: { day: identity(maps.day), night: identity(maps.night) },
+        journeyGraph: identity(versions.journeyGraph),
+      },
     },
   });
 }
@@ -572,6 +599,35 @@ function parseMapReferenceData(value: unknown): MapReferenceDto {
   return {
     theme: parseMapTheme(row.theme), contentVersion: identity(row.contentVersion), attribution: display(row.attribution), features,
   };
+}
+
+function parseJourneyReference(value: unknown, requestedVersion: string): JourneyGraphReferenceEnvelopeDto {
+  const root = strictRecord(
+    value,
+    ['apiVersion', 'schemaVersion', 'contentVersion', 'data'],
+    ['demonstrationLabel'],
+  );
+  apiHeader(root);
+  const contentVersion = identity(root.contentVersion);
+  if (contentVersion !== requestedVersion) invalid();
+  const data = strictRecord(root.data, ['contentVersion', 'graph']);
+  if (identity(data.contentVersion) !== contentVersion) invalid();
+  let graph: JourneyGraph;
+  try {
+    graph = validateJourneyGraph(data.graph as JourneyGraph);
+  } catch {
+    invalid();
+  }
+  const demonstrationLabel = root.demonstrationLabel === undefined
+    ? undefined
+    : demonstration(root.demonstrationLabel);
+  return freeze({
+    apiVersion: API_VERSION,
+    schemaVersion: SCHEMA_VERSION,
+    contentVersion,
+    ...(demonstrationLabel ? { demonstrationLabel } : {}),
+    data: { contentVersion, graph },
+  });
 }
 
 function parseMapFeature(value: unknown): MapFeatureDto {

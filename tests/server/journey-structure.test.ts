@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 
-import { planJourney } from '../../src/server/services/journey-service';
+import { createJourneyGraphReference, planJourney } from '../../src/server/services/journey-service';
 import type { JourneyGraph, JourneyQuery } from '../../src/shared/domain/journey-router';
 
 const graph: JourneyGraph = {
@@ -21,6 +21,22 @@ const graph: JourneyGraph = {
 };
 
 describe('journey response structural ownership', () => {
+  test('publishes a deterministic versioned graph with current, future, timing, and verified-transfer claims removed', () => {
+    const first = createJourneyGraphReference(graph);
+    const second = createJourneyGraphReference(structuredClone(graph));
+
+    expect(first).toEqual(second);
+    expect(first.contentVersion).toMatch(/^journey-graph-/);
+    expect(first.graph.patterns).toEqual(graph.patterns.map((value) => expect.objectContaining({
+      id: value.id,
+      current: { status: 'missing', serviceDecision: 'unknown', validity: 'limited', risk: 'uncertain' },
+      future: [],
+      offline: { schedule: 'missing', serviceDecision: 'unknown', patternMatch: 'exact', validity: 'limited', risk: 'uncertain' },
+    })));
+    expect(first.graph.transfers[0]?.evidence).toEqual({ kind: 'structural-only' });
+    expect(JSON.stringify(first.graph)).not.toMatch(/arrivalSeconds|current-supplemented|admitted/);
+  });
+
   test('enriches exact graph-owned station order, transfer instructions, and request scope', () => {
     const decision = planJourney(graph, query('online-current'));
 
