@@ -84,7 +84,10 @@ describe('audited practical-walk adapter', () => {
         { id: 'entrance-b', coordinate: { latitude: 40.72, longitude: -74.02 } },
       ],
     });
-    expect(result).toMatchObject({ kind: 'available', coverage: { kind: 'complete-universe' } });
+    expect(result).toMatchObject({
+      kind: 'available', source: 'practical-walk', sourceId: 'practical-walk',
+      coverage: { kind: 'complete-universe' },
+    });
     const serialized = JSON.stringify(result);
     expect(serialized).not.toContain('40.7');
     expect(serialized).not.toContain('-74');

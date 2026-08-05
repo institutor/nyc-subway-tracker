@@ -6,6 +6,11 @@ const MAX_REQUEST_BYTES = 512 * 1_024;
 const MAX_RESPONSE_BYTES = 1_048_576 as const;
 const TIMEOUT_MS = 4_000;
 
+export const PRACTICAL_WALK_SOURCE = Object.freeze({
+  source: 'practical-walk' as const,
+  sourceId: 'practical-walk' as const,
+});
+
 export interface PracticalWalkDestination {
   readonly id: string;
   readonly coordinate: Coordinate;
@@ -154,9 +159,65 @@ export async function requestPracticalWalks(
   }
 
   try {
-    return parseProviderDecision(provider, captured.destinations.map(({ id }) => id), config.sourceId);
+    return parseProviderDecision(provider, captured.destinations.map(({ id }) => id));
   } catch (error) {
     return unavailable(error instanceof IncompleteEvidence ? 'incomplete' : 'invalid');
+  }
+}
+
+export function capturePracticalWalkDecision(
+  rawDecision: unknown,
+  destinations: readonly PracticalWalkDestination[],
+): PracticalWalkDecision {
+  try {
+    const universe = captureUniverseIds(destinations);
+    if (!rawDecision || typeof rawDecision !== 'object' || Array.isArray(rawDecision)) throw new Error('Invalid walk decision');
+    if ((rawDecision as Record<string, unknown>).kind === 'unavailable') {
+      const record = strictRecord(rawDecision, ['kind', 'reason']);
+      const reasons: readonly PracticalWalkUnavailableReason[] = [
+        'disabled', 'unapproved', 'unsupported', 'limit', 'cancelled', 'timeout', 'invalid', 'incomplete',
+      ];
+      if (!reasons.includes(record.reason as PracticalWalkUnavailableReason)) throw new Error('Invalid walk reason');
+      return unavailable(record.reason as PracticalWalkUnavailableReason);
+    }
+
+    const record = strictRecord(rawDecision, ['kind', 'source', 'sourceId', 'coverage', 'results']);
+    if (record.kind !== 'available'
+      || record.source !== PRACTICAL_WALK_SOURCE.source
+      || record.sourceId !== PRACTICAL_WALK_SOURCE.sourceId
+      || !Array.isArray(record.results)
+      || record.results.length > MAX_DESTINATIONS) {
+      throw new Error('Invalid walk decision');
+    }
+    const results = record.results.map(captureDecisionResult);
+    assertUnique(results.map(({ destinationId }) => destinationId), 'walk result');
+    const returned = sortedIdentities(results.map(({ destinationId }) => destinationId));
+    const coverage = captureDecisionCoverage(record.coverage);
+
+    if (coverage.kind === 'complete-universe') {
+      if (!sameIdentities(universe, returned)) throw new Error('Incomplete complete-universe evidence');
+    } else {
+      const considered = sortedIdentities(coverage.consideredDestinationIds);
+      const excluded = sortedIdentities(coverage.excludedDestinationIds);
+      assertUnique([...considered, ...excluded], 'coverage destination');
+      if (considered.length < 3
+        || !sameIdentities(returned, considered)
+        || !sameIdentities(universe, sortedIdentities([...considered, ...excluded]))
+        || coverage.excludedMinimumSeconds <= coverage.thirdCardMaximumSeconds
+        || results.some(({ range }) => range.maximumSeconds > coverage.thirdCardMaximumSeconds)) {
+        throw new Error('Invalid certified evidence');
+      }
+    }
+
+    results.sort((left, right) => compareCanonicalIdentity(left.destinationId, right.destinationId));
+    return deepFreeze({
+      kind: 'available',
+      ...PRACTICAL_WALK_SOURCE,
+      coverage,
+      results,
+    });
+  } catch {
+    return unavailable('invalid');
   }
 }
 
@@ -262,7 +323,7 @@ function isAbortSignal(value: unknown): value is AbortSignal {
     && typeof (value as AbortSignal).removeEventListener === 'function';
 }
 
-function parseProviderDecision(provider: unknown, requestedIds: readonly string[], sourceId: string): PracticalWalkDecision {
+function parseProviderDecision(provider: unknown, requestedIds: readonly string[]): PracticalWalkDecision {
   const root = strictRecord(provider, ['coverage', 'results']);
   if (!Array.isArray(root.results) || root.results.length > MAX_DESTINATIONS) throw new Error('Invalid walk results');
   const results = root.results.map(parseProviderResult);
@@ -289,10 +350,62 @@ function parseProviderDecision(provider: unknown, requestedIds: readonly string[
   results.sort((left, right) => compareCanonicalIdentity(left.destinationId, right.destinationId));
   return deepFreeze({
     kind: 'available',
-    source: 'practical-walk',
-    sourceId: normalizeBoundedIdentity(sourceId, 'walk source'),
+    ...PRACTICAL_WALK_SOURCE,
     coverage,
     results,
+  });
+}
+
+function captureUniverseIds(destinations: readonly PracticalWalkDestination[]): string[] {
+  if (!Array.isArray(destinations) || destinations.length > MAX_DESTINATIONS) throw new Error('Invalid walk universe');
+  const identities = destinations.map((destination) => {
+    if (!destination || typeof destination !== 'object' || Array.isArray(destination)) throw new Error('Invalid walk destination');
+    return normalizeBoundedIdentity(destination.id, 'walk destination');
+  });
+  assertUnique(identities, 'walk universe');
+  return sortedIdentities(identities);
+}
+
+function captureDecisionResult(input: unknown): PracticalWalkResult {
+  const record = strictRecord(input, ['destinationId', 'range']);
+  return {
+    destinationId: normalizeBoundedIdentity(record.destinationId as string, 'walk result destination'),
+    range: parseWalkRange(record.range),
+  };
+}
+
+function captureDecisionCoverage(input: unknown): PracticalWalkCoverage {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('Invalid walk coverage');
+  if ((input as Record<string, unknown>).kind === 'complete-universe') {
+    strictRecord(input, ['kind']);
+    return Object.freeze({ kind: 'complete-universe' });
+  }
+  const record = strictRecord(input, [
+    'kind', 'consideredDestinationIds', 'excludedDestinationIds', 'thirdCardMaximumSeconds', 'excludedMinimumSeconds',
+  ]);
+  if (record.kind !== 'certified-third-card-cutoff'
+    || !Array.isArray(record.consideredDestinationIds)
+    || !Array.isArray(record.excludedDestinationIds)
+    || record.consideredDestinationIds.length > MAX_DESTINATIONS
+    || record.excludedDestinationIds.length > MAX_DESTINATIONS) {
+    throw new Error('Invalid walk coverage');
+  }
+  const consideredDestinationIds = record.consideredDestinationIds
+    .map((id) => normalizeBoundedIdentity(id as string, 'walk considered destination'));
+  const excludedDestinationIds = record.excludedDestinationIds
+    .map((id) => normalizeBoundedIdentity(id as string, 'walk excluded destination'));
+  const thirdCardMaximumSeconds = parseWalkRange({
+    minimumSeconds: 0, maximumSeconds: record.thirdCardMaximumSeconds,
+  }).maximumSeconds;
+  const excludedMinimumSeconds = parseWalkRange({
+    minimumSeconds: record.excludedMinimumSeconds, maximumSeconds: 86_400,
+  }).minimumSeconds;
+  return deepFreeze({
+    kind: 'certified-third-card-cutoff',
+    consideredDestinationIds: sortedIdentities(consideredDestinationIds),
+    excludedDestinationIds: sortedIdentities(excludedDestinationIds),
+    thirdCardMaximumSeconds,
+    excludedMinimumSeconds,
   });
 }
 

@@ -50,11 +50,17 @@ export function buildStatusDto(
   provenance: readonly SnapshotProvenance[],
 ) {
   const selected = stationId === undefined ? boards : boards.filter((board) => board.station.id === stationId);
-  const alerts = selected.flatMap((board) => relevantAlerts(board.alerts, board.station, direction));
   const scoped = stationId === undefined && routeIds.length > 0
-    ? alerts.filter((alert) => alert.stationIds.length === 0
-      && (alert.routeIds.length === 0 || alert.routeIds.some((routeId) => routeIds.includes(routeId))))
-    : alerts;
+    ? [
+        ...selected
+          .filter((board) => board.station.routeIds.some((routeId) => routeIds.includes(routeId)))
+          .flatMap((board) => relevantAlerts(board.alerts, board.station, direction)
+            .filter((alert) => alert.routeIds.length === 0
+              || alert.routeIds.some((routeId) => routeIds.includes(routeId)))),
+        ...selected.flatMap((board) => relevantAlerts(board.alerts, board.station, direction)
+          .filter((alert) => alert.routeIds.length === 0 && alert.stationIds.length === 0)),
+      ]
+    : selected.flatMap((board) => relevantAlerts(board.alerts, board.station, direction));
   return deepFreeze({
     alerts: projectAlerts(scoped),
     sourceHealth: toSourceHealthDtos(sourceHealth),

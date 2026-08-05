@@ -25,12 +25,6 @@ export function enforceUrlLimit(request: Request, response: Response, next: Next
 }
 
 export function requireOperationalJson(request: Request, _response: Response, next: NextFunction): void {
-  const requiresJson = request.method === 'POST'
-    && (request.path === '/api/v1/nearby' || request.path === '/api/v1/journeys');
-  if (!requiresJson) {
-    next();
-    return;
-  }
   const value = request.headers['content-type'];
   if (typeof value !== 'string' || !isSupportedJsonMediaType(value)) {
     next(new ApiRequestError(415, 'unsupported_media_type'));

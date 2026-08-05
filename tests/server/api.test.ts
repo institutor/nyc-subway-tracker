@@ -366,7 +366,7 @@ describe('versioned subway API', () => {
     ) => ({
       kind: 'available' as const,
       source: 'practical-walk' as const,
-      sourceId: 'audited-walk-v1',
+      sourceId: 'practical-walk',
       coverage: { kind: 'complete-universe' as const },
       results: [
         { destinationId: 'entrance-a12', range: { minimumSeconds: 500, maximumSeconds: 520 } },
@@ -433,20 +433,25 @@ describe('versioned subway API', () => {
   });
 
   test('preserves allowlisted certified third-card completeness evidence with a fixed walk handle', async () => {
+    const certifiedUniverse = [
+      ...nearbyUniverse,
+      { id: 'entrance-third', coordinate: { latitude: 40.72, longitude: -74.01 } },
+    ] as const;
     const dependencies = createProductionDependencies({
       dataDirectory: '.data-test-do-not-read', mode: 'validation', sources: {},
     }, {
-      clock: createFixedClock(DECIDED_AT), nearbyUniverse,
+      clock: createFixedClock(DECIDED_AT), nearbyUniverse: certifiedUniverse,
       walk: async () => ({
-        kind: 'available', source: 'practical-walk', sourceId: 'https://secret.example/provider-token',
+        kind: 'available', source: 'practical-walk', sourceId: 'practical-walk',
         coverage: {
-          kind: 'certified-third-card-cutoff',
-          consideredDestinationIds: ['entrance-a12', 'entrance-r20'], excludedDestinationIds: [],
+          kind: 'certified-third-card-cutoff' as const,
+          consideredDestinationIds: ['entrance-third', 'entrance-a12', 'entrance-r20'], excludedDestinationIds: [],
           thirdCardMaximumSeconds: 200, excludedMinimumSeconds: 300,
         },
         results: [
           { destinationId: 'entrance-a12', range: { minimumSeconds: 150, maximumSeconds: 170 } },
           { destinationId: 'entrance-r20', range: { minimumSeconds: 100, maximumSeconds: 120 } },
+          { destinationId: 'entrance-third', range: { minimumSeconds: 180, maximumSeconds: 190 } },
         ],
       }),
       snapshotProvider: { capture: () => nearbySnapshot },
@@ -460,12 +465,101 @@ describe('versioned subway API', () => {
         kind: 'available', source: 'practical-walk', sourceId: 'audited-practical-walk',
         coverage: {
           kind: 'certified-third-card-cutoff',
-          consideredDestinationIds: ['entrance-a12', 'entrance-r20'], excludedDestinationIds: [],
+          consideredDestinationIds: ['entrance-a12', 'entrance-r20', 'entrance-third'], excludedDestinationIds: [],
           thirdCardMaximumSeconds: 200, excludedMinimumSeconds: 300,
         },
       });
-      expect(JSON.stringify(body)).not.toMatch(/secret\.example|provider-token/);
+      expect(body.data.kind).toBe('ranked');
     });
+  });
+
+  test('fails forged or incomplete practical-walk evidence closed before ranking and identity construction', async () => {
+    const universe = [
+      ...nearbyUniverse,
+      { id: 'entrance-x', coordinate: { latitude: 40.72, longitude: -74.01 } },
+      { id: 'entrance-y', coordinate: { latitude: 40.73, longitude: -74.02 } },
+    ] as const;
+    const certified = () => ({
+      kind: 'available',
+      source: 'practical-walk',
+      sourceId: 'practical-walk',
+      coverage: {
+        kind: 'certified-third-card-cutoff',
+        consideredDestinationIds: ['entrance-x', 'entrance-a12', 'entrance-r20'],
+        excludedDestinationIds: ['entrance-y'],
+        thirdCardMaximumSeconds: 200,
+        excludedMinimumSeconds: 300,
+      },
+      results: [
+        { destinationId: 'entrance-a12', range: { minimumSeconds: 100, maximumSeconds: 120 } },
+        { destinationId: 'entrance-r20', range: { minimumSeconds: 130, maximumSeconds: 150 } },
+        { destinationId: 'entrance-x', range: { minimumSeconds: 160, maximumSeconds: 180 } },
+      ],
+    });
+    const invalidCases: readonly [string, (value: any) => void][] = [
+      ['wrong source', (value) => { value.source = 'forged-walk'; }],
+      ['unknown source id', (value) => { value.sourceId = 'walk-provider-v2'; }],
+      ['secret source id', (value) => { value.sourceId = 'https://secret.example/token-source'; }],
+      ['duplicate considered id', (value) => { value.coverage.consideredDestinationIds.push('entrance-a12'); }],
+      ['duplicate excluded id', (value) => { value.coverage.excludedDestinationIds.push('entrance-y'); }],
+      ['overlapping partition id', (value) => { value.coverage.excludedDestinationIds.push('entrance-a12'); }],
+      ['missing partition id', (value) => { value.coverage.excludedDestinationIds = []; }],
+      ['extra secret partition id', (value) => { value.coverage.excludedDestinationIds.push('https://secret.example/token-id'); }],
+      ['missing considered result', (value) => { value.results.pop(); }],
+      ['excluded id returned as result', (value) => {
+        value.results.push({ destinationId: 'entrance-y', range: { minimumSeconds: 181, maximumSeconds: 190 } });
+      }],
+      ['duplicate result id', (value) => { value.results.push(structuredClone(value.results[0])); }],
+      ['fractional cutoff', (value) => { value.coverage.thirdCardMaximumSeconds = 200.5; }],
+      ['unsafe cutoff', (value) => { value.coverage.excludedMinimumSeconds = Number.MAX_SAFE_INTEGER + 1; }],
+      ['negative cutoff', (value) => { value.coverage.thirdCardMaximumSeconds = -1; }],
+      ['non-separating cutoffs', (value) => { value.coverage.excludedMinimumSeconds = 200; }],
+      ['reversed cutoffs', (value) => { value.coverage.excludedMinimumSeconds = 199; }],
+      ['fewer than three considered', (value) => {
+        value.coverage.consideredDestinationIds = ['entrance-a12', 'entrance-r20'];
+        value.coverage.excludedDestinationIds = ['entrance-x', 'entrance-y'];
+        value.results = value.results.slice(0, 2);
+      }],
+      ['result above certified maximum', (value) => { value.results[2].range.maximumSeconds = 201; }],
+      ['fractional result range', (value) => { value.results[0].range.minimumSeconds = 100.5; }],
+      ['reversed result range', (value) => { value.results[0].range = { minimumSeconds: 121, maximumSeconds: 120 }; }],
+      ['incomplete complete universe', (value) => { value.coverage = { kind: 'complete-universe' }; }],
+      ['extra complete-universe result', (value) => {
+        value.coverage = { kind: 'complete-universe' };
+        value.results.push({
+          destinationId: 'https://secret.example/token-result', range: { minimumSeconds: 181, maximumSeconds: 190 },
+        });
+      }],
+    ];
+    const responseIdentities = new Set<string>();
+    for (const [name, mutate] of invalidCases) {
+      const forged = certified() as any;
+      mutate(forged);
+      const log = vi.fn();
+      const dependencies = createProductionDependencies({
+        dataDirectory: '.data-test-do-not-read', mode: 'validation', sources: {},
+      }, {
+        clock: createFixedClock(DECIDED_AT), nearbyUniverse: universe, logger: { log },
+        walk: async () => forged,
+        snapshotProvider: { capture: () => nearbySnapshot },
+      });
+      await withApi(createApp(dependencies), async ({ request }) => {
+        const response = await request('/api/v1/nearby', {
+          method: 'POST', headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ location: { latitude: 40.7, longitude: -74, accuracyMeters: 12 }, accessibleRouteOnly: false }),
+        });
+        expect(response.status, name).toBe(200);
+        const body = await response.json();
+        expect(body.practicalWalkEvidence, name).toEqual({ kind: 'unavailable', reason: 'invalid' });
+        expect(body.data, name).toMatchObject({
+          kind: 'picker', reason: 'walk-unavailable', cards: [], picker: { required: true, bottomAnchored: true },
+        });
+        expect(JSON.stringify({ body, logs: log.mock.calls }), name).not.toMatch(/secret\.example|token-(?:source|id|result)/i);
+        responseIdentities.add(body.responseIdentity);
+      });
+    }
+    expect([...responseIdentities]).toHaveLength(1);
+    expect([...responseIdentities][0]).toMatch(/^response:[a-f0-9]{64}$/);
   });
 
   test('cancels practical walking when the Nearby HTTP request disconnects', async () => {
@@ -617,11 +711,63 @@ describe('versioned subway API', () => {
       ]);
 
       const routeStatus = await (await request('/api/v1/status?routes=A&direction=northbound')).json();
-      expect(routeStatus.data.alerts.map(({ id }: { id: string }) => id)).toEqual(['route-a', 'systemwide']);
+      expect(routeStatus.data.alerts.map(({ id }: { id: string }) => id)).toEqual([
+        'route-a', 'station-wide', 'systemwide',
+      ]);
 
       const stationStatus = await (await request('/api/v1/status?stationId=A12&routes=A&direction=northbound')).json();
       expect(stationStatus.data.alerts.map(({ id }: { id: string }) => id)).toEqual([
         'route-a', 'route-c-station', 'station-wide', 'systemwide',
+      ]);
+    });
+  });
+
+  test('keeps station-associated alerts whose board context serves a route-only status filter', async () => {
+    const alert = (
+      id: string,
+      routeIds: string[],
+      stationIds: string[],
+      directions: string[] = ['northbound'],
+    ) => ({
+      id, text: id, activeFrom: new Date('2026-08-04T11:45:00.000Z'), routeIds, stationIds,
+      directions, provenance: boardDecision.alerts[0].provenance,
+    });
+    const board = (id: string, routeIds: string[], alerts: unknown[]) => {
+      const decision = structuredClone(boardDecision) as any;
+      decision.station = { id, name: id, complexId: id, routeIds };
+      decision.directions = [];
+      decision.explanations = [];
+      decision.alerts = alerts;
+      return { decision, validThrough: '2026-08-04T12:01:30.000Z' };
+    };
+    const scoped = {
+      ...operationalSnapshot,
+      boards: [
+        board('A12', ['A', 'C'], [
+          alert('a-at-a12', ['A'], ['A12']),
+          alert('c-at-a12', ['C'], ['A12']),
+          alert('station-wide-a12', [], ['A12']),
+          alert('a-southbound', ['A'], ['A12'], ['southbound']),
+        ]),
+        board('A15', ['A', 'D'], [
+          alert('a-at-a15', ['A'], ['A15']),
+          alert('station-wide-a15', [], ['A15']),
+        ]),
+        board('S01', ['7'], [
+          alert('route-7-at-s01', ['7'], ['S01']),
+          alert('station-wide-s01', [], ['S01']),
+          alert('systemwide', [], []),
+        ]),
+      ],
+    };
+    const dependencies = createProductionDependencies({
+      dataDirectory: '.data-test-do-not-read', mode: 'validation', sources: {},
+    }, { clock: createFixedClock(DECIDED_AT), snapshotProvider: { capture: () => scoped } });
+
+    await withApi(createApp(dependencies), async ({ request }) => {
+      const body = await (await request('/api/v1/status?routes=A&direction=northbound')).json();
+      expect(body.data.alerts.map(({ id }: { id: string }) => id)).toEqual([
+        'a-at-a12', 'a-at-a15', 'station-wide-a12', 'station-wide-a15', 'systemwide',
       ]);
     });
   });
@@ -922,6 +1068,51 @@ describe('versioned subway API', () => {
     });
   });
 
+  test('applies the same JSON media contract to Express trailing-slash operational routes only', async () => {
+    const dependencies = createProductionDependencies({
+      dataDirectory: '.data-test-do-not-read', mode: 'live', sources: {},
+    }, { clock: createFixedClock(DECIDED_AT) });
+    const bodies = {
+      '/api/v1/nearby/': JSON.stringify({
+        location: { latitude: 40.7, longitude: -74, accuracyMeters: 12 }, accessibleRouteOnly: false,
+      }),
+      '/api/v1/journeys/': JSON.stringify({
+        mode: 'online-current', originStationId: 'A12', destinationStationId: 'A15', accessibleRouteOnly: false,
+      }),
+    } as const;
+    await withApi(createApp(dependencies), async ({ rawRequest }) => {
+      for (const [path, body] of Object.entries(bodies)) {
+        for (const contentType of [undefined, 'text/plain'] as const) {
+          const response = await rawRequest(path, {
+            method: 'POST', body, headers: contentType === undefined ? {} : { 'content-type': contentType },
+          });
+          expect(response.status, `${path} ${contentType ?? 'missing'}`).toBe(415);
+          expect(response.headers.get('cache-control')).toBe('no-store');
+          expect(await response.json()).toEqual({
+            error: { code: 'unsupported_media_type', message: 'Request could not be processed.' },
+          });
+        }
+
+        const valid = await rawRequest(path, {
+          method: 'POST', body, headers: { 'content-type': 'application/json' },
+        });
+        expect(valid.status, `${path} valid JSON`).toBe(200);
+        expect((await valid.json()).runtime).toMatchObject({ mode: 'live', availability: 'locked' });
+
+        const wrongMethod = await rawRequest(path);
+        expect(wrongMethod.status, `${path} GET`).toBe(405);
+        expect(wrongMethod.headers.get('allow')).toBe('POST');
+      }
+
+      for (const path of ['/api/v1/nearby//', '/api/v1/journeys//']) {
+        const response = await rawRequest(path, {
+          method: 'POST', body: '{}', headers: { 'content-type': 'application/json' },
+        });
+        expect(response.status, path).toBe(404);
+      }
+    });
+  });
+
   test('returns JSON no-store 404/405 responses and exposes no server rider-state mutation endpoint', async () => {
     const dependencies = createProductionDependencies({
       dataDirectory: '.data-test-do-not-read', mode: 'live', sources: {},
@@ -995,7 +1186,7 @@ describe('versioned subway API', () => {
     }, {
       clock: createFixedClock(DECIDED_AT), nearbyUniverse, mapReferences,
       walk: async () => ({
-        kind: 'available', source: 'practical-walk', sourceId: 'audited-walk-v1',
+        kind: 'available', source: 'practical-walk', sourceId: 'practical-walk',
         coverage: { kind: 'complete-universe' },
         results: [
           { destinationId: 'entrance-a12', range: { minimumSeconds: 500, maximumSeconds: 520 } },
@@ -1103,10 +1294,8 @@ describe('versioned subway API', () => {
         expect(board.data.explanations[0].provenance).toMatchObject({
           source: 'unavailable', sourceId: 'source-unavailable',
         });
-        expect(nearby.practicalWalkEvidence).toEqual({
-          kind: 'available', source: 'practical-walk', sourceId: 'audited-practical-walk',
-          coverage: { kind: 'complete-universe' },
-        });
+        expect(nearby.practicalWalkEvidence).toEqual({ kind: 'unavailable', reason: 'invalid' });
+        expect(nearby.data).toMatchObject({ kind: 'picker', reason: 'walk-unavailable', cards: [] });
         for (const body of [board, nearby]) walkObjects(body, (value) => expect(value).not.toHaveProperty('version'));
         return { boardIdentity: board.responseIdentity, nearbyIdentity: nearby.responseIdentity };
       });
@@ -1257,7 +1446,7 @@ describe('versioned subway API', () => {
       events.push('walk');
       await walkBarrier;
       return {
-        kind: 'available' as const, source: 'practical-walk' as const, sourceId: 'audited-walk-v1',
+        kind: 'available' as const, source: 'practical-walk' as const, sourceId: 'practical-walk',
         coverage: { kind: 'complete-universe' as const },
         results: [
           { destinationId: 'entrance-a12', range: { minimumSeconds: 500, maximumSeconds: 520 } },

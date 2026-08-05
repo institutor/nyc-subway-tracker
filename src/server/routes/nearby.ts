@@ -7,7 +7,7 @@ import { sendNoStoreJson } from '../api/http';
 import { projectPublicSource, toProvenanceDtos, toSourceHealthDtos } from '../api/provenance-dto';
 import { createResponseIdentity } from '../api/response-identity';
 import type { AppDependencies } from '../bootstrap';
-import type { PracticalWalkDecision } from '../walk/practical-walk-adapter';
+import { capturePracticalWalkDecision, type PracticalWalkDecision } from '../walk/practical-walk-adapter';
 import { parseNearbyRequest } from '../api/request-validation';
 
 export function nearbyHandler(dependencies: AppDependencies) {
@@ -39,10 +39,11 @@ export function nearbyHandler(dependencies: AppDependencies) {
     const cancellation = requestCancellation(request, response);
     let walk: PracticalWalkDecision;
     try {
-      walk = await dependencies.walk({
+      const rawWalk = await dependencies.walk({
         origin: parsed.coordinate,
         destinations: dependencies.nearbyUniverse,
       }, { signal: cancellation.signal });
+      walk = capturePracticalWalkDecision(rawWalk, dependencies.nearbyUniverse);
     } catch {
       if (cancellation.signal.aborted || response.destroyed) {
         cancellation.dispose();
@@ -115,7 +116,7 @@ function toPracticalWalkEvidence(walk: PracticalWalkDecision) {
       });
   return Object.freeze({
     kind: walk.kind,
-    ...projectPublicSource('practical-walk', 'practical-walk'),
+    ...projectPublicSource(walk.source, walk.sourceId),
     coverage,
   });
 }
