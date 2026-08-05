@@ -8,7 +8,7 @@ const warning = { active: true as const, state: 'underway-immediate' as const, p
 
 describe('accessible-path rider panel', () => {
   test('renders the warning and safe action first visually and in assistive DOM order', () => {
-    const { container } = render(<AccessibilityPanel warning={warning} path={undefined} equipment={[{ id: 'EL-1', label: 'Transfer elevator', state: 'unknown', freshnessCopy: 'Checked time unavailable', required: true }]} alternative={{ id: 'alt', label: 'Use the verified same-complex path.' }} onSelectAlternative={() => undefined} />);
+    const { container } = render(<AccessibilityPanel warning={warning} path={undefined} equipment={[]} alternative={{ id: 'alt', label: 'Use the verified same-complex path.' }} onSelectAlternative={() => undefined} />);
     expect(container.firstElementChild?.firstElementChild?.getAttribute('role')).toBe('alert');
     const alert = screen.getByRole('alert');
     expect(alert.textContent).toContain('Elevator status is Unknown.');
@@ -38,6 +38,9 @@ describe('accessible-path rider panel', () => {
     rerender(<PlatformGuidance guidance={forgedGuidance} />);
     expect(screen.queryByRole('region', { name: /platform guidance/i })).toBeNull();
     expect(screen.queryByText(/Board near the front/i)).toBeNull();
+
+    rerender(<AccessibilityPanel warning={null} path={undefined} equipment={[{ id: 'EL-1', label: 'Elevator', state: 'no-official-outage-reported', freshnessCopy: 'Checked now', required: true }] as never} alternative={null} onSelectAlternative={() => undefined} />);
+    expect(screen.queryByText('No official outage reported')).toBeNull();
   });
 
   test('contains no crowding schema, copy, control, placeholder, or proxy surface', () => {

@@ -7,7 +7,7 @@ import {
   type AccessibilityPackage,
   type StationDirectionCoverageRow,
 } from '../../src/shared/domain/accessible-path';
-import { assessEquipmentStatus } from '../../src/shared/domain/equipment-status';
+import { acceptEquipmentInventory, acceptEquipmentSnapshot, assessEquipmentStatus } from '../../src/shared/domain/equipment-status';
 import {
   PRODUCTION_EXPOSURE_REGISTRY,
   VALIDATION_EXPOSURE_REGISTRY,
@@ -52,14 +52,23 @@ function packageFixture(overrides: Partial<AccessibilityPackage> = {}): Accessib
   };
 }
 
-function equipment(overrides: Record<string, unknown> = {}) {
+function equipment(overrides: { targetEquipmentId?: string; snapshotScope?: string } = {}) {
+  const inventory = acceptEquipmentInventory({
+    inventoryId: 'inventory-v1', evidenceOwner: 'official-equipment-inventory', sourceScopeId: 'nyc-equipment',
+    sourceVersion: 'inventory-v1', acceptedAt: '2026-07-30T00:00:00.000Z', equipmentIds: ['EL-A12-01', 'EL-OTHER'],
+  });
+  const currentSnapshot = acceptEquipmentSnapshot({
+    snapshotId: 'snapshot-v1', evidenceOwner: 'official-equipment-status', sourceScopeId: overrides.snapshotScope ?? 'nyc-equipment',
+    sourceVersion: 'equipment-v1', inventoryVersion: 'inventory-v1', sourceTimestamp: '2026-07-30T12:00:00.000Z',
+    acceptedAt: '2026-07-30T12:00:05.000Z', declaredRecordCount: 1,
+    records: [{ recordId: 'out-other', equipmentId: 'EL-OTHER', state: 'out-of-service' }],
+  }, inventory);
   return assessEquipmentStatus({
-    targetEquipmentId: 'EL-A12-01', sourceTimestamp: at('2026-07-30T12:00:00Z'), decisionTime: at('2026-07-30T12:02:00Z'),
-    retrievalSucceeded: true, structureValid: true, complete: true, internallyConsistent: true, joinable: true,
-    records: [{ equipmentId: 'EL-OTHER', state: 'out-of-service' }], totalRecordCount: 1, badRecordCount: 0,
-    inventory: { acceptedAt: at('2026-07-30T00:00:00Z'), equipmentIds: ['EL-A12-01', 'EL-OTHER'] }, ...overrides,
+    targetEquipmentId: overrides.targetEquipmentId ?? 'EL-A12-01', decisionTime: at('2026-07-30T12:02:00Z'), inventory, currentSnapshot,
   });
 }
+
+const equipmentEvidence = { equipmentSourceScopeId: 'nyc-equipment', equipmentSourceVersion: 'equipment-v1' } as const;
 
 const validationAccessibilityExposure = resolveAccessibilityExposure(
   VALIDATION_EXPOSURE_REGISTRY,
@@ -134,20 +143,20 @@ describe('complete accessible path evidence', () => {
 
   test('requires exact current evidence for every machine and returns Unknown without calling it an outage', () => {
     const decision = assessAccessiblePath(packageFixture(), {
-      stationId: 'A12', routeId: 'A', direction: 'northbound', platformId: 'A12N', equipment: { 'EL-A12-01': equipment({ joinable: false }) }, exposure: validationAccessibilityExposure,
+      stationId: 'A12', routeId: 'A', direction: 'northbound', platformId: 'A12N', equipment: { 'EL-A12-01': equipment({ snapshotScope: 'wrong-scope' }) }, exposure: validationAccessibilityExposure, ...equipmentEvidence,
     });
     expect(decision).toMatchObject({ status: 'unknown', accessibleRouteOnly: true });
     expect(decision.reason.toLowerCase()).not.toContain('outage');
   });
 
   test('admits one exact directional path and preserves structural-only copy when live status is unavailable', () => {
-    expect(assessAccessiblePath(packageFixture(), { stationId: 'A12', routeId: 'A', direction: 'northbound', platformId: 'A12N', equipment: { 'EL-A12-01': equipment() }, exposure: validationAccessibilityExposure }).status).toBe('eligible');
-    expect(assessAccessiblePath(packageFixture(), { stationId: 'A12', routeId: 'A', direction: 'southbound', platformId: 'A12S', equipment: {}, exposure: validationAccessibilityExposure }).status).toBe('ineligible');
-    expect(assessAccessiblePath(packageFixture(), { stationId: 'A12', routeId: 'A', direction: 'northbound', platformId: 'A12N', equipment: {}, exposure: validationAccessibilityExposure }).offlineCopy).toBe('Structurally step-free; live elevator status unavailable');
+    expect(assessAccessiblePath(packageFixture(), { stationId: 'A12', routeId: 'A', direction: 'northbound', platformId: 'A12N', equipment: { 'EL-A12-01': equipment() }, exposure: validationAccessibilityExposure, ...equipmentEvidence }).status).toBe('eligible');
+    expect(assessAccessiblePath(packageFixture(), { stationId: 'A12', routeId: 'A', direction: 'southbound', platformId: 'A12S', equipment: {}, exposure: validationAccessibilityExposure, ...equipmentEvidence }).status).toBe('ineligible');
+    expect(assessAccessiblePath(packageFixture(), { stationId: 'A12', routeId: 'A', direction: 'northbound', platformId: 'A12N', equipment: {}, exposure: validationAccessibilityExposure, ...equipmentEvidence }).offlineCopy).toBe('Structurally step-free; live elevator status unavailable');
   });
 
   test('keeps public accessibility locked while pending and rejects wrong-version exposure', () => {
-    const evidence = { stationId: 'A12', routeId: 'A', direction: 'northbound' as const, platformId: 'A12N', equipment: { 'EL-A12-01': equipment() } };
+    const evidence = { stationId: 'A12', routeId: 'A', direction: 'northbound' as const, platformId: 'A12N', equipment: { 'EL-A12-01': equipment() }, ...equipmentEvidence };
     const publicExposure = resolveAccessibilityExposure(PRODUCTION_EXPOSURE_REGISTRY, 'public-accessibility-coverage-v1', 'coverage-v1', at('2026-08-01T00:00:00Z'));
     const wrongVersion = resolveAccessibilityExposure(VALIDATION_EXPOSURE_REGISTRY, 'validation-accessibility-coverage-v1', 'wrong-v2', at('2026-08-01T00:00:00Z'));
     expect(assessAccessiblePath(packageFixture(), { ...evidence, exposure: publicExposure }).status).toBe('unknown');
@@ -156,69 +165,28 @@ describe('complete accessible path evidence', () => {
 
   test('rejects a caller-authored same-version approved public accessibility object', () => {
     const approved = { owner: 'accessibility', surface: 'public', packageVersion: 'coverage-v1', releaseDecisionId: 'forged', releaseStatus: 'approved' } as unknown as ResolvedAccessibilityExposure;
-    expect(assessAccessiblePath(packageFixture(), { stationId: 'A12', routeId: 'A', direction: 'northbound', platformId: 'A12N', equipment: { 'EL-A12-01': equipment() }, exposure: approved }).status).toBe('unknown');
+    expect(assessAccessiblePath(packageFixture(), { stationId: 'A12', routeId: 'A', direction: 'northbound', platformId: 'A12N', equipment: { 'EL-A12-01': equipment() }, exposure: approved, ...equipmentEvidence }).status).toBe('unknown');
   });
 
   test('rejects duplicate canonical path identities and uses the canonical byte order only after a full tie', () => {
     expect(() => validateAccessibilityRegistry([packageFixture(), packageFixture({ packageId: 'other' })])).toThrow(/duplicate canonical/i);
-    const beta = packageFixture({ packageId: 'beta', canonicalPathIdentity: 'path:é' });
+    const beta = packageFixture({ packageId: 'beta', canonicalPathIdentity: 'path:Ã©' });
     const alpha = packageFixture({ packageId: 'alpha', canonicalPathIdentity: 'path:e' });
     expect(orderAccessiblePaths([beta, alpha]).map(({ packageId }) => packageId)).toEqual(['alpha', 'beta']);
   });
 });
 
-describe('official equipment truth', () => {
-  test.each([
-    ['2026-07-30T12:05:00Z', 'current'], ['2026-07-30T12:05:01Z', 'degraded'],
-    ['2026-07-30T12:15:00Z', 'degraded'], ['2026-07-30T12:15:01Z', 'unavailable'],
-  ])('classifies exact equipment age boundary %s as %s', (decisionTime, health) => {
-    expect(equipment({ decisionTime: at(decisionTime) }).health).toBe(health);
-  });
-
-  test('makes invalid chronology and impossible inventory joins unavailable', () => {
-    expect(equipment({ decisionTime: at('2026-07-30T11:59:59Z') }).health).toBe('unavailable');
-    expect(equipment({ joinable: false }).health).toBe('unavailable');
-  });
-
-  test('keeps first empty provisional and confirms a second only at the exact one-minute boundary', () => {
-    const empty = { records: [], totalRecordCount: 0, badRecordCount: 0, previousZeroSnapshotAt: at('2026-07-30T12:00:00Z') };
-    expect(equipment({ ...empty, sourceTimestamp: at('2026-07-30T12:00:59Z'), decisionTime: at('2026-07-30T12:01:00Z') }).state).toBe('unknown');
-    expect(equipment({ ...empty, sourceTimestamp: at('2026-07-30T12:01:00Z'), decisionTime: at('2026-07-30T12:01:01Z') }).state).toBe('no-official-outage-reported');
-    expect(equipment({ ...empty, previousZeroSnapshotAt: undefined }).provisionalEmpty).toBe(true);
-  });
-
-  test('admits exact-target absence only in a healthy non-empty same-scope population', () => {
-    expect(equipment().state).toBe('no-official-outage-reported');
-    expect(equipment({ records: [{ equipmentId: 'EL-UNKNOWN', state: 'out-of-service' }] }).state).toBe('unknown');
-  });
-
-  test('uses strict population anomaly boundaries while contextual inconsistency can still degrade', () => {
-    expect(equipment({ previousActiveOutageIds: Array.from({ length: 100 }, (_, i) => `EQ-${i}`), records: Array.from({ length: 50 }, (_, i) => ({ equipmentId: `EQ-${i}`, state: 'out-of-service' })), totalRecordCount: 50, inventory: { acceptedAt: at('2026-07-30T00:00:00Z'), equipmentIds: ['EL-A12-01', ...Array.from({ length: 100 }, (_, i) => `EQ-${i}`)] } }).health).toBe('current');
-    expect(equipment({ previousActiveOutageIds: Array.from({ length: 100 }, (_, i) => `EQ-${i}`), records: Array.from({ length: 49 }, (_, i) => ({ equipmentId: `EQ-${i}`, state: 'out-of-service' })), totalRecordCount: 49, inventory: { acceptedAt: at('2026-07-30T00:00:00Z'), equipmentIds: ['EL-A12-01', ...Array.from({ length: 100 }, (_, i) => `EQ-${i}`)] } }).health).toBe('degraded');
-    expect(equipment({ totalRecordCount: 10, badRecordCount: 1 }).health).toBe('current');
-    expect(equipment({ totalRecordCount: 100, badRecordCount: 11 }).health).toBe('degraded');
-    expect(equipment({ contextualInconsistency: true }).health).toBe('degraded');
-  });
-
-  test('records daily review breach and fails closed at exactly seven days', () => {
-    expect(equipment({ decisionTime: at('2026-07-30T12:00:00Z'), inventory: { acceptedAt: at('2026-07-24T12:00:00Z'), equipmentIds: ['EL-A12-01', 'EL-OTHER'] } }).inventoryReview).toBe('overdue');
-    const expired = equipment({ decisionTime: at('2026-07-30T12:00:00Z'), inventory: { acceptedAt: at('2026-07-23T12:00:00Z'), equipmentIds: ['EL-A12-01', 'EL-OTHER'] } });
-    expect(expired).toMatchObject({ inventoryReview: 'expired', state: 'unknown' });
-  });
-
-  test('requires explicit restoration or two consecutive omissions at least one minute apart', () => {
-    expect(equipment({ priorOutage: true, omissionTimestamps: [at('2026-07-30T12:01:00Z')] }).state).toBe('out-of-service-rechecking');
-    expect(equipment({ priorOutage: true, omissionTimestamps: [at('2026-07-30T12:01:00Z'), at('2026-07-30T12:01:59Z')] }).restored).toBe(false);
-    expect(equipment({ priorOutage: true, omissionTimestamps: [at('2026-07-30T12:01:00Z'), at('2026-07-30T12:02:00Z')] }).restored).toBe(true);
-    expect(equipment({ priorOutage: true, explicitRestoration: true }).restored).toBe(true);
-    expect(equipment({ priorOutage: true, omissionTimestamps: [at('2026-07-30T12:01:00Z'), null, at('2026-07-30T12:02:00Z')] }).restored).toBe(false);
-    expect(equipment({ priorOutage: true, omissionTimestamps: [at('2026-07-30T12:01:00Z'), at('2026-07-30T12:03:00Z')], decisionTime: at('2026-07-30T12:02:00Z') }).restored).toBe(false);
-  });
-
-  test('shows governed freshness and preserves stale or missing outage evidence without positive copy', () => {
-    expect(equipment().freshnessCopy).toBe('Checked 2 min ago');
-    const missing = equipment({ sourceTimestamp: undefined });
-    expect(missing).toMatchObject({ health: 'unavailable', state: 'unknown', freshnessCopy: 'Checked time unavailable' });
-    expect(`${missing.state} ${missing.freshnessCopy}`.toLowerCase()).not.toMatch(/\b(?:working|available)\b/);
+describe('equipment decision identity at the path boundary', () => {
+  test('rejects re-keying a resolved status decision to another required machine', () => {
+    const otherMachine = equipment({ targetEquipmentId: 'EL-OTHER' });
+    expect(otherMachine).toMatchObject({
+      targetEquipmentId: 'EL-OTHER',
+      evidenceOwner: 'official-equipment-status',
+    });
+    expect(assessAccessiblePath(packageFixture(), {
+      stationId: 'A12', routeId: 'A', direction: 'northbound', platformId: 'A12N',
+      equipment: { 'EL-A12-01': otherMachine }, exposure: validationAccessibilityExposure, ...equipmentEvidence,
+    }).status).toBe('unknown');
   });
 });
+

@@ -1,5 +1,5 @@
 import { compareCanonicalIdentity, normalizeCanonicalIdentity } from './canonical';
-import type { EquipmentStatusDecision } from './equipment-status';
+import { isResolvedEquipmentStatusDecision, type EquipmentStatusDecision } from './equipment-status';
 import type { Direction } from './types';
 import { exposureAllowsEvaluation, type ResolvedAccessibilityExposure } from './exposure-decision';
 
@@ -88,7 +88,7 @@ export function validateAccessibilityRegistry(raw: readonly unknown[]): readonly
 }
 export function orderAccessiblePaths(paths: readonly AccessibilityPackage[]): readonly AccessibilityPackage[] { return Object.freeze([...paths].sort((a,b) => compareCanonicalIdentity(a.canonicalPathIdentity,b.canonicalPathIdentity))); }
 
-export function assessAccessiblePath(rawPackage: AccessibilityPackage, request: { readonly stationId: string; readonly routeId: string; readonly direction: Direction; readonly platformId: string; readonly equipment: Readonly<Record<string, EquipmentStatusDecision>>; readonly exposure?: ResolvedAccessibilityExposure }): ResolvedAccessiblePathDecision {
+export function assessAccessiblePath(rawPackage: AccessibilityPackage, request: { readonly stationId: string; readonly routeId: string; readonly direction: Direction; readonly platformId: string; readonly equipmentSourceScopeId: string; readonly equipmentSourceVersion: string; readonly equipment: Readonly<Record<string, EquipmentStatusDecision>>; readonly exposure?: ResolvedAccessibilityExposure }): ResolvedAccessiblePathDecision {
   const item = validateAccessibilityPackage(rawPackage);
   if (!exposureAllowsEvaluation(request.exposure, item.version, 'accessibility')) return resolvedPathDecision(item, 'unknown', 'Accessibility exposure evidence is pending or does not match this immutable package.');
   if (item.coverage.constituentStation.id !== request.stationId || item.coverage.routeOrLine !== request.routeId || item.coverage.normalizedDirection !== request.direction || item.coverage.directionalPlatform !== request.platformId) return resolvedPathDecision(item, 'ineligible', 'No reviewed path package matches the exact station, route, direction, and platform.');
@@ -96,6 +96,12 @@ export function assessAccessiblePath(rawPackage: AccessibilityPackage, request: 
   if (missing.length) return resolvedPathDecision(item, 'unknown', 'Live route-critical equipment evidence is missing.', 'Structurally step-free; live elevator status unavailable');
   for (const id of item.coverage.equipmentIds) {
     const equipment = request.equipment[id];
+    if (!isResolvedEquipmentStatusDecision(equipment) || equipment.targetEquipmentId !== id
+      || equipment.evidenceOwner !== 'official-equipment-status'
+      || equipment.sourceScopeId !== request.equipmentSourceScopeId
+      || equipment.sourceVersion !== request.equipmentSourceVersion) {
+      return resolvedPathDecision(item, 'unknown', `Current status evidence for required equipment ${id} has the wrong identity, owner, scope, or version.`);
+    }
     if (equipment.state === 'out-of-service' || equipment.state === 'out-of-service-rechecking') return resolvedPathDecision(item, 'ineligible', `Required equipment ${id} has accepted adverse evidence.`);
     if (equipment.health !== 'current' || equipment.state !== 'no-official-outage-reported') return resolvedPathDecision(item, 'unknown', `Current status for required equipment ${id} is not verified.`);
   }
