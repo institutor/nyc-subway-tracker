@@ -10,8 +10,16 @@ export const PRODUCTION_ACCESSIBILITY_EXPOSURE: AccessibilityExposureDecision = 
 export const PRODUCTION_GUIDANCE_EXPOSURE: GuidanceExposureDecision = deepFreeze({ owner: 'guidance', surface: 'public', exposed: false, packageVersion: 'pending', immutable: false, reviewed: false, reason: 'pending' });
 
 export function exposureAllowsEvaluation(decision: AccessibilityExposureDecision | GuidanceExposureDecision | null | undefined, packageVersion: string, owner: EvidenceOwner): boolean {
-  if (!decision || decision.owner !== owner || !decision.exposed || !decision.immutable || !decision.reviewed || decision.packageVersion !== packageVersion) return false;
-  if (decision.surface === 'validation') return true;
-  return decision.approval.status === 'approved' && decision.approval.version === packageVersion && decision.approval.immutable && decision.approval.reviewed;
+  if (!decision) return false;
+  const immutableDecision = deepFreeze(decision);
+  if (immutableDecision.owner !== owner || !immutableDecision.exposed || !immutableDecision.immutable || !immutableDecision.reviewed || immutableDecision.packageVersion !== packageVersion) return false;
+  if (immutableDecision.surface === 'validation') return true;
+  return immutableDecision.approval.status === 'approved' && immutableDecision.approval.version === packageVersion && immutableDecision.approval.immutable && immutableDecision.approval.reviewed;
 }
-function deepFreeze<T>(value: T): T { if (value && typeof value === 'object') Object.freeze(value); return value; }
+function deepFreeze<T>(value: T): T {
+  if (value && typeof value === 'object') {
+    for (const child of Object.values(value)) deepFreeze(child);
+    if (!Object.isFrozen(value)) Object.freeze(value);
+  }
+  return value;
+}

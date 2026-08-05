@@ -45,7 +45,15 @@ describe('immutable platform guidance', () => {
   });
 
   test('allows only immutable reviewed same-version approved public guidance evaluation', () => {
-    const approved = { owner: 'guidance', surface: 'public', exposed: true, packageVersion: 'package-v1', immutable: true, reviewed: true, approval: { status: 'approved', version: 'package-v1', immutable: true, reviewed: true } } as const satisfies GuidanceExposureDecision;
-    expect(resolvePlatformGuidance([record()], { ...request, exposure: approved })?.position).toBe('middle');
+    const approved = { owner: 'guidance', surface: 'public', exposed: true, packageVersion: 'package-v1', immutable: true, reviewed: true, approval: { status: 'approved', version: 'package-v1', immutable: true, reviewed: true } } satisfies GuidanceExposureDecision;
+    expect(resolvePlatformGuidance([record()], { ...request, exposure: approved })).toBeUndefined();
+    expect(resolvePlatformGuidance([record({ releasePackage: { packageVersion: 'package-v1', inclusion: 'included', scope: 'exact-scope', reason: 'fixture', downstreamDecision: 'approved' } })], { ...request, exposure: approved })?.position).toBe('middle');
+  });
+
+  test('recursively freezes approved public exposure evidence before evaluation', () => {
+    const approved = { owner: 'guidance', surface: 'public', exposed: true, packageVersion: 'package-v1', immutable: true, reviewed: true, approval: { status: 'approved', version: 'package-v1', immutable: true, reviewed: true } } satisfies GuidanceExposureDecision;
+    resolvePlatformGuidance([record()], { ...request, exposure: approved });
+    expect(Object.isFrozen(approved)).toBe(true);
+    expect(Object.isFrozen(approved.approval)).toBe(true);
   });
 });
