@@ -1,6 +1,7 @@
 import { compareCanonicalIdentity, normalizeCanonicalIdentity } from './canonical';
 import type { EquipmentStatusDecision } from './equipment-status';
 import type { Direction } from './types';
+import { exposureAllowsEvaluation, type AccessibilityExposureDecision } from './exposure-decision';
 
 interface ReviewDecision { readonly decision: 'approve' | 'changes-required'; readonly reviewer: string; readonly date: string; readonly recordVersion: string }
 export interface StationDirectionCoverageRow {
@@ -76,8 +77,9 @@ export function validateAccessibilityRegistry(raw: readonly unknown[]): readonly
 }
 export function orderAccessiblePaths(paths: readonly AccessibilityPackage[]): readonly AccessibilityPackage[] { return Object.freeze([...paths].sort((a,b) => compareCanonicalIdentity(a.canonicalPathIdentity,b.canonicalPathIdentity))); }
 
-export function assessAccessiblePath(rawPackage: AccessibilityPackage, request: { readonly stationId: string; readonly routeId: string; readonly direction: Direction; readonly platformId: string; readonly equipment: Readonly<Record<string, EquipmentStatusDecision>> }): AccessiblePathDecision {
+export function assessAccessiblePath(rawPackage: AccessibilityPackage, request: { readonly stationId: string; readonly routeId: string; readonly direction: Direction; readonly platformId: string; readonly equipment: Readonly<Record<string, EquipmentStatusDecision>>; readonly exposure: AccessibilityExposureDecision }): AccessiblePathDecision {
   const item = validateAccessibilityPackage(rawPackage);
+  if (!exposureAllowsEvaluation(request.exposure, item.version, 'accessibility')) return Object.freeze({ status: 'unknown', reason: 'Accessibility exposure evidence is pending or does not match this immutable package.', accessibleRouteOnly: true });
   if (item.coverage.constituentStation.id !== request.stationId || item.coverage.routeOrLine !== request.routeId || item.coverage.normalizedDirection !== request.direction || item.coverage.directionalPlatform !== request.platformId) return Object.freeze({ status: 'ineligible' as const, reason: 'No reviewed path package matches the exact station, route, direction, and platform.', accessibleRouteOnly: true as const });
   const missing = item.coverage.equipmentIds.filter((id) => !request.equipment[id]);
   if (missing.length) return Object.freeze({ status: 'unknown' as const, reason: 'Live route-critical equipment evidence is missing.', accessibleRouteOnly: true as const, offlineCopy: 'Structurally step-free; live elevator status unavailable' as const });

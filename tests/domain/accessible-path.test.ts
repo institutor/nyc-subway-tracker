@@ -8,6 +8,7 @@ import {
   type StationDirectionCoverageRow,
 } from '../../src/shared/domain/accessible-path';
 import { assessEquipmentStatus } from '../../src/shared/domain/equipment-status';
+import { PRODUCTION_ACCESSIBILITY_EXPOSURE, type AccessibilityExposureDecision } from '../../src/shared/domain/exposure-decision';
 import { loadOptionalOfficialEquipment, loadStationAccessibility } from '../../src/server/accessibility/station-accessibility-loader';
 import { loadPathEvidence, PRODUCTION_PATH_REGISTRY } from '../../src/server/accessibility/path-evidence-loader';
 
@@ -54,6 +55,8 @@ function equipment(overrides: Record<string, unknown> = {}) {
     inventory: { acceptedAt: at('2026-07-30T00:00:00Z'), equipmentIds: ['EL-A12-01', 'EL-OTHER'] }, ...overrides,
   });
 }
+
+const validationAccessibilityExposure = { owner: 'accessibility', surface: 'validation', exposed: true, packageVersion: 'coverage-v1', immutable: true, reviewed: true } as const satisfies AccessibilityExposureDecision;
 
 describe('complete accessible path evidence', () => {
   test('rejects a station label because only exact direction and platform evidence can pass', () => {
@@ -121,16 +124,27 @@ describe('complete accessible path evidence', () => {
 
   test('requires exact current evidence for every machine and returns Unknown without calling it an outage', () => {
     const decision = assessAccessiblePath(packageFixture(), {
-      stationId: 'A12', routeId: 'A', direction: 'northbound', platformId: 'A12N', equipment: { 'EL-A12-01': equipment({ joinable: false }) },
+      stationId: 'A12', routeId: 'A', direction: 'northbound', platformId: 'A12N', equipment: { 'EL-A12-01': equipment({ joinable: false }) }, exposure: validationAccessibilityExposure,
     });
     expect(decision).toMatchObject({ status: 'unknown', accessibleRouteOnly: true });
     expect(decision.reason.toLowerCase()).not.toContain('outage');
   });
 
   test('admits one exact directional path and preserves structural-only copy when live status is unavailable', () => {
-    expect(assessAccessiblePath(packageFixture(), { stationId: 'A12', routeId: 'A', direction: 'northbound', platformId: 'A12N', equipment: { 'EL-A12-01': equipment() } }).status).toBe('eligible');
-    expect(assessAccessiblePath(packageFixture(), { stationId: 'A12', routeId: 'A', direction: 'southbound', platformId: 'A12S', equipment: {} }).status).toBe('ineligible');
-    expect(assessAccessiblePath(packageFixture(), { stationId: 'A12', routeId: 'A', direction: 'northbound', platformId: 'A12N', equipment: {} }).offlineCopy).toBe('Structurally step-free; live elevator status unavailable');
+    expect(assessAccessiblePath(packageFixture(), { stationId: 'A12', routeId: 'A', direction: 'northbound', platformId: 'A12N', equipment: { 'EL-A12-01': equipment() }, exposure: validationAccessibilityExposure }).status).toBe('eligible');
+    expect(assessAccessiblePath(packageFixture(), { stationId: 'A12', routeId: 'A', direction: 'southbound', platformId: 'A12S', equipment: {}, exposure: validationAccessibilityExposure }).status).toBe('ineligible');
+    expect(assessAccessiblePath(packageFixture(), { stationId: 'A12', routeId: 'A', direction: 'northbound', platformId: 'A12N', equipment: {}, exposure: validationAccessibilityExposure }).offlineCopy).toBe('Structurally step-free; live elevator status unavailable');
+  });
+
+  test('keeps public accessibility locked while pending and rejects wrong-version exposure', () => {
+    const evidence = { stationId: 'A12', routeId: 'A', direction: 'northbound' as const, platformId: 'A12N', equipment: { 'EL-A12-01': equipment() } };
+    expect(assessAccessiblePath(packageFixture(), { ...evidence, exposure: PRODUCTION_ACCESSIBILITY_EXPOSURE }).status).toBe('unknown');
+    expect(assessAccessiblePath(packageFixture(), { ...evidence, exposure: { ...validationAccessibilityExposure, packageVersion: 'wrong-v2' } }).status).toBe('unknown');
+  });
+
+  test('allows only immutable reviewed same-version approved public accessibility evaluation', () => {
+    const approved = { owner: 'accessibility', surface: 'public', exposed: true, packageVersion: 'coverage-v1', immutable: true, reviewed: true, approval: { status: 'approved', version: 'coverage-v1', immutable: true, reviewed: true } } as const satisfies AccessibilityExposureDecision;
+    expect(assessAccessiblePath(packageFixture(), { stationId: 'A12', routeId: 'A', direction: 'northbound', platformId: 'A12N', equipment: { 'EL-A12-01': equipment() }, exposure: approved }).status).toBe('eligible');
   });
 
   test('rejects duplicate canonical path identities and uses the canonical byte order only after a full tie', () => {
