@@ -96,9 +96,15 @@ async function loadActiveTripServiceChanges(
     ownerScope(context, 'service-change'),
   );
   const candidates = response.data?.kind === 'planned' ? response.data.itineraries : [];
-  const exactCandidate = candidates.find((candidate) => sameActiveTripPattern(candidate, trip));
+  const exactCandidate = candidates.find((candidate) => (
+    sameOwnedActiveTripPattern(candidate, trip, serviceChanges.scopeMembership)
+  ));
   const evaluatedCandidate = exactCandidate ?? bestComparableCandidate(candidates, trip, serviceChanges.scopeMembership);
-  const verified = Boolean(exactCandidate && currentCandidateAdmitsStoredPattern(exactCandidate, trip));
+  const verified = Boolean(exactCandidate && currentCandidateAdmitsStoredPattern(
+    exactCandidate,
+    trip,
+    serviceChanges.scopeMembership,
+  ));
   const unusable = response.data?.kind === 'no-path'
     || Boolean(exactCandidate && !verified)
     || (response.data?.kind === 'planned' && !exactCandidate);
@@ -143,9 +149,22 @@ function hasCurrentServiceOwner(response: JourneyEnvelopeDto): boolean {
   )) === true;
 }
 
-function sameActiveTripPattern(candidate: JourneyItineraryDto, trip: ActiveTripRecord): boolean {
+function sameOwnedActiveTripPattern(
+  candidate: JourneyItineraryDto,
+  trip: ActiveTripRecord,
+  ownerScopes: readonly ReconnectionScopeMembership[],
+): boolean {
   if (candidate.legs.length !== trip.legs.length) return false;
-  return candidate.legs.every((leg, index) => sameActiveTripLeg(leg, trip.legs[index]));
+  const ownedLegIds = new Set(ownerScopes.filter(({ kind }) => kind === 'leg').map(({ id }) => id));
+  if (ownedLegIds.size === 0) {
+    return candidate.legs.every((leg, index) => sameActiveTripLeg(leg, trip.legs[index]));
+  }
+  const storedOwnedLegs = trip.legs.filter(({ id }) => ownedLegIds.has(id));
+  return storedOwnedLegs.length === ownedLegIds.size
+    && candidate.legs.every((leg, index) => {
+      const stored = trip.legs[index];
+      return stored !== undefined && (!ownedLegIds.has(stored.id) || sameActiveTripLeg(leg, stored));
+    });
 }
 
 function sameActiveTripLeg(
@@ -194,16 +213,8 @@ function affectedServiceScopes(
     const stored = trip.legs[index];
     if (stored && ownedLegIds.has(stored.id) && !sameActiveTripLeg(leg, stored)) affected.add(stored.id);
   });
-  const capture = candidate.capture;
-  if (capture) {
-    const blockingClaims = [
-      ...capture.validity.vetoes,
-      ...capture.serviceClaims.filter(({ state }) => (
-        state === 'unresolved' || state === 'suspended' || state === 'bypassed'
-        || state === 'closed' || state === 'cancelled'
-      )),
-    ];
-    for (const claim of blockingClaims) {
+  if (candidate.capture) {
+    for (const claim of blockingServiceEvidence(candidate)) {
       for (const legId of claimLegIds(claim.scope, candidate, trip)) {
         if (ownedLegIds.has(legId)) affected.add(legId);
       }
@@ -233,21 +244,35 @@ function claimLegIds(
 function currentCandidateAdmitsStoredPattern(
   candidate: JourneyItineraryDto,
   trip: ActiveTripRecord,
+  ownerScopes: readonly ReconnectionScopeMembership[],
 ): boolean {
   const capture = candidate.capture;
   if (!capture
     || capture.requestMode !== 'online-current'
     || capture.validity.result !== 'current-itinerary'
     || capture.validity.pattern !== 'actual-now'
-    || capture.validity.vetoes.length > 0
     || candidate.validity !== 'valid'
-    || candidate.risk === 'blocked'
-    || candidate.risk === 'uncertain'
     || (trip.accessibleRouteOnly && candidate.accessibility !== 'eligible')) return false;
-  return !capture.serviceClaims.some(({ state }) => (
-    state === 'unresolved' || state === 'suspended' || state === 'bypassed'
-    || state === 'closed' || state === 'cancelled'
+  const blockingEvidence = blockingServiceEvidence(candidate);
+  const ownedLegIds = new Set(ownerScopes.filter(({ kind }) => kind === 'leg').map(({ id }) => id));
+  const relevantBlockingEvidence = blockingEvidence.some(({ scope }) => (
+    ownedLegIds.size === 0
+      || claimLegIds(scope, candidate, trip).some((legId) => ownedLegIds.has(legId))
   ));
+  if (relevantBlockingEvidence) return false;
+  return (candidate.risk !== 'blocked' && candidate.risk !== 'uncertain') || blockingEvidence.length > 0;
+}
+
+function blockingServiceEvidence(candidate: JourneyItineraryDto) {
+  const capture = candidate.capture;
+  if (!capture) return [];
+  return [
+    ...capture.validity.vetoes,
+    ...capture.serviceClaims.filter(({ state }) => (
+      state === 'unresolved' || state === 'suspended' || state === 'bypassed'
+      || state === 'closed' || state === 'cancelled'
+    )),
+  ];
 }
 
 function serviceInvalidation(

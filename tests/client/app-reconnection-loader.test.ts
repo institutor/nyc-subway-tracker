@@ -123,6 +123,55 @@ describe('App reconnection owner loader', () => {
       },
     });
   });
+
+  test('ignores completed-leg changes and completed-leg vetoes when every remaining owned leg is current', async () => {
+    const trip = twoLegActiveTrip();
+    const loader = createAppReconnectionStageLoader({
+      api: createClientApi({ planJourney: vi.fn(async () => completedLegChangedJourney(false)) }),
+      stationId: 'D14',
+      filters: { routeIds: ['C'], direction: 'southbound' },
+      hasUnrelatedSavedRecords: false,
+      artifacts: {},
+      activeTrip: trip,
+      now: () => new Date(ACCEPTED_AT),
+    });
+
+    const result = await loader(
+      { stage: 2, context: recoveryContext(['leg-2']), state: null as any },
+      new AbortController().signal,
+    );
+
+    expect(result).toMatchObject({
+      stage: 2,
+      tripServicePattern: 'verified',
+      serviceChanges: { gate: { scopeMembership: [{ kind: 'leg', id: 'leg-2' }] } },
+      invalidation: null,
+    });
+  });
+
+  test('applies an itinerary-wide veto to the remaining owned legs after completed travel', async () => {
+    const trip = twoLegActiveTrip();
+    const loader = createAppReconnectionStageLoader({
+      api: createClientApi({ planJourney: vi.fn(async () => completedLegChangedJourney(true)) }),
+      stationId: 'D14',
+      filters: { routeIds: ['C'], direction: 'southbound' },
+      hasUnrelatedSavedRecords: false,
+      artifacts: {},
+      activeTrip: trip,
+      now: () => new Date(ACCEPTED_AT),
+    });
+
+    const result = await loader(
+      { stage: 2, context: recoveryContext(['leg-2']), state: null as any },
+      new AbortController().signal,
+    );
+
+    expect(result).toMatchObject({
+      stage: 2,
+      tripServicePattern: 'unusable',
+      invalidation: { scopes: [{ kind: 'leg', id: 'leg-2' }] },
+    });
+  });
 });
 
 function recoveryContext(serviceLegIds: readonly string[] = ['leg-1']): PreservedReconnectionContext {
@@ -138,13 +187,15 @@ function recoveryContext(serviceLegIds: readonly string[] = ['leg-1']): Preserve
     accessibleRouteOnly: false,
     mapTuple: { referenceMode: 'actual', theme: 'day', contentVersion: 'map-day', viewportKey: 'viewport-1' },
     activeTripId: 'trip-current',
-    manualCursor: { legIndex: 0, stopId: 'point-origin' },
+    manualCursor: serviceLegIds[0] === 'leg-2'
+      ? { legIndex: 1, stopId: 'point-transfer-out' }
+      : { legIndex: 0, stopId: 'point-origin' },
     hasStoredTrainChoice: true,
     guidanceRequirements: { positioning: 'none', transfer: 'none' },
     activeSurface: 'station',
     scrollOffset: 0,
     focusTargetId: null,
-    readingAnchorId: 'point-origin',
+    readingAnchorId: serviceLegIds[0] === 'leg-2' ? 'point-transfer-out' : 'point-origin',
     recovery: {
       epochId: 'epoch-1',
       requestIdentity: 'request-1',
@@ -299,6 +350,82 @@ function laterLegChangedJourney(): JourneyEnvelopeDto {
         risk: 'affected',
         timing: 'timed',
         arrivalSeconds: 600,
+      }],
+    },
+  };
+}
+
+function completedLegChangedJourney(itineraryWideVeto: boolean): JourneyEnvelopeDto {
+  const base = currentJourney(false);
+  if (base.data?.kind !== 'planned') throw new Error('Current journey fixture must be planned');
+  const original = base.data.itineraries[0]!;
+  if (!original.capture) throw new Error('Current journey fixture must own capture evidence');
+  const scope = {
+    mode: 'online-current' as const,
+    originStationId: 'A12',
+    destinationStationId: 'R20',
+    accessibleRouteOnly: false,
+  };
+  const itineraryId = 'itinerary-completed-leg-changed';
+  const completedLegVeto = {
+    id: 'veto-completed-leg',
+    scope: {
+      kind: 'pattern' as const,
+      patternId: 'pattern-a',
+      routeId: 'A',
+      direction: 'southbound' as const,
+    },
+    message: 'The already-traveled A pattern changed.',
+    ownerRecordId: 'alert-completed-leg',
+    lastCheckedAt: STARTED_AT,
+  };
+  const wholeItineraryVeto = {
+    ...completedLegVeto,
+    id: 'veto-whole-itinerary',
+    scope: { kind: 'itinerary' as const, itineraryId },
+    message: 'The remaining itinerary is no longer admitted.',
+    ownerRecordId: 'alert-whole-itinerary',
+  };
+  return {
+    ...base,
+    responseIdentity: itineraryWideVeto ? 'journey-itinerary-veto' : 'journey-completed-leg-change',
+    data: {
+      kind: 'planned',
+      scope,
+      itineraries: [{
+        ...original,
+        id: itineraryId,
+        legs: [
+          {
+            patternId: 'pattern-a', routeId: 'A', routeLabel: 'A', direction: 'southbound',
+            actualDestination: 'Far Rockaway', fromOccurrenceId: 'occ-a12', toOccurrenceId: 'occ-d14-a',
+            orderedOccurrenceIds: ['occ-a12', 'occ-a15', 'occ-d14-a'], fromStationId: 'A12', toStationId: 'D14',
+            orderedStationIds: ['A12', 'A15', 'D14'],
+          },
+          {
+            patternId: 'pattern-c', routeId: 'C', routeLabel: 'C', direction: 'southbound',
+            actualDestination: 'Euclid Av', fromOccurrenceId: 'occ-d14-c', toOccurrenceId: 'occ-r20',
+            orderedOccurrenceIds: ['occ-d14-c', 'occ-r20'], fromStationId: 'D14', toStationId: 'R20',
+            orderedStationIds: ['D14', 'R20'],
+          },
+        ],
+        transferIds: ['transfer-response-1'],
+        transferInstructions: [{
+          transferId: 'transfer-response-1', stationId: 'D14',
+          fromRouteId: 'A', fromDirection: 'southbound', fromActualDestination: 'Far Rockaway',
+          toRouteId: 'C', toDirection: 'southbound', toActualDestination: 'Euclid Av',
+        }],
+        transfers: 1,
+        risk: 'blocked',
+        capture: {
+          ...original.capture,
+          itineraryId,
+          scope,
+          validity: {
+            ...original.capture.validity,
+            vetoes: [itineraryWideVeto ? wholeItineraryVeto : completedLegVeto],
+          },
+        },
       }],
     },
   };
