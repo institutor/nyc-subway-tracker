@@ -1,5 +1,5 @@
 import { compareCanonicalIdentity, normalizeCanonicalIdentity } from './canonical';
-import { isResolvedEquipmentStatusDecision, type EquipmentStatusDecision } from './equipment-status';
+import { equipmentDecisionAllowsUse, type EquipmentStatusDecision } from './equipment-status';
 import type { Direction } from './types';
 import { exposureAllowsEvaluation, type ResolvedAccessibilityExposure } from './exposure-decision';
 import type { ExposureSurface } from './exposure-decision';
@@ -108,7 +108,7 @@ export function assessAccessiblePath(rawPackage: AccessibilityPackage, request: 
   if (missing.length) return decide('unknown', 'Live route-critical equipment evidence is missing.', 'Structurally step-free; live elevator status unavailable');
   for (const id of item.coverage.equipmentIds) {
     const equipment = request.equipment[id];
-    if (!isResolvedEquipmentStatusDecision(equipment) || equipment.targetEquipmentId !== id
+    if (!equipmentDecisionAllowsUse(equipment, request.decisionTime) || equipment.targetEquipmentId !== id
       || equipment.evidenceOwner !== 'official-equipment-status'
       || equipment.sourceScopeId !== request.equipmentSourceScopeId
       || equipment.sourceVersion !== request.equipmentSourceVersion) {

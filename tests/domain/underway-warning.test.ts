@@ -1,14 +1,14 @@
 import { describe, expect, test } from 'vitest';
 import { chooseAccessibilityAlternative, type AccessibilityAlternative } from '../../src/shared/domain/accessibility-alternatives';
-import { acceptEquipmentInventory, acceptEquipmentSnapshot, assessEquipmentStatus } from '../../src/shared/domain/equipment-status';
+import { acceptEquipmentHistory, acceptEquipmentInventory, assessEquipmentStatus } from '../../src/shared/domain/equipment-status';
 import { classifyPathImpact, type ImpactPath } from '../../src/shared/domain/path-impact';
 import { createAccessibilityWarning, deriveLastAccessibleDecisionPoint, transitionAccessibilityWarning } from '../../src/shared/domain/underway-warning';
 import { resolvedPath } from '../fixtures/accessibility-decisions';
 
 function impact() {
   const inventory = acceptEquipmentInventory({ inventoryId: 'inv', evidenceOwner: 'official-equipment-inventory', sourceScopeId: 'scope', sourceVersion: 'inv-v1', acceptedAt: '2026-07-30T00:00:00.000Z', equipmentIds: ['EL-1'] });
-  const snapshot = acceptEquipmentSnapshot({ snapshotId: 'snap', evidenceOwner: 'official-equipment-status', sourceScopeId: 'scope', sourceVersion: 'status-v1', inventoryVersion: 'inv-v1', sourceTimestamp: '2026-07-30T12:00:00.000Z', acceptedAt: '2026-07-30T12:00:01.000Z', declaredRecordCount: 1, records: [{ recordId: 'out', equipmentId: 'EL-1', state: 'out-of-service' }] }, inventory);
-  const changedEquipment = assessEquipmentStatus({ targetEquipmentId: 'EL-1', decisionTime: new Date('2026-07-30T12:01:00.000Z'), inventory, currentSnapshot: snapshot });
+  const history = acceptEquipmentHistory({ historyId: 'history', evidenceOwner: 'official-equipment-status', sourceScopeId: 'scope', sourceVersion: 'status-v1', inventoryVersion: 'inv-v1', snapshots: [{ snapshotId: 'snap', sequenceOrdinal: 1, predecessorSnapshotId: null, evidenceOwner: 'official-equipment-status', sourceScopeId: 'scope', sourceVersion: 'status-v1', inventoryVersion: 'inv-v1', sourceTimestamp: '2026-07-30T12:00:00.000Z', acceptedAt: '2026-07-30T12:00:01.000Z', declaredRecordCount: 1, records: [{ recordId: 'out', equipmentId: 'EL-1', state: 'out-of-service' }] }] }, inventory);
+  const changedEquipment = assessEquipmentStatus({ targetEquipmentId: 'EL-1', decisionTime: new Date('2026-07-30T12:01:00.000Z'), inventory, history });
   const selectedPath: ImpactPath = { canonicalIdentity: 'selected', complexId: 'A12', origin: 'origin', destination: '168 St', routeId: 'A', direction: 'northbound', platformId: 'A12N', equipmentIds: ['EL-1'], pathDecision: resolvedPath('selected') };
   return classifyPathImpact({ changedEquipment, selectedPath, alternatePaths: [], destinationIntent: '168 St' })!;
 }

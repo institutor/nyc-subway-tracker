@@ -23,6 +23,8 @@ export interface AcceptedEquipmentInventory extends EquipmentInventoryEvidenceIn
 
 export interface EquipmentSnapshotEvidenceInput {
   readonly snapshotId: string;
+  readonly sequenceOrdinal: number;
+  readonly predecessorSnapshotId: string | null;
   readonly evidenceOwner: 'official-equipment-status';
   readonly sourceScopeId: string;
   readonly sourceVersion: string;
@@ -37,6 +39,8 @@ const snapshotBrand: unique symbol = Symbol('accepted-equipment-snapshot');
 export interface AcceptedEquipmentSnapshot {
   readonly [snapshotBrand]: true;
   readonly snapshotId: string;
+  readonly sequenceOrdinal: number;
+  readonly predecessorSnapshotId: string | null;
   readonly evidenceOwner: 'official-equipment-status';
   readonly sourceScopeId: string;
   readonly sourceVersion: string;
@@ -48,7 +52,27 @@ export interface AcceptedEquipmentSnapshot {
   readonly malformedRecordCount: number;
   readonly duplicateRecordCount: number;
   readonly unmatchedRecordCount: number;
+  readonly badRecordCount: number;
   readonly coherent: boolean;
+}
+
+export interface EquipmentHistoryEvidenceInput {
+  readonly historyId: string;
+  readonly evidenceOwner: 'official-equipment-status';
+  readonly sourceScopeId: string;
+  readonly sourceVersion: string;
+  readonly inventoryVersion: string;
+  readonly snapshots: readonly EquipmentSnapshotEvidenceInput[];
+}
+
+const historyBrand: unique symbol = Symbol('accepted-equipment-history');
+export interface AcceptedEquipmentHistory {
+  readonly [historyBrand]: true;
+  readonly historyId: string;
+  readonly evidenceOwner: 'official-equipment-status';
+  readonly sourceScopeId: string;
+  readonly sourceVersion: string;
+  readonly inventoryVersion: string;
 }
 
 export interface EquipmentRestorationEvidenceInput {
@@ -78,6 +102,8 @@ export interface EquipmentStatusDecision {
   readonly snapshotId: string;
   readonly sourceTimestamp: string;
   readonly assessedAt: string;
+  readonly validFrom: string;
+  readonly validThrough: string;
   readonly adverseRecordId?: string;
   readonly health: EquipmentHealth;
   readonly state: EquipmentMachineState;
@@ -93,14 +119,15 @@ export interface EquipmentStatusAssessmentInput {
   readonly targetEquipmentId: string;
   readonly decisionTime: Date;
   readonly inventory: AcceptedEquipmentInventory;
-  readonly currentSnapshot: AcceptedEquipmentSnapshot;
-  readonly priorDecision?: EquipmentStatusDecision;
-  readonly recoverySnapshots?: readonly AcceptedEquipmentSnapshot[];
+  readonly history: AcceptedEquipmentHistory;
   readonly restorationRecords?: readonly AcceptedEquipmentRestoration[];
 }
 
 const acceptedInventories = new WeakSet<object>();
 const acceptedSnapshots = new WeakSet<object>();
+const acceptedHistories = new WeakSet<object>();
+const canonicalEquipmentHistories = new WeakMap<object, readonly AcceptedEquipmentSnapshot[]>();
+const equipmentStreamsByInventory = new WeakMap<object, Set<string>>();
 const acceptedRestorations = new WeakSet<object>();
 const resolvedEquipmentDecisions = new WeakSet<object>();
 const MINUTE = 60_000;
@@ -124,25 +151,89 @@ export function acceptEquipmentInventory(raw: EquipmentInventoryEvidenceInput): 
   return accepted;
 }
 
-export function acceptEquipmentSnapshot(
+export function acceptEquipmentHistory(
+  raw: EquipmentHistoryEvidenceInput,
+  inventory: AcceptedEquipmentInventory,
+): AcceptedEquipmentHistory {
+  if (!acceptedInventories.has(inventory)) throw new Error('Equipment history requires an accepted inventory');
+  const root = strictRecord(raw, ['historyId', 'evidenceOwner', 'sourceScopeId', 'sourceVersion', 'inventoryVersion', 'snapshots'], 'equipment history');
+  if (root.evidenceOwner !== 'official-equipment-status') throw new Error('Equipment history owner is invalid');
+  const historyId = identity(root.historyId, 'equipment history identity');
+  const sourceScopeId = identity(root.sourceScopeId, 'equipment history scope');
+  const sourceVersion = identity(root.sourceVersion, 'equipment history version');
+  const inventoryVersion = identity(root.inventoryVersion, 'equipment history inventory version');
+  if (sourceScopeId !== inventory.sourceScopeId || inventoryVersion !== inventory.sourceVersion) {
+    throw new Error('Equipment history inventory join is invalid');
+  }
+  if (!Array.isArray(root.snapshots) || root.snapshots.length === 0) throw new Error('Equipment history snapshots are required');
+  const streamKey = `${sourceScopeId}\u0000${sourceVersion}\u0000${inventoryVersion}`;
+  const acceptedStreams = equipmentStreamsByInventory.get(inventory) ?? new Set<string>();
+  if (acceptedStreams.has(streamKey)) throw new Error('Equipment history stream already has a canonical accepted ledger');
+  const snapshots = root.snapshots.map((value) => parseEquipmentSnapshot(value, inventory));
+  const snapshotIds = new Set<string>();
+  for (const [index, snapshot] of snapshots.entries()) {
+    const predecessor = index === 0 ? null : snapshots[index - 1].snapshotId;
+    if (snapshot.sourceScopeId !== sourceScopeId || snapshot.sourceVersion !== sourceVersion
+      || snapshot.inventoryVersion !== inventoryVersion) throw new Error('Equipment history stream join is invalid');
+    if (snapshot.sequenceOrdinal !== index + 1 || snapshot.predecessorSnapshotId !== predecessor) {
+      throw new Error('Equipment history sequence is not complete and adjacent');
+    }
+    if (snapshotIds.has(snapshot.snapshotId)) throw new Error('Duplicate equipment history snapshot identity');
+    snapshotIds.add(snapshot.snapshotId);
+    if (Date.parse(snapshot.acceptedAt) < Date.parse(snapshot.sourceTimestamp)) {
+      throw new Error('Equipment history snapshot receipt chronology is invalid');
+    }
+    if (index > 0 && (Date.parse(snapshot.sourceTimestamp) <= Date.parse(snapshots[index - 1].sourceTimestamp)
+      || Date.parse(snapshot.acceptedAt) <= Date.parse(snapshots[index - 1].acceptedAt))) {
+      throw new Error('Equipment history chronology is not strictly monotonic');
+    }
+    if (Date.parse(inventory.acceptedAt) > Date.parse(snapshot.acceptedAt)) throw new Error('Equipment history predates its inventory');
+  }
+  for (const snapshot of snapshots) acceptedSnapshots.add(snapshot);
+  const accepted = deepFreeze({
+    [historyBrand]: true as const,
+    historyId,
+    evidenceOwner: 'official-equipment-status' as const,
+    sourceScopeId,
+    sourceVersion,
+    inventoryVersion,
+  });
+  acceptedStreams.add(streamKey);
+  equipmentStreamsByInventory.set(inventory, acceptedStreams);
+  acceptedHistories.add(accepted);
+  canonicalEquipmentHistories.set(accepted, snapshots);
+  return accepted;
+}
+
+function parseEquipmentSnapshot(
   raw: EquipmentSnapshotEvidenceInput,
   inventory: AcceptedEquipmentInventory,
 ): AcceptedEquipmentSnapshot {
-  if (!acceptedInventories.has(inventory)) throw new Error('Equipment snapshot requires an accepted inventory');
-  const root = strictRecord(raw, ['snapshotId', 'evidenceOwner', 'sourceScopeId', 'sourceVersion', 'inventoryVersion', 'sourceTimestamp', 'acceptedAt', 'declaredRecordCount', 'records'], 'equipment snapshot');
+  const root = strictRecord(raw, ['snapshotId', 'sequenceOrdinal', 'predecessorSnapshotId', 'evidenceOwner', 'sourceScopeId', 'sourceVersion', 'inventoryVersion', 'sourceTimestamp', 'acceptedAt', 'declaredRecordCount', 'records'], 'equipment snapshot');
   if (root.evidenceOwner !== 'official-equipment-status') throw new Error('Equipment snapshot owner is invalid');
   if (!Array.isArray(root.records) || !Number.isInteger(root.declaredRecordCount) || (root.declaredRecordCount as number) < 0) throw new Error('Equipment snapshot population is invalid');
-  const parsed = root.records.map(parseOutageRecord);
-  const records = parsed.filter((record): record is EquipmentOutageRecord => record !== undefined);
-  const malformedRecordCount = parsed.length - records.length;
-  const duplicateRecordCount = records.length - new Set(records.map((record) => record.equipmentId)).size;
+  if (!Number.isInteger(root.sequenceOrdinal) || (root.sequenceOrdinal as number) < 1) throw new Error('Equipment snapshot sequence ordinal is invalid');
+  if (root.predecessorSnapshotId !== null && typeof root.predecessorSnapshotId !== 'string') throw new Error('Equipment snapshot predecessor is invalid');
+  const parsed = root.records.map((value, index) => ({ index, record: parseOutageRecord(value) }));
+  const records = parsed.flatMap(({ record }) => record ? [record] : []);
+  const malformedIndexes = parsed.filter(({ record }) => !record).map(({ index }) => index);
+  const seenEquipmentIds = new Set<string>();
+  const duplicateIndexes: number[] = [];
+  for (const { index, record } of parsed) {
+    if (!record) continue;
+    if (seenEquipmentIds.has(record.equipmentId)) duplicateIndexes.push(index);
+    seenEquipmentIds.add(record.equipmentId);
+  }
   const inventoryIds = new Set(inventory.equipmentIds);
-  const unmatchedRecordCount = records.filter((record) => !inventoryIds.has(record.equipmentId)).length;
+  const unmatchedIndexes = parsed.filter(({ record }) => record && !inventoryIds.has(record.equipmentId)).map(({ index }) => index);
+  const badRecordCount = new Set([...malformedIndexes, ...duplicateIndexes, ...unmatchedIndexes]).size;
   const sourceTimestamp = instant(root.sourceTimestamp, 'snapshot source time');
   const acceptedAt = instant(root.acceptedAt, 'snapshot acceptance');
   const accepted = deepFreeze({
     [snapshotBrand]: true as const,
     snapshotId: identity(root.snapshotId, 'snapshot identity'),
+    sequenceOrdinal: root.sequenceOrdinal as number,
+    predecessorSnapshotId: root.predecessorSnapshotId === null ? null : identity(root.predecessorSnapshotId, 'snapshot predecessor'),
     evidenceOwner: 'official-equipment-status' as const,
     sourceScopeId: identity(root.sourceScopeId, 'snapshot scope'),
     sourceVersion: identity(root.sourceVersion, 'snapshot version'),
@@ -151,12 +242,12 @@ export function acceptEquipmentSnapshot(
     acceptedAt,
     declaredRecordCount: root.declaredRecordCount as number,
     records,
-    malformedRecordCount,
-    duplicateRecordCount,
-    unmatchedRecordCount,
+    malformedRecordCount: malformedIndexes.length,
+    duplicateRecordCount: duplicateIndexes.length,
+    unmatchedRecordCount: unmatchedIndexes.length,
+    badRecordCount,
     coherent: (root.declaredRecordCount as number) === root.records.length && Date.parse(acceptedAt) >= Date.parse(sourceTimestamp),
   });
-  acceptedSnapshots.add(accepted);
   return accepted;
 }
 
@@ -182,17 +273,29 @@ export function acceptEquipmentRestoration(raw: EquipmentRestorationEvidenceInpu
 }
 
 export function assessEquipmentStatus(input: EquipmentStatusAssessmentInput): EquipmentStatusDecision {
-  const snapshot = input.currentSnapshot;
+  const history = input.history;
   const inventory = input.inventory;
   const assessedAt = canonicalDate(input.decisionTime, 'equipment assessment');
   const targetEquipmentId = identity(input.targetEquipmentId, 'target equipment');
-  const trusted = acceptedSnapshots.has(snapshot) && acceptedInventories.has(inventory);
+  const canonicalHistory = canonicalEquipmentHistories.get(history);
+  const trustedHistory = acceptedHistories.has(history) && acceptedInventories.has(inventory)
+    && history.sourceScopeId === inventory.sourceScopeId && history.inventoryVersion === inventory.sourceVersion
+    && Boolean(canonicalHistory);
+  const acceptedByDecision = trustedHistory && canonicalHistory
+    ? canonicalHistory.filter((candidate) => acceptedSnapshots.has(candidate) && Date.parse(candidate.acceptedAt) <= Date.parse(assessedAt))
+    : [];
+  const snapshot = acceptedByDecision.at(-1) ?? canonicalHistory?.at(-1);
+  if (!snapshot) throw new Error('Equipment assessment requires a canonical accepted history');
+  const trusted = trustedHistory && acceptedByDecision.length > 0;
   const age = trusted ? Date.parse(assessedAt) - Date.parse(snapshot.sourceTimestamp) : Number.NaN;
   const inventoryAge = trusted ? Date.parse(assessedAt) - Date.parse(inventory.acceptedAt) : Number.NaN;
   const inventoryReview = inventoryAge >= 7 * DAY ? 'expired' : inventoryAge > DAY ? 'overdue' : 'current';
-  const badPopulation = trusted ? snapshot.malformedRecordCount + snapshot.duplicateRecordCount + snapshot.unmatchedRecordCount : 0;
-  const badRatio = trusted && snapshot.declaredRecordCount > 0 ? badPopulation / snapshot.declaredRecordCount : 0;
-  const anomaly = badRatio > 0.1;
+  const badRatio = trusted && snapshot.declaredRecordCount > 0 ? snapshot.badRecordCount / snapshot.declaredRecordCount : 0;
+  const previous = acceptedByDecision.at(-2);
+  const disappearanceRatio = previous?.coherent && snapshot.coherent && previous.declaredRecordCount > 0
+    ? (previous.declaredRecordCount - snapshot.declaredRecordCount) / previous.declaredRecordCount
+    : 0;
+  const anomaly = badRatio > 0.1 || disappearanceRatio > 0.5;
   const joined = trusted && inventory.sourceScopeId === snapshot.sourceScopeId
     && inventory.sourceVersion === snapshot.inventoryVersion && inventory.equipmentIds.includes(targetEquipmentId);
   const unusable = !trusted || !snapshot.coherent || !joined || !Number.isFinite(age) || age < 0 || inventoryAge < 0 || inventoryReview === 'expired';
@@ -201,9 +304,10 @@ export function assessEquipmentStatus(input: EquipmentStatusAssessmentInput): Eq
   const target = snapshot.records.find((record) => record.equipmentId === targetEquipmentId);
   const currentExactAdverse = trusted && joined && snapshot.coherent && age >= 0 && age <= 5 * MINUTE
     && (target?.state === 'out-of-service' || target?.state === 'planned-outage');
-  const prior = isResolvedEquipmentStatusDecision(input.priorDecision) ? input.priorDecision : undefined;
-  const restored = !currentExactAdverse && health === 'current' && restorationPasses(input, prior);
-  const confirmedEmpty = health === 'current' && snapshot.records.length === 0 && omissionPairPasses(input);
+  const priorAdverse = latestPriorAdverse(acceptedByDecision, targetEquipmentId);
+  const restored = !currentExactAdverse && health === 'current' && restorationPasses(input, acceptedByDecision, priorAdverse);
+  const confirmedEmpty = health === 'current' && snapshot.records.length === 0
+    && omissionPairPasses(acceptedByDecision, targetEquipmentId, undefined, true);
   const provisionalEmpty = health === 'current' && snapshot.records.length === 0 && !restored && !confirmedEmpty;
   let state: EquipmentMachineState = 'unknown';
   let reason = 'Current status cannot be verified from accepted evidence.';
@@ -211,7 +315,7 @@ export function assessEquipmentStatus(input: EquipmentStatusAssessmentInput): Eq
     state = 'out-of-service'; reason = 'A current official outage record matches the exact equipment identity.';
   } else if (currentExactAdverse && target?.state === 'planned-outage') {
     state = 'planned-outage'; reason = 'A current official planned outage matches the exact equipment identity.';
-  } else if (prior?.state === 'out-of-service' && !restored) {
+  } else if (priorAdverse && !restored) {
     state = 'out-of-service-rechecking'; reason = 'A prior official outage awaits qualifying restoration evidence.';
   } else if (health === 'current' && restored) {
     state = 'no-official-outage-reported'; reason = 'Accepted exact-machine restoration evidence passed.';
@@ -242,44 +346,63 @@ export function isResolvedEquipmentStatusDecision(value: unknown): value is Equi
   return Boolean(value && typeof value === 'object' && resolvedEquipmentDecisions.has(value));
 }
 
-function restorationPasses(input: EquipmentStatusAssessmentInput, prior: EquipmentStatusDecision | undefined): boolean {
-  if (!prior || prior.state !== 'out-of-service') return false;
-  const snapshot = input.currentSnapshot;
+export function equipmentDecisionAllowsUse(value: unknown, decisionTime: Date): value is EquipmentStatusDecision {
+  if (!isResolvedEquipmentStatusDecision(value) || !(decisionTime instanceof Date) || !Number.isFinite(decisionTime.getTime())) return false;
+  const instant = decisionTime.getTime();
+  return value.health === 'current' && instant >= Date.parse(value.validFrom) && instant <= Date.parse(value.validThrough);
+}
+
+interface PriorAdverse {
+  readonly index: number;
+  readonly snapshot: AcceptedEquipmentSnapshot;
+  readonly record: EquipmentOutageRecord;
+}
+
+function latestPriorAdverse(
+  observations: readonly AcceptedEquipmentSnapshot[],
+  targetEquipmentId: string,
+): PriorAdverse | undefined {
+  for (let index = observations.length - 2; index >= 0; index -= 1) {
+    const record = observations[index].records.find((candidate) => candidate.equipmentId === targetEquipmentId);
+    if (record) return { index, snapshot: observations[index], record };
+  }
+  return undefined;
+}
+
+function restorationPasses(
+  input: EquipmentStatusAssessmentInput,
+  observations: readonly AcceptedEquipmentSnapshot[],
+  prior: PriorAdverse | undefined,
+): boolean {
+  if (!prior) return false;
+  const snapshot = observations.at(-1)!;
   const assessedAt = input.decisionTime.getTime();
-  if (prior.targetEquipmentId !== input.targetEquipmentId
-    || prior.evidenceOwner !== 'official-equipment-status'
-    || prior.sourceScopeId !== snapshot.sourceScopeId
-    || prior.sourceVersion !== snapshot.sourceVersion
-    || !prior.adverseRecordId
-    || Date.parse(prior.sourceTimestamp) >= Date.parse(snapshot.sourceTimestamp)) return false;
   const explicit = input.restorationRecords?.find((record) => acceptedRestorations.has(record)
     && record.equipmentId === input.targetEquipmentId
-    && record.outageRecordId === prior.adverseRecordId
+    && record.outageRecordId === prior.record.recordId
     && record.sourceScopeId === snapshot.sourceScopeId
     && record.sourceVersion === snapshot.sourceVersion
-    && Date.parse(record.restoredAt) > Date.parse(prior.sourceTimestamp)
+    && Date.parse(record.restoredAt) > Date.parse(prior.snapshot.sourceTimestamp)
     && Date.parse(record.restoredAt) <= Date.parse(snapshot.sourceTimestamp)
     && Date.parse(record.acceptedAt) <= assessedAt);
   if (explicit) return true;
-  return omissionPairPasses(input, prior);
+  return omissionPairPasses(observations, input.targetEquipmentId, prior.index, false);
 }
 
-function omissionPairPasses(input: EquipmentStatusAssessmentInput, prior?: EquipmentStatusDecision): boolean {
-  const observations = input.recoverySnapshots ?? [];
+function omissionPairPasses(
+  observations: readonly AcceptedEquipmentSnapshot[],
+  targetEquipmentId: string,
+  afterIndex: number | undefined,
+  requireEmpty: boolean,
+): boolean {
   const first = observations.at(-2);
   const second = observations.at(-1);
-  const current = input.currentSnapshot;
-  const assessedAt = input.decisionTime.getTime();
   return Boolean(first && second && acceptedSnapshots.has(first) && acceptedSnapshots.has(second)
-    && second === current
     && first.coherent && second.coherent
-    && first.sourceScopeId === current.sourceScopeId && second.sourceScopeId === current.sourceScopeId
-    && first.sourceVersion === current.sourceVersion && second.sourceVersion === current.sourceVersion
-    && first.inventoryVersion === current.inventoryVersion && second.inventoryVersion === current.inventoryVersion
-    && (!prior || Date.parse(first.sourceTimestamp) > Date.parse(prior.sourceTimestamp))
-    && Date.parse(first.acceptedAt) <= assessedAt && Date.parse(second.acceptedAt) <= assessedAt
-    && !first.records.some((record) => record.equipmentId === input.targetEquipmentId)
-    && !second.records.some((record) => record.equipmentId === input.targetEquipmentId)
+    && (afterIndex === undefined || observations.length - 2 > afterIndex)
+    && (!requireEmpty || (first.records.length === 0 && second.records.length === 0))
+    && !first.records.some((record) => record.equipmentId === targetEquipmentId)
+    && !second.records.some((record) => record.equipmentId === targetEquipmentId)
     && Date.parse(second.sourceTimestamp) - Date.parse(first.sourceTimestamp) >= MINUTE);
 }
 
@@ -307,6 +430,8 @@ function resolvedDecision(input: {
     snapshotId: input.snapshot.snapshotId,
     sourceTimestamp: input.snapshot.sourceTimestamp,
     assessedAt: input.assessedAt,
+    validFrom: input.assessedAt,
+    validThrough: new Date(Date.parse(input.snapshot.sourceTimestamp) + 5 * MINUTE).toISOString(),
     ...(input.adverseRecordId ? { adverseRecordId: input.adverseRecordId } : {}),
     health: input.health,
     state: input.state,

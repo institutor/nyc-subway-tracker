@@ -1,12 +1,12 @@
 import { describe, expect, test } from 'vitest';
-import { acceptEquipmentInventory, acceptEquipmentSnapshot, assessEquipmentStatus } from '../../src/shared/domain/equipment-status';
+import { acceptEquipmentHistory, acceptEquipmentInventory, assessEquipmentStatus } from '../../src/shared/domain/equipment-status';
 import { classifyPathImpact, type ImpactPath } from '../../src/shared/domain/path-impact';
 import { resolvedPath } from '../fixtures/accessibility-decisions';
 
 function equipment(targetEquipmentId = 'EL-1') {
   const inventory = acceptEquipmentInventory({ inventoryId: 'inv', evidenceOwner: 'official-equipment-inventory', sourceScopeId: 'scope', sourceVersion: 'inv-v1', acceptedAt: '2026-07-30T00:00:00.000Z', equipmentIds: ['EL-1', 'EL-2'] });
-  const currentSnapshot = acceptEquipmentSnapshot({ snapshotId: 'snap', evidenceOwner: 'official-equipment-status', sourceScopeId: 'scope', sourceVersion: 'status-v1', inventoryVersion: 'inv-v1', sourceTimestamp: '2026-07-30T12:00:00.000Z', acceptedAt: '2026-07-30T12:00:01.000Z', declaredRecordCount: 1, records: [{ recordId: 'out-1', equipmentId: 'EL-1', state: 'out-of-service' }] }, inventory);
-  return assessEquipmentStatus({ targetEquipmentId, decisionTime: new Date('2026-07-30T12:01:00.000Z'), inventory, currentSnapshot });
+  const history = acceptEquipmentHistory({ historyId: 'history', evidenceOwner: 'official-equipment-status', sourceScopeId: 'scope', sourceVersion: 'status-v1', inventoryVersion: 'inv-v1', snapshots: [{ snapshotId: 'snap', sequenceOrdinal: 1, predecessorSnapshotId: null, evidenceOwner: 'official-equipment-status', sourceScopeId: 'scope', sourceVersion: 'status-v1', inventoryVersion: 'inv-v1', sourceTimestamp: '2026-07-30T12:00:00.000Z', acceptedAt: '2026-07-30T12:00:01.000Z', declaredRecordCount: 1, records: [{ recordId: 'out-1', equipmentId: 'EL-1', state: 'out-of-service' }] }] }, inventory);
+  return assessEquipmentStatus({ targetEquipmentId, decisionTime: new Date('2026-07-30T12:01:00.000Z'), inventory, history });
 }
 
 const path = (id: string, equipmentIds: readonly string[], eligible = true): ImpactPath => ({

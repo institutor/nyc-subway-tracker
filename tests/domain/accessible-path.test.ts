@@ -7,7 +7,7 @@ import {
   type AccessibilityPackage,
   type StationDirectionCoverageRow,
 } from '../../src/shared/domain/accessible-path';
-import { acceptEquipmentInventory, acceptEquipmentSnapshot, assessEquipmentStatus } from '../../src/shared/domain/equipment-status';
+import { acceptEquipmentHistory, acceptEquipmentInventory, assessEquipmentStatus } from '../../src/shared/domain/equipment-status';
 import {
   PRODUCTION_EXPOSURE_REGISTRY,
   VALIDATION_EXPOSURE_REGISTRY,
@@ -53,18 +53,22 @@ function packageFixture(overrides: Partial<AccessibilityPackage> = {}): Accessib
 }
 
 function equipment(overrides: { targetEquipmentId?: string; snapshotScope?: string } = {}) {
+  const sourceScopeId = overrides.snapshotScope ?? 'nyc-equipment';
   const inventory = acceptEquipmentInventory({
-    inventoryId: 'inventory-v1', evidenceOwner: 'official-equipment-inventory', sourceScopeId: 'nyc-equipment',
-    sourceVersion: 'inventory-v1', acceptedAt: '2026-07-30T00:00:00.000Z', equipmentIds: ['EL-A12-01', 'EL-OTHER'],
+    inventoryId: 'inventory-v1', evidenceOwner: 'official-equipment-inventory', sourceScopeId,
+    sourceVersion: 'inventory-v1', acceptedAt: '2026-07-31T23:00:00.000Z', equipmentIds: ['EL-A12-01', 'EL-OTHER'],
   });
-  const currentSnapshot = acceptEquipmentSnapshot({
-    snapshotId: 'snapshot-v1', evidenceOwner: 'official-equipment-status', sourceScopeId: overrides.snapshotScope ?? 'nyc-equipment',
-    sourceVersion: 'equipment-v1', inventoryVersion: 'inventory-v1', sourceTimestamp: '2026-07-30T12:00:00.000Z',
-    acceptedAt: '2026-07-30T12:00:05.000Z', declaredRecordCount: 1,
-    records: [{ recordId: 'out-other', equipmentId: 'EL-OTHER', state: 'out-of-service' }],
+  const history = acceptEquipmentHistory({
+    historyId: 'history-v1', evidenceOwner: 'official-equipment-status', sourceScopeId,
+    sourceVersion: 'equipment-v1', inventoryVersion: 'inventory-v1', snapshots: [{
+      snapshotId: 'snapshot-v1', sequenceOrdinal: 1, predecessorSnapshotId: null,
+      evidenceOwner: 'official-equipment-status', sourceScopeId, sourceVersion: 'equipment-v1', inventoryVersion: 'inventory-v1',
+      sourceTimestamp: '2026-07-31T23:59:00.000Z', acceptedAt: '2026-07-31T23:59:01.000Z', declaredRecordCount: 1,
+      records: [{ recordId: 'out-other', equipmentId: 'EL-OTHER', state: 'out-of-service' }],
+    }],
   }, inventory);
   return assessEquipmentStatus({
-    targetEquipmentId: overrides.targetEquipmentId ?? 'EL-A12-01', decisionTime: at('2026-07-30T12:02:00Z'), inventory, currentSnapshot,
+    targetEquipmentId: overrides.targetEquipmentId ?? 'EL-A12-01', decisionTime: at('2026-08-01T00:00:00Z'), inventory, history,
   });
 }
 
@@ -172,6 +176,14 @@ describe('complete accessible path evidence', () => {
     expect(assessAccessiblePath(packageFixture(), { stationId: 'A12', routeId: 'A', direction: 'northbound', platformId: 'A12N', equipment: { 'EL-A12-01': equipment() }, exposure: validationAccessibilityExposure, ...equipmentEvidence }).status).toBe('eligible');
     expect(assessAccessiblePath(packageFixture(), { stationId: 'A12', routeId: 'A', direction: 'southbound', platformId: 'A12S', equipment: {}, exposure: validationAccessibilityExposure, ...equipmentEvidence }).status).toBe('ineligible');
     expect(assessAccessiblePath(packageFixture(), { stationId: 'A12', routeId: 'A', direction: 'northbound', platformId: 'A12N', equipment: {}, exposure: validationAccessibilityExposure, ...equipmentEvidence }).offlineCopy).toBe('Structurally step-free; live elevator status unavailable');
+  });
+
+  test('rejects a genuine positive equipment decision after its source-validity window', () => {
+    expect(assessAccessiblePath(packageFixture(), {
+      stationId: 'A12', routeId: 'A', direction: 'northbound', platformId: 'A12N',
+      equipment: { 'EL-A12-01': equipment() }, exposure: validationAccessibilityExposure, ...equipmentEvidence,
+      decisionTime: at('2026-08-01T00:04:00.001Z'),
+    }).status).toBe('unknown');
   });
 
   test('keeps public accessibility locked while pending and rejects wrong-version exposure', () => {
