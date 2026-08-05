@@ -92,6 +92,78 @@ describe('audited practical-walk adapter', () => {
     expect(Object.isFrozen(result)).toBe(true);
   });
 
+  test('returns typed cancellation before transport for an already-aborted caller', async () => {
+    const caller = new AbortController();
+    caller.abort();
+    const transport = vi.fn<PracticalWalkTransport>(async () => jsonResponse(complete(['entrance-a'])));
+
+    await expect(requestPracticalWalks(request(), config(), transport, { signal: caller.signal })).resolves.toEqual({
+      kind: 'unavailable',
+      reason: 'cancelled',
+    });
+    expect(transport).not.toHaveBeenCalled();
+  });
+
+  test('propagates mid-flight caller cancellation to transport and settles promptly', async () => {
+    const caller = new AbortController();
+    let observedSignal: AbortSignal | undefined;
+    let completeTransport: ((response: ReturnType<typeof jsonResponse>) => void) | undefined;
+    const transport: PracticalWalkTransport = ({ signal }) => new Promise((resolve, reject) => {
+      observedSignal = signal;
+      completeTransport = resolve;
+      signal.addEventListener('abort', () => reject(Object.assign(new Error('transport aborted'), { name: 'AbortError' })), { once: true });
+    });
+    const pending = requestPracticalWalks(request(), config(), transport, { signal: caller.signal });
+    await Promise.resolve();
+
+    caller.abort();
+    const stillPending = Symbol('still-pending');
+    const result = await Promise.race([
+      pending,
+      new Promise<typeof stillPending>((resolve) => setTimeout(() => resolve(stillPending), 25)),
+    ]);
+    if (result === stillPending) {
+      completeTransport?.(jsonResponse(complete(['entrance-a'])));
+      await pending;
+    }
+
+    expect(result).toEqual({ kind: 'unavailable', reason: 'cancelled' });
+    expect(observedSignal?.aborted).toBe(true);
+  });
+
+  test('keeps the four-second timeout authoritative and aborts the observed transport signal', async () => {
+    vi.useFakeTimers();
+    try {
+      let observedSignal: AbortSignal | undefined;
+      const transport: PracticalWalkTransport = ({ signal }) => new Promise((_resolve, reject) => {
+        observedSignal = signal;
+        signal.addEventListener('abort', () => reject(Object.assign(new Error('transport aborted'), { name: 'AbortError' })), { once: true });
+      });
+      const pending = requestPracticalWalks(request(), config(), transport);
+      await vi.advanceTimersByTimeAsync(4_000);
+
+      await expect(pending).resolves.toEqual({ kind: 'unavailable', reason: 'timeout' });
+      expect(observedSignal?.aborted).toBe(true);
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test('detaches caller cancellation after transport settlement', async () => {
+    const caller = new AbortController();
+    let observedSignal: AbortSignal | undefined;
+    const result = await requestPracticalWalks(request(), config(), async ({ signal }) => {
+      observedSignal = signal;
+      return jsonResponse(complete(['entrance-a']));
+    }, { signal: caller.signal });
+
+    expect(result.kind).toBe('available');
+    expect(observedSignal?.aborted).toBe(false);
+    caller.abort();
+    expect(observedSignal?.aborted).toBe(false);
+  });
+
   test('requires exact complete one-to-one destination results and never returns a partial matrix', async () => {
     const inputs = [
       complete(['entrance-a']),

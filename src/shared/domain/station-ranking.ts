@@ -81,6 +81,7 @@ export interface SelectedNearbyEntrance {
 export interface NearbyDirectionCard {
   readonly constituentId: string;
   readonly constituentPublicName: string;
+  readonly directionalStopId: string;
   readonly direction: Direction;
   readonly actualDestination: string;
   readonly routeIds: readonly string[];
@@ -216,6 +217,7 @@ export function rankNearbyStations(rawInput: NearbyRankingInput): NearbyRankingD
       directionSelections.push({
         constituentId: constituent.id,
         constituentPublicName: constituent.publicName,
+        directionalStopId: firstService.directionalStopId,
         direction: firstService.direction,
         actualDestination: firstService.actualDestination,
         routeIds: Object.freeze(uniqueSorted(serviceGroup.map(({ routeId }) => routeId))),
@@ -418,7 +420,7 @@ function validateRelationships(
 function groupServices(services: readonly NearbyServiceInput[]): NearbyServiceInput[][] {
   const groups = new Map<string, NearbyServiceInput[]>();
   for (const service of services) {
-    const key = [service.constituentId, service.direction, service.actualDestination].join('\0');
+    const key = [service.constituentId, service.directionalStopId, service.direction, service.actualDestination].join('\0');
     groups.set(key, [...(groups.get(key) ?? []), service]);
   }
   return [...groups.values()].map((group) => group.sort((left, right) => compareCanonicalIdentity(left.id, right.id)));
@@ -490,7 +492,8 @@ function compareConfirmedComplexes(
 function compareDirectionSelections(left: DirectionSelection, right: DirectionSelection): number {
   return compareCanonicalIdentity(left.direction, right.direction)
     || compareDisplay(left.actualDestination, right.actualDestination)
-    || compareCanonicalIdentity(left.constituentId, right.constituentId);
+    || compareCanonicalIdentity(left.constituentId, right.constituentId)
+    || compareCanonicalIdentity(left.directionalStopId, right.directionalStopId);
 }
 
 function compareRepresentativeSelection(left: DirectionSelection, right: DirectionSelection): number {
@@ -499,6 +502,7 @@ function compareRepresentativeSelection(left: DirectionSelection, right: Directi
     || compareDisplay(left.constituentPublicName, right.constituentPublicName)
     || compareDisplay(left.selectedEntrance.publicDescription, right.selectedEntrance.publicDescription)
     || compareCanonicalIdentity(left.constituentId, right.constituentId)
+    || compareCanonicalIdentity(left.directionalStopId, right.directionalStopId)
     || compareCanonicalIdentity(left.selectedEntrance.id, right.selectedEntrance.id);
 }
 

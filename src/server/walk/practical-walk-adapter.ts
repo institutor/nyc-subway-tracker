@@ -25,6 +25,10 @@ export interface PracticalWalkAdapterConfig {
   readonly sourceId: string;
 }
 
+export interface PracticalWalkCallOptions {
+  readonly signal?: AbortSignal;
+}
+
 export interface PracticalWalkTransportRequest {
   readonly url: string;
   readonly method: 'POST';
@@ -51,6 +55,7 @@ export type PracticalWalkUnavailableReason =
   | 'unapproved'
   | 'unsupported'
   | 'limit'
+  | 'cancelled'
   | 'timeout'
   | 'invalid'
   | 'incomplete';
@@ -91,7 +96,15 @@ export async function requestPracticalWalks(
   rawRequest: PracticalWalkRequest,
   config: PracticalWalkAdapterConfig,
   transport: PracticalWalkTransport,
+  rawOptions: PracticalWalkCallOptions = {},
 ): Promise<PracticalWalkDecision> {
+  let callerSignal: AbortSignal | undefined;
+  try {
+    callerSignal = captureCallerSignal(rawOptions);
+  } catch {
+    return unavailable('invalid');
+  }
+  if (callerSignal?.aborted) return unavailable('cancelled');
   if (!config.enabled) return unavailable('disabled');
   if (!config.auditApproved) return unavailable('unapproved');
   if (!config.supported || typeof transport !== 'function') return unavailable('unsupported');
@@ -120,9 +133,11 @@ export async function requestPracticalWalks(
       redirect: 'error',
       timeoutMs: TIMEOUT_MS,
       maxResponseBytes: MAX_RESPONSE_BYTES,
-    });
+    }, callerSignal);
   } catch (error) {
-    return unavailable(isTimeout(error) ? 'timeout' : 'invalid');
+    return unavailable(error instanceof CallerCancelled
+      ? 'cancelled'
+      : error instanceof WalkTimeout || isTimeout(error) ? 'timeout' : 'invalid');
   }
 
   if (!isByteView(response.body)) return unavailable('invalid');
@@ -188,20 +203,63 @@ function validEndpoint(config: PracticalWalkAdapterConfig): boolean {
 async function boundedTransport(
   transport: PracticalWalkTransport,
   request: Omit<PracticalWalkTransportRequest, 'signal'>,
+  callerSignal?: AbortSignal,
 ): Promise<PracticalWalkTransportResponse> {
+  if (callerSignal?.aborted) throw new CallerCancelled();
   const controller = new AbortController();
+  let disposition: 'active' | 'caller-cancelled' | 'timed-out' | 'settled' = 'active';
   let timer: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<never>((_resolve, reject) => {
-    timer = setTimeout(() => {
-      controller.abort();
-      reject(Object.assign(new Error('Walk adapter timeout'), { name: 'AbortError' }));
-    }, TIMEOUT_MS);
+  let rejectBoundary!: (reason: Error) => void;
+  const boundary = new Promise<never>((_resolve, reject) => {
+    rejectBoundary = reject;
   });
-  try {
-    return await Promise.race([transport({ ...request, signal: controller.signal }), timeout]);
-  } finally {
-    if (timer !== undefined) clearTimeout(timer);
+  const cancelFromCaller = () => {
+    if (disposition !== 'active') return;
+    disposition = 'caller-cancelled';
+    rejectBoundary(new CallerCancelled());
+    controller.abort();
+  };
+  callerSignal?.addEventListener('abort', cancelFromCaller, { once: true });
+  if (callerSignal?.aborted) cancelFromCaller();
+  if (disposition === 'active') {
+    timer = setTimeout(() => {
+      if (disposition !== 'active') return;
+      disposition = 'timed-out';
+      rejectBoundary(new WalkTimeout());
+      controller.abort();
+    }, TIMEOUT_MS);
   }
+  try {
+    return await Promise.race([
+      Promise.resolve().then(() => transport({ ...request, signal: controller.signal })),
+      boundary,
+    ]);
+  } finally {
+    if (disposition === 'active') disposition = 'settled';
+    if (timer !== undefined) clearTimeout(timer);
+    callerSignal?.removeEventListener('abort', cancelFromCaller);
+  }
+}
+
+function captureCallerSignal(options: PracticalWalkCallOptions): AbortSignal | undefined {
+  if (!options || typeof options !== 'object' || Array.isArray(options) || Object.getPrototypeOf(options) !== Object.prototype) {
+    throw new Error('Invalid practical walk call options');
+  }
+  const keys = Object.keys(options);
+  if (keys.length === 0) return undefined;
+  if (keys.length !== 1 || keys[0] !== 'signal' || !isAbortSignal(options.signal)) {
+    throw new Error('Invalid practical walk caller signal');
+  }
+  return options.signal;
+}
+
+function isAbortSignal(value: unknown): value is AbortSignal {
+  return value !== null
+    && typeof value === 'object'
+    && Object.prototype.toString.call(value) === '[object AbortSignal]'
+    && typeof (value as AbortSignal).aborted === 'boolean'
+    && typeof (value as AbortSignal).addEventListener === 'function'
+    && typeof (value as AbortSignal).removeEventListener === 'function';
 }
 
 function parseProviderDecision(provider: unknown, requestedIds: readonly string[], sourceId: string): PracticalWalkDecision {
@@ -313,6 +371,8 @@ function byteView(value: Uint8Array): Uint8Array {
 }
 
 class IncompleteEvidence extends Error {}
+class CallerCancelled extends Error {}
+class WalkTimeout extends Error {}
 
 function deepFreeze<T>(value: T): T {
   if (value && typeof value === 'object' && !Object.isFrozen(value)) {

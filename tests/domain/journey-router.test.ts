@@ -216,6 +216,28 @@ describe('exact directional occurrence journey graph', () => {
       id: `node-${index}`, occurrenceId: `occurrence-${index}`, stationId: `station-${index}`, directionalStopId: `stop-${index}`,
     }));
     expect(() => validateJourneyGraph({ nodes: tooManyNodes, patterns: [], transfers: [] })).toThrow(/node limit/i);
+    expect(() => validateJourneyGraph({
+      nodes: [],
+      patterns: Array.from({ length: 20_001 }, () => graph.patterns[0]),
+      transfers: [],
+    })).toThrow(/pattern limit/i);
+    expect(() => validateJourneyGraph({
+      nodes: [],
+      patterns: [],
+      transfers: Array.from({ length: 20_001 }, () => ({
+        id: 'transfer',
+        fromOccurrenceId: 'from',
+        toOccurrenceId: 'to',
+        evidence: { kind: 'structural-only' as const },
+      })),
+    })).toThrow(/transfer limit/i);
+    expect(() => validateJourneyGraph({
+      ...graph,
+      patterns: [{
+        ...graph.patterns[0],
+        orderedOccurrenceIds: Array.from({ length: 257 }, (_, index) => `occurrence-${index}`),
+      }],
+    })).toThrow(/stops per journey pattern/i);
   });
 
   test('returns a typed search limit instead of truncating or canonically selecting an unproved optimum', () => {

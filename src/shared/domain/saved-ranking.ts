@@ -5,6 +5,7 @@ export interface SavedPromotionDirection {
   readonly routeId: string;
   readonly direction: Direction;
   readonly actualDestination: string;
+  readonly selectedEntranceId: string;
 }
 
 export interface SavedPromotionCandidate {
@@ -64,11 +65,12 @@ function captureBaseline(values: readonly SavedPromotionCandidate[]): SavedPromo
       throw new Error('Invalid promotion directions');
     }
     const directions = record.directions.map((direction) => {
-      const row = strictRecord(direction, ['routeId', 'direction', 'actualDestination'], 'promotion direction');
+      const row = strictRecord(direction, ['routeId', 'direction', 'actualDestination', 'selectedEntranceId'], 'promotion direction');
       return {
         routeId: identity(row.routeId, 'promotion route'),
         direction: parseDirection(row.direction),
         actualDestination: display(row.actualDestination, 'promotion destination'),
+        selectedEntranceId: identity(row.selectedEntranceId, 'promotion selected entrance'),
       };
     });
     const accessibility = record.accessibility === undefined
@@ -174,7 +176,9 @@ function recordApplies(
   if (record.timeWindow && !withinWindow(record.timeWindow, local)) return false;
   return candidate.directions.some((direction) =>
     (record.routeFilters.length === 0 || record.routeFilters.includes(direction.routeId))
-    && (!record.preferredEntrance || record.preferredEntrance.direction === direction.direction)
+    && (!record.preferredEntrance
+      || (record.preferredEntrance.direction === direction.direction
+        && record.preferredEntrance.entranceId === direction.selectedEntranceId))
     && (!record.preferredRide
       || (record.preferredRide.direction === direction.direction
         && record.preferredRide.actualDestination === direction.actualDestination)));

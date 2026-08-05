@@ -97,6 +97,50 @@ describe('nearest useful subway station ranking', () => {
     ]);
   });
 
+  test('keeps route, arrival, and entrance evidence owned by each exact directional stop', () => {
+    const input = rankingFixture();
+    input.entrances = [
+      entrance('alpha-stop-a-entry', 'alpha', 'alpha-c', ['alpha-stop-a']),
+      entrance('alpha-stop-b-entry', 'alpha', 'alpha-c', ['alpha-stop-b']),
+    ];
+    input.services = [
+      {
+        ...service('alpha-stop-a-service', 'alpha', 'alpha-c', 'alpha-stop-a', 'northbound', 'Shared terminal'),
+        routeId: 'A',
+        arrivalState: 'available',
+      },
+      {
+        ...service('alpha-stop-b-service', 'alpha', 'alpha-c', 'alpha-stop-b', 'northbound', 'Shared terminal'),
+        routeId: 'C',
+        arrivalState: 'unavailable',
+      },
+    ];
+    input.walk = walkEvidence([
+      ['alpha-stop-a-entry', 100, 110],
+      ['alpha-stop-b-entry', 200, 210],
+    ]);
+
+    for (const candidate of [input, reverseRankingInput(input)]) {
+      const result = rankNearbyStations(candidate);
+      expect(result.kind).toBe('ranked');
+      if (result.kind !== 'ranked') continue;
+      expect(result.cards[0].directions).toEqual([
+        expect.objectContaining({
+          directionalStopId: 'alpha-stop-a',
+          routeIds: ['A'],
+          arrivalState: 'available',
+          selectedEntrance: expect.objectContaining({ id: 'alpha-stop-a-entry' }),
+        }),
+        expect.objectContaining({
+          directionalStopId: 'alpha-stop-b',
+          routeIds: ['C'],
+          arrivalState: 'unavailable',
+          selectedEntrance: expect.objectContaining({ id: 'alpha-stop-b-entry' }),
+        }),
+      ]);
+    }
+  });
+
   test('retains an all-unconfirmed complex only as an honest detail and picker option', () => {
     const input = rankingFixture();
     input.entrances = [
@@ -265,7 +309,7 @@ function service(
   directionalStopId: string,
   direction: 'northbound' | 'southbound',
   actualDestination: string,
-) {
+): NearbyRankingInput['services'][number] {
   return {
     id,
     complexId,

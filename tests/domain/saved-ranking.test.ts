@@ -6,7 +6,12 @@ import type { SavedRecord } from '../../src/shared/domain/types';
 const candidate = (id: string): SavedPromotionCandidate => ({
   complexId: id,
   constituentId: `${id}-constituent`,
-  directions: [{ routeId: 'A', direction: 'northbound', actualDestination: `${id} terminal` }],
+  directions: [{
+    routeId: 'A',
+    direction: 'northbound',
+    actualDestination: `${id} terminal`,
+    selectedEntranceId: `${id}-entrance`,
+  }],
 });
 
 const saved = (id: string, overrides: Partial<SavedRecord> = {}): SavedRecord => ({
@@ -59,6 +64,27 @@ describe('SAVE-O01 saved promotion', () => {
     ).map(({ complexId }) => complexId)).toEqual(['B', 'A', 'C']);
   });
 
+  test('requires the exact selected entrance identity for a preferred-entrance promotion', () => {
+    const baseline = ['A', 'B', 'C'].map(candidate);
+    const wrongEntrance = saved('B', {
+      preferredEntrance: { entranceId: 'another-b-entrance', direction: 'northbound' },
+    });
+    expect(promoteSavedStations(
+      baseline,
+      [wrongEntrance],
+      new Date('2026-08-04T12:30:00.000Z'),
+    ).map(({ complexId }) => complexId)).toEqual(['A', 'B', 'C']);
+
+    const exactEntrance = saved('B', {
+      preferredEntrance: { entranceId: 'B-entrance', direction: 'northbound' },
+    });
+    expect(promoteSavedStations(
+      baseline,
+      [exactEntrance],
+      new Date('2026-08-04T12:30:00.000Z'),
+    ).map(({ complexId }) => complexId)).toEqual(['B', 'A', 'C']);
+  });
+
   test('uses half-open New York windows with ISO weekdays and overnight ownership by start weekday', () => {
     const weekday = saved('B', { timeWindow: { weekdays: [2], startsAt: '08:00', endsAt: '09:00' } });
     expect(promoteSavedStations(['A', 'B', 'C'].map(candidate), [weekday], new Date('2026-08-04T11:59:59.999Z'))[0].complexId).toBe('A');
@@ -66,7 +92,9 @@ describe('SAVE-O01 saved promotion', () => {
     expect(promoteSavedStations(['A', 'B', 'C'].map(candidate), [weekday], new Date('2026-08-04T13:00:00.000Z'))[0].complexId).toBe('A');
 
     const overnight = saved('C', { timeWindow: { weekdays: [5], startsAt: '23:30', endsAt: '01:00' } });
+    expect(promoteSavedStations(['A', 'B', 'C'].map(candidate), [overnight], new Date('2026-08-08T03:30:00.000Z'))[0].complexId).toBe('C');
     expect(promoteSavedStations(['A', 'B', 'C'].map(candidate), [overnight], new Date('2026-08-08T04:30:00.000Z'))[0].complexId).toBe('C');
+    expect(promoteSavedStations(['A', 'B', 'C'].map(candidate), [overnight], new Date('2026-08-08T05:00:00.000Z'))[0].complexId).toBe('A');
     expect(promoteSavedStations(['A', 'B', 'C'].map(candidate), [overnight], new Date('2026-08-09T04:30:00.000Z'))[0].complexId).toBe('A');
   });
 
