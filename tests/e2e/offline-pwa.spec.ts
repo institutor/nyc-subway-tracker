@@ -21,6 +21,16 @@ test('warms device-held subway references through the product and plans with the
   });
   expect(manifest.icons).not.toHaveLength(0);
 
+  const shellPaths = await page.evaluate(() => [
+    '/index.html',
+    ...[...document.querySelectorAll<HTMLScriptElement | HTMLLinkElement>('script[src], link[rel="stylesheet"]')]
+      .map((element) => new URL(element instanceof HTMLScriptElement ? element.src : element.href).pathname),
+  ]);
+  await expect.poll(() => page.evaluate(async () => {
+    const shell = await caches.open('subway-first-shell-v2');
+    return Promise.all((await shell.keys()).map(async ({ url }) => new URL(url).pathname));
+  })).toEqual(expect.arrayContaining(shellPaths));
+
   await chooseStation(page, '125 St');
   await expect(page.getByText('Live and expected arrivals', { exact: true })).toBeVisible();
 
