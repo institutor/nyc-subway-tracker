@@ -111,7 +111,9 @@ describe('independent map service meaning', () => {
 
     expect(screen.getByRole('button', { name: 'Actual now' })).toBeDisabled();
     expect(screen.getByText('Current service information is unavailable. Choose a reference pattern to continue.')).toBeInTheDocument();
-    expect(api.mapReference).not.toHaveBeenCalled();
+    await waitFor(() => expect(api.mapReference).toHaveBeenCalledWith('day', 'map-day-7', expect.any(AbortSignal)));
+    expect(within(screen.getByTestId('vector-network-map')).getByText('Subway reference — current overlay unavailable')).toBeInTheDocument();
+    expect(screen.getByTestId('vector-network-map').querySelector('[data-map-feature="line-a"]')).toHaveAttribute('data-state', 'reference');
     expect(screen.queryByText('Reference pattern—not live.')).not.toBeInTheDocument();
     expect(screen.getByTestId('map-context')).toHaveAttribute('data-selected-station', 'A12');
     expect(screen.getByTestId('map-context')).toHaveAttribute('data-selected-route', 'A');
@@ -121,6 +123,89 @@ describe('independent map service meaning', () => {
     expect(screen.getByTestId('vector-network-map')).toHaveAttribute('data-viewport', '40.73,-73.99,2');
     expect(onContextChange).toHaveBeenCalledWith(expect.objectContaining({
       serviceMeaning: 'typical-weekday', spatialView: 'geographic', selectedStationId: 'A12', selectedRouteId: 'A',
+    }));
+  });
+
+  test('withholds the Actual-now map while its current overlay is still being checked', async () => {
+    const pending = deferred<Awaited<ReturnType<TransitApiClient['mapOverlay']>>>();
+    const api = mapApi();
+    api.mapOverlay.mockImplementation(async () => pending.promise);
+    render(<MapView
+      api={api}
+      bootstrap={bootstrap}
+      catalog={catalog}
+      connected
+      initialContext={{ serviceMeaning: 'actual-now', spatialView: 'schematic', viewport: { centerX: 40.7, centerY: -74, zoom: 1 } }}
+      onContextChange={vi.fn()}
+      onActivateTrip={vi.fn()}
+    />);
+
+    expect(screen.getByRole('button', { name: 'Actual now' })).toBeDisabled();
+    expect(screen.getByRole('status')).toHaveTextContent('Checking current service overlay');
+    await waitFor(() => expect(screen.getByTestId('vector-network-map').querySelector('[data-map-feature="line-a"]')).toBeInTheDocument());
+    expect(within(screen.getByTestId('vector-network-map')).getByText('Subway reference — checking current overlay')).toBeInTheDocument();
+    expect(screen.getByTestId('vector-network-map').querySelector('[data-map-feature="line-a"]')).toHaveAttribute('data-state', 'reference');
+
+    pending.resolve(currentOverlay());
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Actual now' })).toBeEnabled());
+    expect(within(screen.getByTestId('vector-network-map')).getByText('Actual now')).toBeInTheDocument();
+    expect(screen.getByTestId('vector-network-map').querySelector('[data-map-feature="line-a"]')).toBeInTheDocument();
+  });
+
+  test.each(['locked', 'null', 'error'] as const)(
+    'keeps Actual now unavailable when the overlay owner returns %s',
+    async (outcome) => {
+      const api = mapApi();
+      api.mapOverlay.mockImplementation(async () => {
+        if (outcome === 'error') throw new Error('overlay unavailable');
+        return {
+          ...dynamic,
+          cacheState: 'network',
+          runtime: outcome === 'locked'
+            ? { mode: 'live' as const, surface: 'public' as const, availability: 'locked' as const }
+            : dynamic.runtime,
+          data: outcome === 'null' ? null : currentOverlay().data,
+        };
+      });
+      render(<MapView
+        api={api}
+        bootstrap={bootstrap}
+        catalog={catalog}
+        connected
+        initialContext={{ serviceMeaning: 'actual-now', spatialView: 'schematic', viewport: { centerX: 40.7, centerY: -74, zoom: 1 } }}
+        onContextChange={vi.fn()}
+        onActivateTrip={vi.fn()}
+      />);
+
+      expect(await screen.findByText('Current service overlay could not be verified. Choose a reference pattern to continue.')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Actual now' })).toBeDisabled();
+      expect(within(screen.getByTestId('vector-network-map')).queryByText('Actual now')).not.toBeInTheDocument();
+      await waitFor(() => expect(screen.getByTestId('vector-network-map').querySelector('[data-map-feature="line-a"]')).toBeInTheDocument());
+      expect(within(screen.getByTestId('vector-network-map')).getByText('Subway reference — current overlay unavailable')).toBeInTheDocument();
+      expect(screen.getByTestId('vector-network-map').querySelector('[data-map-feature="line-a"]')).toHaveAttribute('data-state', 'reference');
+    },
+  );
+
+  test('resets to the NYC overview without claiming to locate the rider', async () => {
+    const onContextChange = vi.fn();
+    render(<MapView
+      api={mapApi()}
+      bootstrap={bootstrap}
+      catalog={catalog}
+      connected
+      initialContext={{ serviceMeaning: 'typical-weekday', spatialView: 'geographic', viewport: { centerX: 40.81, centerY: -73.91, zoom: 3 } }}
+      onContextChange={onContextChange}
+      onActivateTrip={vi.fn()}
+    />);
+
+    await waitFor(() => expect(screen.getByTestId('vector-network-map').querySelector('[data-map-feature="line-a"]')).toBeInTheDocument());
+    expect(screen.queryByRole('button', { name: 'Center on me' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Reset to NYC overview' }));
+
+    expect(onContextChange).toHaveBeenLastCalledWith(expect.objectContaining({
+      serviceMeaning: 'typical-weekday',
+      spatialView: 'geographic',
+      viewport: { centerX: 40.7128, centerY: -74.006, zoom: 1 },
     }));
   });
 
@@ -137,8 +222,11 @@ describe('independent map service meaning', () => {
     />);
 
     expect(await screen.findByText('A retained historical service overlay is available, but it is hidden because it is not current.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Actual now' })).toBeDisabled();
     await waitFor(() => expect(screen.getByTestId('vector-network-map').querySelector('[data-map-feature="line-a"]')).toBeInTheDocument());
-    expect(screen.getByTestId('vector-network-map').querySelector('[data-map-feature="line-a"]')).toHaveAttribute('data-state', 'normal');
+    expect(screen.getByTestId('vector-network-map').querySelector('[data-map-feature="line-a"]')).toHaveAttribute('data-state', 'reference');
+    expect(within(screen.getByTestId('vector-network-map')).queryByText('Actual now')).not.toBeInTheDocument();
+    expect(within(screen.getByTestId('vector-network-map')).getByText('Subway reference — current overlay unavailable')).toBeInTheDocument();
   });
 });
 
@@ -325,6 +413,18 @@ function mapReference(theme: 'day' | 'night', featureId: string): MapReferenceEn
     data: {
       theme, contentVersion: theme === 'day' ? 'map-day-7' : 'map-night-7', attribution: 'Unofficial app-owned subway reference geometry',
       features: [{ id: featureId, kind: 'line', routeIds: ['A'], geometry: { type: 'LineString', coordinates: [[-74, 40.7], [-73.9, 40.8]] } }],
+    },
+  };
+}
+
+function currentOverlay() {
+  return {
+    ...dynamic,
+    cacheState: 'network' as const,
+    data: {
+      theme: 'day' as const,
+      serviceEpoch: 'epoch-current',
+      segments: [{ id: 'line-a', routeIds: ['A'], state: 'normal' as const, alertIds: [] }],
     },
   };
 }

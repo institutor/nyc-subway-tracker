@@ -1217,6 +1217,11 @@ select:disabled {
   stroke-dasharray: 8 18;
 }
 
+.network-map__feature--reference {
+  opacity: 0.68;
+  stroke-dasharray: 10 8;
+}
+
 .network-map figcaption {
   display: flex;
   flex-wrap: wrap;

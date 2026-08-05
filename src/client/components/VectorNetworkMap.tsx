@@ -48,7 +48,7 @@ function renderFeature(
 ) {
   const routeId = feature.routeIds[0] ?? '?';
   const color = routeColorFor({ id: routeId, label: routeId });
-  const state = overlay?.state ?? 'normal';
+  const state = overlay?.state ?? 'reference';
   if (feature.geometry.type === 'Point') {
     const [x, y] = project(feature.geometry.coordinates);
     return (
