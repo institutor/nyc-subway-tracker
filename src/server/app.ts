@@ -14,6 +14,7 @@ import {
   MAX_JSON_BYTES,
   methodNotAllowed,
   notFound,
+  requireOperationalJson,
   verifyStrictJson,
 } from './api/request-validation';
 
@@ -21,6 +22,7 @@ export function createApp(dependencies: AppDependencies) {
   const app = express();
   app.disable('x-powered-by');
   app.use(enforceUrlLimit);
+  app.use(requireOperationalJson);
   app.use(express.json({ limit: MAX_JSON_BYTES, strict: true, verify: verifyStrictJson }));
   app.get('/api/v1/bootstrap', bootstrapHandler(dependencies));
   app.get('/api/v1/stations/catalog/:contentVersion', catalogHandler(dependencies));

@@ -80,18 +80,22 @@ export function mapOverlayHandler(dependencies: AppDependencies) {
           })),
         })
       : deepFreeze({ theme, serviceEpoch: null, segments: [] });
+    const sourceHealth = toSourceHealthDtos(snapshot.sourceHealth);
+    const provenance = toProvenanceDtos(snapshot.provenance);
     sendNoStoreJson(response, 200, {
       apiVersion: API_VERSION,
       schemaVersion: SCHEMA_VERSION,
-      responseIdentity: createResponseIdentity(['map-overlay', theme, snapshot.identity, decidedAt, JSON.stringify(data)]),
+      responseIdentity: createResponseIdentity([
+        'map-overlay', theme, decidedAt, JSON.stringify(sourceHealth), JSON.stringify(provenance), JSON.stringify(data),
+      ]),
       decidedAt,
       serverTime: decidedAt,
       runtime: { mode: 'validation', surface: 'demonstration', availability: 'available' },
       gates: dependencies.exposure.public,
       gateDecision,
       demonstrationLabel: DEMONSTRATION_LABEL,
-      sourceHealth: toSourceHealthDtos(snapshot.sourceHealth),
-      provenance: toProvenanceDtos(snapshot.provenance),
+      sourceHealth,
+      provenance,
       data,
     });
   };

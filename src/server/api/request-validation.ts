@@ -24,6 +24,21 @@ export function enforceUrlLimit(request: Request, response: Response, next: Next
   next();
 }
 
+export function requireOperationalJson(request: Request, _response: Response, next: NextFunction): void {
+  const requiresJson = request.method === 'POST'
+    && (request.path === '/api/v1/nearby' || request.path === '/api/v1/journeys');
+  if (!requiresJson) {
+    next();
+    return;
+  }
+  const value = request.headers['content-type'];
+  if (typeof value !== 'string' || !isSupportedJsonMediaType(value)) {
+    next(new ApiRequestError(415, 'unsupported_media_type'));
+    return;
+  }
+  next();
+}
+
 export function verifyStrictJson(_request: Request, _response: Response, buffer: Buffer): void {
   assertNoDuplicateObjectKeys(new TextDecoder('utf-8', { fatal: true }).decode(buffer));
 }
@@ -46,6 +61,9 @@ export function parseApiIdentifier(value: unknown, label = 'identifier'): string
   try {
     const normalized = normalizeBoundedIdentity(value, label, 128);
     if (new TextEncoder().encode(normalized).byteLength > 128) throw new Error('byte limit');
+    if (!/^[A-Za-z0-9][A-Za-z0-9._:-]*$/u.test(normalized) || normalized.includes('..')) {
+      throw new Error('token shape');
+    }
     return normalized;
   } catch {
     throw new ApiRequestError(400);
@@ -136,6 +154,7 @@ export function createApiErrorHandler(logger: SafeLogger) {
     if (response.headersSent || response.destroyed) return;
     const shaped = error as { status?: unknown; type?: unknown };
     const status = error instanceof ApiRequestError ? error.status
+      : error instanceof URIError || shaped?.status === 400 ? 400
       : shaped?.type === 'entity.too.large' ? 413
         : shaped?.type === 'entity.parse.failed' || shaped?.type === 'entity.verify.failed' ? 400
           : shaped?.status === 415 ? 415 : 500;
@@ -148,6 +167,14 @@ export function createApiErrorHandler(logger: SafeLogger) {
       error: { code, message: status === 500 ? 'Request could not be completed.' : 'Request could not be processed.' },
     });
   };
+}
+
+function isSupportedJsonMediaType(value: string): boolean {
+  const parts = value.split(';').map((part) => part.trim());
+  if (parts.shift()?.toLocaleLowerCase('en-US') !== 'application/json') return false;
+  if (parts.length === 0) return true;
+  if (parts.length !== 1) return false;
+  return /^charset\s*=\s*(?:utf-8|"utf-8")$/iu.test(parts[0]);
 }
 
 function parseLimit(value: string): number {

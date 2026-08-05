@@ -4,7 +4,7 @@ import { rankNearbyStations } from '../../shared/domain/station-ranking';
 import { API_VERSION, DEMONSTRATION_LABEL, SCHEMA_VERSION } from '../api/contracts';
 import { captureDecisionSnapshot } from '../api/decision-snapshot';
 import { sendNoStoreJson } from '../api/http';
-import { toProvenanceDtos, toSourceHealthDtos } from '../api/provenance-dto';
+import { projectPublicSource, toProvenanceDtos, toSourceHealthDtos } from '../api/provenance-dto';
 import { createResponseIdentity } from '../api/response-identity';
 import type { AppDependencies } from '../bootstrap';
 import type { PracticalWalkDecision } from '../walk/practical-walk-adapter';
@@ -68,11 +68,14 @@ export function nearbyHandler(dependencies: AppDependencies) {
         locationAccuracyMeters: parsed.accuracyMeters,
       });
       const practicalWalkEvidence = toPracticalWalkEvidence(walk);
+      const sourceHealth = toSourceHealthDtos(snapshot.sourceHealth);
+      const provenance = toProvenanceDtos(snapshot.provenance);
       sendNoStoreJson(response, 200, {
         apiVersion: API_VERSION,
         schemaVersion: SCHEMA_VERSION,
         responseIdentity: createResponseIdentity([
-          'nearby', snapshot.identity, decidedAt, JSON.stringify(practicalWalkEvidence), JSON.stringify(data),
+          'nearby', decidedAt, JSON.stringify(sourceHealth), JSON.stringify(provenance),
+          JSON.stringify(practicalWalkEvidence), JSON.stringify(data),
         ]),
         decidedAt,
         serverTime: decidedAt,
@@ -80,8 +83,8 @@ export function nearbyHandler(dependencies: AppDependencies) {
         gates: dependencies.exposure.public,
         gateDecision: dependencies.exposure.public['nearby-offline'],
         demonstrationLabel: DEMONSTRATION_LABEL,
-        sourceHealth: toSourceHealthDtos(snapshot.sourceHealth),
-        provenance: toProvenanceDtos(snapshot.provenance),
+        sourceHealth,
+        provenance,
         practicalWalkEvidence,
         data,
       });
@@ -92,20 +95,27 @@ export function nearbyHandler(dependencies: AppDependencies) {
 }
 
 function toPracticalWalkEvidence(walk: PracticalWalkDecision) {
-  if (walk.kind === 'unavailable') return Object.freeze({ kind: walk.kind, reason: walk.reason });
-  const coverage = walk.coverage.kind === 'complete-universe'
-    ? Object.freeze({ kind: walk.coverage.kind })
+  if (walk.kind === 'unavailable') {
+    const reasons = ['disabled', 'unapproved', 'unsupported', 'limit', 'cancelled', 'timeout', 'invalid', 'incomplete'];
+    const reason = reasons.includes(walk.reason) ? walk.reason : 'invalid';
+    return Object.freeze({ kind: walk.kind, reason });
+  }
+  const coverageKind = walk.coverage?.kind;
+  if (coverageKind !== 'complete-universe' && coverageKind !== 'certified-third-card-cutoff') {
+    return Object.freeze({ kind: 'unavailable' as const, reason: 'invalid' as const });
+  }
+  const coverage = coverageKind === 'complete-universe'
+    ? Object.freeze({ kind: coverageKind })
     : Object.freeze({
-        kind: walk.coverage.kind,
-        consideredDestinationIds: Object.freeze([...walk.coverage.consideredDestinationIds]),
-        excludedDestinationIds: Object.freeze([...walk.coverage.excludedDestinationIds]),
+        kind: coverageKind,
+        consideredDestinationIds: Object.freeze([...walk.coverage.consideredDestinationIds].sort()),
+        excludedDestinationIds: Object.freeze([...walk.coverage.excludedDestinationIds].sort()),
         thirdCardMaximumSeconds: walk.coverage.thirdCardMaximumSeconds,
         excludedMinimumSeconds: walk.coverage.excludedMinimumSeconds,
       });
   return Object.freeze({
     kind: walk.kind,
-    source: walk.source,
-    sourceId: walk.sourceId,
+    ...projectPublicSource('practical-walk', 'practical-walk'),
     coverage,
   });
 }

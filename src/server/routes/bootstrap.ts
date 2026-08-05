@@ -33,11 +33,14 @@ export function bootstrapHandler(dependencies: AppDependencies) {
         night: dependencies.maps.get('night').contentVersion,
       },
     };
+    const sourceHealth = toSourceHealthDtos(snapshot.sourceHealth);
+    const provenance = toProvenanceDtos(snapshot.provenance);
     const body: DynamicEnvelope<BootstrapData> = {
       apiVersion: API_VERSION,
       schemaVersion: SCHEMA_VERSION,
       responseIdentity: createResponseIdentity([
-        'bootstrap', dependencies.config.mode, snapshot.identity, decidedAt, JSON.stringify(contentVersions),
+        'bootstrap', dependencies.config.mode, decidedAt, JSON.stringify(contentVersions),
+        JSON.stringify(sourceHealth), JSON.stringify(provenance),
       ]),
       decidedAt,
       serverTime: decidedAt,
@@ -47,8 +50,8 @@ export function bootstrapHandler(dependencies: AppDependencies) {
         availability: 'available',
       },
       gates: dependencies.exposure.public,
-      sourceHealth: toSourceHealthDtos(snapshot.sourceHealth),
-      provenance: toProvenanceDtos(snapshot.provenance),
+      sourceHealth,
+      provenance,
       ...(validation ? { demonstrationLabel: DEMONSTRATION_LABEL } : {}),
       data: { productName: 'NYC Subway Tracker', unofficial: true, contentVersions },
     };

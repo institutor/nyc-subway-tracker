@@ -11,7 +11,7 @@ import { parseStatusRequest } from '../api/request-validation';
 
 export function statusHandler(dependencies: AppDependencies) {
   return (request: Request, response: Response): void => {
-    const { stationId, direction } = parseStatusRequest(request);
+    const { stationId, routeIds, direction } = parseStatusRequest(request);
     const decidedAt = captureNow(dependencies).toISOString();
     const gateDecision = dependencies.exposure.public['arrival-boards'];
     if (dependencies.config.mode !== 'validation') {
@@ -30,11 +30,11 @@ export function statusHandler(dependencies: AppDependencies) {
     }
     const snapshot = captureDecisionSnapshot(dependencies.snapshotProvider);
     const boards = (snapshot.boards ?? []).map(({ decision }) => decision);
-    const data = buildStatusDto(boards, stationId, direction, snapshot.sourceHealth, snapshot.provenance);
+    const data = buildStatusDto(boards, stationId, routeIds, direction, snapshot.sourceHealth, snapshot.provenance);
     sendNoStoreJson(response, 200, {
       apiVersion: API_VERSION,
       schemaVersion: SCHEMA_VERSION,
-      responseIdentity: createResponseIdentity(['status', snapshot.identity, stationId ?? '', direction ?? '', decidedAt, JSON.stringify(data)]),
+      responseIdentity: createResponseIdentity(['status', stationId ?? '', routeIds.join(','), direction ?? '', decidedAt, JSON.stringify(data)]),
       decidedAt,
       serverTime: decidedAt,
       runtime: { mode: 'validation', surface: 'demonstration', availability: 'available' },

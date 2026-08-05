@@ -34,16 +34,19 @@ export function boardHandler(dependencies: AppDependencies) {
     const data = selected
       ? buildBoardDto(selected.decision, selected.validThrough, filters, snapshot.sourceHealth, snapshot.provenance)
       : {
-          mode: 'demonstration' as const,
+          mode: 'unavailable' as const,
+          station: null,
           directions: Object.freeze([]),
           alerts: Object.freeze([]),
+          explanations: Object.freeze([{ code: 'BOARD_UNAVAILABLE', message: 'Arrival information is unavailable.' }]),
           sourceHealth: toSourceHealthDtos(snapshot.sourceHealth),
           provenance: toProvenanceDtos(snapshot.provenance),
+          capabilities: Object.freeze({ arrivals: 'unavailable', accessibility: 'locked', guidance: 'locked', commute: 'locked' }),
         };
     sendNoStoreJson(response, 200, {
       apiVersion: API_VERSION,
       schemaVersion: SCHEMA_VERSION,
-      responseIdentity: createResponseIdentity(['board', snapshot.identity, filters.stationId, filters.direction ?? '', filters.routeIds.join(','), decidedAt, JSON.stringify(data)]),
+      responseIdentity: createResponseIdentity(['board', filters.stationId, filters.direction ?? '', filters.routeIds.join(','), decidedAt, JSON.stringify(data)]),
       decidedAt,
       serverTime: decidedAt,
       runtime: { mode: 'validation', surface: 'demonstration', availability: 'available' },

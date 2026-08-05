@@ -39,11 +39,14 @@ export function journeyHandler(dependencies: AppDependencies) {
     const decidedAt = captureNow(dependencies).toISOString();
     const snapshot = captureDecisionSnapshot(dependencies.snapshotProvider);
     const data = planJourney(snapshot.journeyGraph, query);
+    const sourceHealth = toSourceHealthDtos(snapshot.sourceHealth);
+    const provenance = toProvenanceDtos(snapshot.provenance);
     sendNoStoreJson(response, 200, {
       apiVersion: API_VERSION,
       schemaVersion: SCHEMA_VERSION,
       responseIdentity: createResponseIdentity([
-        'journey', snapshot.identity, query.mode, query.originStationId, query.destinationStationId, decidedAt, JSON.stringify(data),
+        'journey', query.mode, query.originStationId, query.destinationStationId, decidedAt,
+        JSON.stringify(sourceHealth), JSON.stringify(provenance), JSON.stringify(data),
       ]),
       decidedAt,
       serverTime: decidedAt,
@@ -51,8 +54,8 @@ export function journeyHandler(dependencies: AppDependencies) {
       gates: dependencies.exposure.public,
       gateDecision: dependencies.exposure.public['nearby-offline'],
       demonstrationLabel: DEMONSTRATION_LABEL,
-      sourceHealth: toSourceHealthDtos(snapshot.sourceHealth),
-      provenance: toProvenanceDtos(snapshot.provenance),
+      sourceHealth,
+      provenance,
       data,
     });
   };

@@ -1,8 +1,10 @@
 import type {
-  Alert, Arrival, BoardDecision, BoardDirection, BoardExplanation, FeedHealth, Provenance, SecondaryArrival,
+  Alert, Arrival, BoardDecision, BoardDirection, BoardExplanation, Provenance, SecondaryArrival, Station,
 } from '../../shared/domain/types';
+import { compareCanonicalIdentity } from '../../shared/domain/canonical';
+import { sanitizeOfficialText } from '../../shared/domain/alert-scope';
 import { DEMONSTRATION_LABEL } from '../api/contracts';
-import { toProvenanceDtos, toSourceHealthDtos } from '../api/provenance-dto';
+import { projectPublicProvenance, toProvenanceDtos, toSourceHealthDtos } from '../api/provenance-dto';
 import type { SnapshotProvenance, SnapshotSourceHealth } from '../api/decision-snapshot';
 
 export interface BoardFilters {
@@ -21,7 +23,7 @@ export function buildBoardDto(
   const directions = board.directions
     .filter((value) => filters.direction === undefined || value.direction === filters.direction)
     .map((value) => mapDirection(value, validUntil, filters.routeIds));
-  const alerts = relevantAlerts(board.alerts, board.station.id, filters.direction).map(mapAlert);
+  const alerts = projectAlerts(relevantAlerts(board.alerts, board.station, filters.direction));
   return deepFreeze({
     station: {
       id: board.station.id,
@@ -29,7 +31,7 @@ export function buildBoardDto(
       complexId: board.station.complexId,
       routeIds: [...board.station.routeIds],
     },
-    mode: 'demonstration' as const,
+    mode: board.mode,
     directions,
     alerts,
     explanations: board.explanations.map(mapExplanation),
@@ -42,15 +44,19 @@ export function buildBoardDto(
 export function buildStatusDto(
   boards: readonly BoardDecision[],
   stationId: string | undefined,
+  routeIds: readonly string[],
   direction: string | undefined,
   sourceHealth: readonly SnapshotSourceHealth[],
   provenance: readonly SnapshotProvenance[],
 ) {
   const selected = stationId === undefined ? boards : boards.filter((board) => board.station.id === stationId);
-  const alerts = selected.flatMap((board) => relevantAlerts(board.alerts, board.station.id, direction));
-  const unique = [...new Map(alerts.map((alert) => [alert.id, alert])).values()].map(mapAlert);
+  const alerts = selected.flatMap((board) => relevantAlerts(board.alerts, board.station, direction));
+  const scoped = stationId === undefined && routeIds.length > 0
+    ? alerts.filter((alert) => alert.stationIds.length === 0
+      && (alert.routeIds.length === 0 || alert.routeIds.some((routeId) => routeIds.includes(routeId))))
+    : alerts;
   return deepFreeze({
-    alerts: unique,
+    alerts: projectAlerts(scoped),
     sourceHealth: toSourceHealthDtos(sourceHealth),
     provenance: toProvenanceDtos(provenance),
     explanations: selected.flatMap((board) => board.explanations.map(mapExplanation)),
@@ -91,13 +97,17 @@ function mapArrival(row: Arrival | SecondaryArrival, validThrough: string) {
   if (row.kind === 'holding') return {
     ...base, displayAuthority: 'status-only' as const, lastSupportedAt: dateIso(row.lastSupportedAt),
   };
-  return { ...base, displayAuthority: 'status-only' as const, reason: row.reason };
+  return {
+    ...base,
+    displayAuthority: 'status-only' as const,
+    reason: publicPlainText(row.reason, 'Arrival confidence is unavailable.'),
+  };
 }
 
 function mapAlert(alert: Alert) {
   return {
     id: alert.id,
-    text: alert.text,
+    text: publicPlainText(alert.text, 'Service information is unavailable.'),
     activeFrom: dateIso(alert.activeFrom),
     ...(alert.activeUntil === undefined ? {} : { activeUntil: dateIso(alert.activeUntil) }),
     routeIds: [...alert.routeIds],
@@ -108,28 +118,39 @@ function mapAlert(alert: Alert) {
   };
 }
 
-function relevantAlerts(alerts: readonly Alert[], stationId: string, direction?: string): Alert[] {
+function relevantAlerts(alerts: readonly Alert[], station: Station, direction?: string): Alert[] {
   return alerts.filter((alert) =>
-    (alert.stationIds.length === 0 || alert.stationIds.includes(stationId))
+    (alert.stationIds.length > 0
+      ? alert.stationIds.includes(station.id)
+      : alert.routeIds.length === 0 || alert.routeIds.some((routeId) => station.routeIds.includes(routeId)))
     && (direction === undefined || alert.directions.length === 0 || alert.directions.includes(direction as Alert['directions'][number])));
+}
+
+function projectAlerts(alerts: readonly Alert[]) {
+  const byId = new Map<string, { dto: ReturnType<typeof mapAlert>; fingerprint: string; conflicted: boolean }>();
+  for (const alert of alerts) {
+    const dto = mapAlert(alert);
+    const fingerprint = JSON.stringify(dto);
+    const existing = byId.get(alert.id);
+    if (!existing) byId.set(alert.id, { dto, fingerprint, conflicted: false });
+    else if (existing.fingerprint !== fingerprint) existing.conflicted = true;
+  }
+  return [...byId.entries()]
+    .filter(([, value]) => !value.conflicted)
+    .sort(([left], [right]) => compareCanonicalIdentity(left, right))
+    .map(([, value]) => value.dto);
 }
 
 function mapExplanation(explanation: BoardExplanation) {
   return {
     code: explanation.code,
-    message: explanation.message,
+    message: publicPlainText(explanation.message, 'Additional service context is unavailable.'),
     ...(explanation.provenance === undefined ? {} : { provenance: mapDomainProvenance(explanation.provenance) }),
   };
 }
 
 function mapDomainProvenance(value: Provenance) {
-  return {
-    source: value.source,
-    sourceId: value.sourceId,
-    observedAt: dateIso(value.observedAt),
-    retrievedAt: dateIso(value.retrievedAt),
-    ...(value.version === undefined ? {} : { version: value.version }),
-  };
+  return projectPublicProvenance(value);
 }
 
 function dateIso(value: Date): string {
@@ -142,6 +163,13 @@ function isoString(value: string): string {
   const date = new Date(value);
   if (!Number.isFinite(date.getTime()) || date.toISOString() !== value) throw new Error('Invalid response validity');
   return value;
+}
+
+function publicPlainText(value: unknown, fallback: string): string {
+  if (typeof value !== 'string') return fallback;
+  const sanitized = sanitizeOfficialText(value);
+  if (sanitized.length === 0) return fallback;
+  return [...sanitized].slice(0, 2_048).join('');
 }
 
 function deepFreeze<T>(value: T): T {

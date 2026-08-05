@@ -29,11 +29,11 @@ const catalogFixture = {
 const nearbySnapshot = {
   identity: 'snapshot-nearby-1',
   sourceHealth: [{
-    source: 'gtfs-rt', sourceId: 'subway-ace', state: 'current',
+    source: 'gtfs-rt', sourceId: 'subway-rt-ace', state: 'current',
     assessedAt: '2026-08-04T11:59:58.000Z', lastAcceptedAt: '2026-08-04T11:59:58.000Z',
   }],
   provenance: [{
-    source: 'gtfs-rt', sourceId: 'subway-ace', observedAt: '2026-08-04T11:59:58.000Z',
+    source: 'gtfs-rt', sourceId: 'subway-rt-ace', observedAt: '2026-08-04T11:59:58.000Z',
     retrievedAt: '2026-08-04T11:59:59.000Z', version: 'feed-7',
   }],
   nearby: {
@@ -82,7 +82,7 @@ const boardDecision = {
           id: 'train-a', kind: 'live', route: { id: 'A', label: 'A' }, direction: 'northbound',
           destination: 'Inwood–207 St', at: new Date('2026-08-04T12:03:00.000Z'),
           provenance: {
-            source: 'gtfs-rt', sourceId: 'subway-ace', observedAt: new Date('2026-08-04T11:59:58.000Z'),
+            source: 'gtfs-rt', sourceId: 'subway-rt-ace', observedAt: new Date('2026-08-04T11:59:58.000Z'),
             retrievedAt: new Date('2026-08-04T11:59:59.000Z'), version: 'feed-7',
           },
         },
@@ -91,7 +91,7 @@ const boardDecision = {
           destination: '168 St', estimateAt: new Date('2026-08-04T12:06:00.000Z'),
           range: { startsAt: new Date('2026-08-04T12:05:00.000Z'), endsAt: new Date('2026-08-04T12:07:00.000Z') },
           provenance: {
-            source: 'gtfs-rt', sourceId: 'subway-ace', observedAt: new Date('2026-08-04T11:59:58.000Z'),
+            source: 'gtfs-rt', sourceId: 'subway-rt-ace', observedAt: new Date('2026-08-04T11:59:58.000Z'),
             retrievedAt: new Date('2026-08-04T11:59:59.000Z'), version: 'feed-7',
           },
         },
@@ -101,7 +101,7 @@ const boardDecision = {
           id: 'train-hold', kind: 'holding', route: { id: 'A', label: 'A' }, direction: 'northbound',
           destination: 'Inwood–207 St', lastSupportedAt: new Date('2026-08-04T11:58:30.000Z'),
           provenance: {
-            source: 'gtfs-rt', sourceId: 'subway-ace', observedAt: new Date('2026-08-04T11:59:58.000Z'),
+            source: 'gtfs-rt', sourceId: 'subway-rt-ace', observedAt: new Date('2026-08-04T11:59:58.000Z'),
             retrievedAt: new Date('2026-08-04T11:59:59.000Z'), version: 'feed-7',
           },
         },
@@ -109,7 +109,7 @@ const boardDecision = {
           id: 'train-uncertain', kind: 'uncertain', route: { id: 'C', label: 'C' }, direction: 'northbound',
           destination: '168 St', reason: 'Movement is not confirmed.',
           provenance: {
-            source: 'gtfs-rt', sourceId: 'subway-ace', observedAt: new Date('2026-08-04T11:59:58.000Z'),
+            source: 'gtfs-rt', sourceId: 'subway-rt-ace', observedAt: new Date('2026-08-04T11:59:58.000Z'),
             retrievedAt: new Date('2026-08-04T11:59:59.000Z'), version: 'feed-7',
           },
         },
@@ -122,7 +122,7 @@ const boardDecision = {
         id: 'train-a-s', kind: 'live', route: { id: 'A', label: 'A' }, direction: 'southbound',
         destination: 'Far Rockaway', at: new Date('2026-08-04T12:04:00.000Z'),
         provenance: {
-          source: 'gtfs-rt', sourceId: 'subway-ace', observedAt: new Date('2026-08-04T11:59:58.000Z'),
+          source: 'gtfs-rt', sourceId: 'subway-rt-ace', observedAt: new Date('2026-08-04T11:59:58.000Z'),
           retrievedAt: new Date('2026-08-04T11:59:59.000Z'), version: 'feed-7',
         },
       }],
@@ -260,7 +260,7 @@ describe('versioned subway API', () => {
         demonstrationLabel: 'Demonstration data — not live',
         gateDecision: { exposed: false, reasonCode: 'GATE_0_NOT_PASSED' },
         data: {
-          mode: 'demonstration',
+          mode: 'unavailable',
           directions: [],
           alerts: [],
           sourceHealth: [],
@@ -392,8 +392,8 @@ describe('versioned subway API', () => {
       expect(body).toMatchObject({
         runtime: { mode: 'validation', surface: 'demonstration', availability: 'available' },
         demonstrationLabel: 'Demonstration data — not live',
-        sourceHealth: [{ sourceId: 'subway-ace', state: 'current' }],
-        provenance: [{ source: 'gtfs-rt', sourceId: 'subway-ace', version: 'feed-7' }],
+        sourceHealth: [{ sourceId: 'mta-realtime-ace', state: 'current', reasonCode: 'SOURCE_CURRENT' }],
+        provenance: [{ source: 'gtfs-rt', sourceId: 'mta-realtime-ace' }],
         data: { kind: 'ranked', cards: [{ complexId: 'R20' }, { complexId: 'A12' }] },
       });
       expect(walk).toHaveBeenCalledTimes(1);
@@ -429,6 +429,42 @@ describe('versioned subway API', () => {
           picker: { required: true, bottomAnchored: true },
         },
       });
+    });
+  });
+
+  test('preserves allowlisted certified third-card completeness evidence with a fixed walk handle', async () => {
+    const dependencies = createProductionDependencies({
+      dataDirectory: '.data-test-do-not-read', mode: 'validation', sources: {},
+    }, {
+      clock: createFixedClock(DECIDED_AT), nearbyUniverse,
+      walk: async () => ({
+        kind: 'available', source: 'practical-walk', sourceId: 'https://secret.example/provider-token',
+        coverage: {
+          kind: 'certified-third-card-cutoff',
+          consideredDestinationIds: ['entrance-a12', 'entrance-r20'], excludedDestinationIds: [],
+          thirdCardMaximumSeconds: 200, excludedMinimumSeconds: 300,
+        },
+        results: [
+          { destinationId: 'entrance-a12', range: { minimumSeconds: 150, maximumSeconds: 170 } },
+          { destinationId: 'entrance-r20', range: { minimumSeconds: 100, maximumSeconds: 120 } },
+        ],
+      }),
+      snapshotProvider: { capture: () => nearbySnapshot },
+    });
+    await withApi(createApp(dependencies), async ({ request }) => {
+      const body = await (await request('/api/v1/nearby', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ location: { latitude: 40.7, longitude: -74, accuracyMeters: 12 }, accessibleRouteOnly: false }),
+      })).json();
+      expect(body.practicalWalkEvidence).toEqual({
+        kind: 'available', source: 'practical-walk', sourceId: 'audited-practical-walk',
+        coverage: {
+          kind: 'certified-third-card-cutoff',
+          consideredDestinationIds: ['entrance-a12', 'entrance-r20'], excludedDestinationIds: [],
+          thirdCardMaximumSeconds: 200, excludedMinimumSeconds: 300,
+        },
+      });
+      expect(JSON.stringify(body)).not.toMatch(/secret\.example|provider-token/);
     });
   });
 
@@ -471,7 +507,7 @@ describe('versioned subway API', () => {
         demonstrationLabel: 'Demonstration data — not live',
         data: {
           station: { id: 'A12', name: '125 St', routeIds: ['A', 'C'] },
-          mode: 'demonstration',
+          mode: 'live',
           directions: [{
             direction: 'northbound',
             primary: [
@@ -496,6 +532,50 @@ describe('versioned subway API', () => {
     });
   });
 
+  test('preserves live, scheduled-fallback, and unavailable board truth beneath the demonstration surface', async () => {
+    for (const mode of ['live', 'scheduled-fallback', 'unavailable'] as const) {
+      const snapshot = structuredClone(operationalSnapshot) as any;
+      snapshot.boards[0].decision.mode = mode;
+      if (mode === 'scheduled-fallback') {
+        snapshot.boards[0].decision.directions = [{
+          direction: 'northbound',
+          primary: [{
+            id: 'scheduled-a', kind: 'scheduled', route: { id: 'A', label: 'A' }, direction: 'northbound',
+            destination: 'Inwoodâ€“207 St', at: new Date('2026-08-04T12:08:00.000Z'), serviceDate: '2026-08-04',
+            provenance: boardDecision.directions[0].primary[0].provenance,
+          }],
+          secondary: [], explanations: [],
+        }];
+      }
+      if (mode === 'unavailable') snapshot.boards[0].decision.directions = [];
+      const dependencies = createProductionDependencies({
+        dataDirectory: '.data-test-do-not-read', mode: 'validation', sources: {},
+      }, { clock: createFixedClock(DECIDED_AT), snapshotProvider: { capture: () => snapshot } });
+
+      await withApi(createApp(dependencies), async ({ request }) => {
+        const body = await (await request('/api/v1/stations/A12/board')).json();
+        expect(body.runtime).toEqual({ mode: 'validation', surface: 'demonstration', availability: 'available' });
+        expect(body.demonstrationLabel).toBe('Demonstration data — not live');
+        expect(body.gateDecision.exposed).toBe(false);
+        expect(body.data.mode).toBe(mode);
+        for (const direction of body.data.directions) {
+          for (const row of [...direction.primary, ...direction.secondary]) {
+            expect(row.demonstrationLabel).toBe('Demonstration data — not live');
+          }
+        }
+        for (const alert of body.data.alerts) expect(alert.demonstrationLabel).toBe('Demonstration data — not live');
+      });
+    }
+
+    const missing = createProductionDependencies({
+      dataDirectory: '.data-test-do-not-read', mode: 'validation', sources: {},
+    }, { clock: createFixedClock(DECIDED_AT), snapshotProvider: { capture: () => nearbySnapshot } });
+    await withApi(createApp(missing), async ({ request }) => {
+      const body = await (await request('/api/v1/stations/A12/board')).json();
+      expect(body.data).toMatchObject({ mode: 'unavailable', directions: [], alerts: [] });
+    });
+  });
+
   test('applies exact board row filters without hiding relevant disruption warnings', async () => {
     const dependencies = createProductionDependencies({
       dataDirectory: '.data-test-do-not-read', mode: 'validation', sources: {},
@@ -508,6 +588,41 @@ describe('versioned subway API', () => {
       expect(body.data.directions[0].primary.map((row: { route: { id: string } }) => row.route.id)).toEqual(['C']);
       expect(body.data.directions[0].secondary.map((row: { route: { id: string } }) => row.route.id)).toEqual(['C']);
       expect(body.data.alerts).toMatchObject([{ id: 'alert-a-north', routeIds: ['A'] }]);
+    });
+  });
+
+  test('scopes board and status alerts by the selected station service before row filters', async () => {
+    const alert = (id: string, routeIds: string[], stationIds: string[], text = id) => ({
+      id, text, activeFrom: new Date('2026-08-04T11:45:00.000Z'), routeIds, stationIds,
+      directions: ['northbound'], provenance: boardDecision.alerts[0].provenance,
+    });
+    const scoped = structuredClone(operationalSnapshot) as any;
+    scoped.boards[0].decision.alerts = [
+      alert('route-7-only', ['7'], []),
+      alert('route-a', ['A'], []),
+      alert('station-wide', [], ['A12']),
+      alert('route-c-station', ['C'], ['A12']),
+      alert('systemwide', [], []),
+      alert('conflict', ['A'], [], 'first'),
+      alert('conflict', ['A'], [], 'different'),
+    ];
+    const dependencies = createProductionDependencies({
+      dataDirectory: '.data-test-do-not-read', mode: 'validation', sources: {},
+    }, { clock: createFixedClock(DECIDED_AT), snapshotProvider: { capture: () => scoped } });
+
+    await withApi(createApp(dependencies), async ({ request }) => {
+      const board = await (await request('/api/v1/stations/A12/board?routes=A&direction=northbound')).json();
+      expect(board.data.alerts.map(({ id }: { id: string }) => id)).toEqual([
+        'route-a', 'route-c-station', 'station-wide', 'systemwide',
+      ]);
+
+      const routeStatus = await (await request('/api/v1/status?routes=A&direction=northbound')).json();
+      expect(routeStatus.data.alerts.map(({ id }: { id: string }) => id)).toEqual(['route-a', 'systemwide']);
+
+      const stationStatus = await (await request('/api/v1/status?stationId=A12&routes=A&direction=northbound')).json();
+      expect(stationStatus.data.alerts.map(({ id }: { id: string }) => id)).toEqual([
+        'route-a', 'route-c-station', 'station-wide', 'systemwide',
+      ]);
     });
   });
 
@@ -733,6 +848,80 @@ describe('versioned subway API', () => {
     });
   });
 
+  test('rejects malformed, encoded structural, traversal, and double-encoded path tokens on loopback', async () => {
+    const log = vi.fn();
+    const dependencies = createProductionDependencies({
+      dataDirectory: '.data-test-do-not-read', mode: 'validation', sources: {},
+    }, { clock: createFixedClock(DECIDED_AT), logger: { log }, snapshotProvider: { capture: () => operationalSnapshot } });
+    await withApi(createApp(dependencies), async ({ rawRequest }) => {
+      const hostilePaths = [
+        '/api/v1/stations/%E0%A4%A/board',
+        '/api/v1/stations/A%2F12/board',
+        '/api/v1/stations/A%5C12/board',
+        '/api/v1/stations/A%2512/board',
+        '/api/v1/stations/A%3F12/board',
+        '/api/v1/stations/A%2312/board',
+        '/api/v1/stations/%2E/board',
+        '/api/v1/stations/%2E%2E/board',
+        '/api/v1/stations/%252E%252E/board',
+      ];
+      for (const path of hostilePaths) {
+        const response = await rawRequest(path);
+        expect(response.status, path).toBe(400);
+        expect(response.headers.get('cache-control'), path).toBe('no-store');
+        expect(await response.json(), path).toEqual({
+          error: { code: 'invalid_request', message: 'Request could not be processed.' },
+        });
+      }
+
+      for (const path of ['/api/v1/stations/A12/board', '/api/v1/stations/R20N/board']) {
+        expect((await rawRequest(path)).status, path).toBe(200);
+      }
+      expect(JSON.stringify(log.mock.calls)).not.toMatch(/%E0|%2F|%5C|%25|%3F|%23|\.\.|A12|R20N/i);
+    });
+  });
+
+  test('requires UTF-8 JSON media types before POST parsing or locked handling', async () => {
+    const log = vi.fn();
+    const dependencies = createProductionDependencies({
+      dataDirectory: '.data-test-do-not-read', mode: 'live', sources: {},
+    }, { clock: createFixedClock(DECIDED_AT), logger: { log } });
+    const nearbyBody = JSON.stringify({
+      location: { latitude: 40.700123, longitude: -74.000456, accuracyMeters: 12 }, accessibleRouteOnly: false,
+    });
+    const journeyBody = JSON.stringify({
+      mode: 'online-current', originStationId: 'A12', destinationStationId: 'A15',
+      requiredFirstDirection: 'northbound', requiredActualDestination: 'credential-token-destination',
+      accessibleRouteOnly: false,
+    });
+    await withApi(createApp(dependencies), async ({ rawRequest }) => {
+      const cases = [
+        ['/api/v1/nearby', nearbyBody, undefined],
+        ['/api/v1/nearby', nearbyBody, 'text/plain'],
+        ['/api/v1/nearby', nearbyBody, 'application/json; charset=iso-8859-1'],
+        ['/api/v1/journeys', journeyBody, undefined],
+        ['/api/v1/journeys', journeyBody, 'text/plain; charset=utf-8'],
+      ] as const;
+      for (const [path, body, contentType] of cases) {
+        const response = await rawRequest(path, {
+          method: 'POST', body, headers: contentType === undefined ? {} : { 'content-type': contentType },
+        });
+        expect(response.status, `${path} ${contentType ?? 'missing'}`).toBe(415);
+        expect(response.headers.get('cache-control')).toBe('no-store');
+        expect(await response.json()).toEqual({
+          error: { code: 'unsupported_media_type', message: 'Request could not be processed.' },
+        });
+      }
+
+      const valid = await rawRequest('/api/v1/nearby', {
+        method: 'POST', body: nearbyBody, headers: { 'content-type': 'application/json; charset=UTF-8' },
+      });
+      expect(valid.status).toBe(200);
+      expect((await valid.json()).runtime).toMatchObject({ mode: 'live', availability: 'locked' });
+      expect(JSON.stringify(log.mock.calls)).not.toMatch(/40\.700123|-74\.000456|credential-token-destination|A12|A15/i);
+    });
+  });
+
   test('returns JSON no-store 404/405 responses and exposes no server rider-state mutation endpoint', async () => {
     const dependencies = createProductionDependencies({
       dataDirectory: '.data-test-do-not-read', mode: 'live', sources: {},
@@ -852,6 +1041,141 @@ describe('versioned subway API', () => {
     });
   });
 
+  test('projects provenance values to fixed public handles without secret fingerprints', async () => {
+    const run = async (marker: 'alpha' | 'beta') => {
+      const secret = `https://user:token-${marker}@secret.example/40.700123/internal-version-${marker}`;
+      const hostile = structuredClone(operationalSnapshot) as any;
+      hostile.identity = secret;
+      hostile.sourceHealth[0].sourceId = secret;
+      hostile.sourceHealth[0].state = `state-${marker}`;
+      hostile.sourceHealth[0].reasonCode = secret;
+      hostile.provenance[0].sourceId = secret;
+      hostile.provenance[0].version = secret;
+      for (const direction of hostile.boards[0].decision.directions) {
+        for (const row of [...direction.primary, ...direction.secondary]) {
+          row.provenance.sourceId = secret;
+          row.provenance.version = secret;
+        }
+      }
+      hostile.boards[0].decision.directions[0].primary[0].provenance.sourceId = 'subway-rt-ace';
+      hostile.boards[0].decision.directions[0].secondary[0].provenance.source = secret;
+      hostile.boards[0].decision.alerts[0].provenance.sourceId = secret;
+      hostile.boards[0].decision.alerts[0].provenance.version = secret;
+      hostile.boards[0].decision.alerts[0].provenance.sourceId = 'subway-alerts';
+      hostile.boards[0].decision.explanations[0].provenance = {
+        source: secret, sourceId: secret,
+        observedAt: new Date('2026-08-04T11:59:00.000Z'),
+        retrievedAt: new Date('2026-08-04T11:59:30.000Z'), version: secret,
+      };
+      const log = vi.fn();
+      const dependencies = createProductionDependencies({
+        dataDirectory: '.data-test-do-not-read', mode: 'validation', sources: {},
+      }, {
+        clock: createFixedClock(DECIDED_AT), nearbyUniverse, logger: { log },
+        walk: async () => ({
+          kind: 'available', source: 'practical-walk', sourceId: secret,
+          coverage: { kind: 'complete-universe' },
+          results: [
+            { destinationId: 'entrance-a12', range: { minimumSeconds: 500, maximumSeconds: 520 } },
+            { destinationId: 'entrance-r20', range: { minimumSeconds: 100, maximumSeconds: 120 } },
+          ],
+        }),
+        snapshotProvider: { capture: () => hostile },
+      });
+      return withApi(createApp(dependencies), async ({ request }) => {
+        const board = await (await request('/api/v1/stations/A12/board')).json();
+        const nearby = await (await request('/api/v1/nearby', {
+          method: 'POST', headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ location: { latitude: 40.7, longitude: -74, accuracyMeters: 12 }, accessibleRouteOnly: false }),
+        })).json();
+        expect(JSON.stringify({ board, nearby, logs: log.mock.calls })).not.toMatch(
+          /secret\.example|token-(?:alpha|beta)|40\.700123|internal-version|state-(?:alpha|beta)/i,
+        );
+        expect(board.sourceHealth[0]).toMatchObject({
+          source: 'unavailable', sourceId: 'source-unavailable', state: 'unavailable', reasonCode: 'SOURCE_UNAVAILABLE',
+        });
+        expect(board.provenance[0]).toMatchObject({ source: 'unavailable', sourceId: 'source-unavailable' });
+        expect(board.data.directions[0].primary[0].provenance.sourceId).toBe('mta-realtime-ace');
+        expect(board.data.directions[0].secondary[0].provenance).toMatchObject({
+          source: 'unavailable', sourceId: 'source-unavailable',
+        });
+        expect(board.data.alerts[0].provenance.sourceId).toBe('mta-service-alerts');
+        expect(board.data.explanations[0].provenance).toMatchObject({
+          source: 'unavailable', sourceId: 'source-unavailable',
+        });
+        expect(nearby.practicalWalkEvidence).toEqual({
+          kind: 'available', source: 'practical-walk', sourceId: 'audited-practical-walk',
+          coverage: { kind: 'complete-universe' },
+        });
+        for (const body of [board, nearby]) walkObjects(body, (value) => expect(value).not.toHaveProperty('version'));
+        return { boardIdentity: board.responseIdentity, nearbyIdentity: nearby.responseIdentity };
+      });
+    };
+
+    const alpha = await run('alpha');
+    const beta = await run('beta');
+    expect(alpha).toEqual(beta);
+
+    const unsafeWalk = createProductionDependencies({
+      dataDirectory: '.data-test-do-not-read', mode: 'validation', sources: {},
+    }, {
+      clock: createFixedClock(DECIDED_AT), nearbyUniverse,
+      walk: async () => ({ kind: 'unavailable', reason: 'https://secret.example/token-gamma' } as any),
+      snapshotProvider: { capture: () => nearbySnapshot },
+    });
+    await withApi(createApp(unsafeWalk), async ({ request }) => {
+      const body = await (await request('/api/v1/nearby', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ location: { latitude: 40.7, longitude: -74, accuracyMeters: 12 }, accessibleRouteOnly: false }),
+      })).json();
+      expect(body.practicalWalkEvidence).toEqual({ kind: 'unavailable', reason: 'invalid' });
+      expect(JSON.stringify(body)).not.toMatch(/secret\.example|token-gamma/);
+    });
+  });
+
+  test('keeps registered realtime feed groups diagnostically distinct and fails unknown IDs closed', async () => {
+    const sourceHealth = ['subway-rt-bdfm', 'https://secret.example/token', 'subway-rt-ace'].map((sourceId) => ({
+      source: 'gtfs-rt', sourceId, state: 'current' as const,
+      assessedAt: '2026-08-04T11:59:58.000Z', lastAcceptedAt: '2026-08-04T11:59:58.000Z',
+    }));
+    const provenance = sourceHealth.map(({ source, sourceId }) => ({
+      source, sourceId, observedAt: '2026-08-04T11:59:58.000Z', retrievedAt: '2026-08-04T11:59:59.000Z',
+    }));
+    const dependencies = createProductionDependencies({
+      dataDirectory: '.data-test-do-not-read', mode: 'validation', sources: {},
+    }, {
+      clock: createFixedClock(DECIDED_AT),
+      snapshotProvider: { capture: () => ({ identity: 'registry-groups', sourceHealth, provenance }) },
+    });
+    await withApi(createApp(dependencies), async ({ request }) => {
+      const body = await (await request('/api/v1/bootstrap')).json();
+      expect(body.sourceHealth.map(({ sourceId }: { sourceId: string }) => sourceId)).toEqual([
+        'mta-realtime-ace', 'mta-realtime-bdfm', 'source-unavailable',
+      ]);
+      expect(body.provenance.map(({ sourceId }: { sourceId: string }) => sourceId)).toEqual([
+        'mta-realtime-ace', 'mta-realtime-bdfm', 'source-unavailable',
+      ]);
+      expect(JSON.stringify(body)).not.toMatch(/secret\.example|token/);
+    });
+  });
+
+  test('projects alert, explanation, and uncertain-reason copy as inert normalized plain text', async () => {
+    const hostile = structuredClone(operationalSnapshot) as any;
+    hostile.boards[0].decision.alerts[0].text = '<script>credential-token</script>A <b>trains</b>\n delayed.';
+    hostile.boards[0].decision.explanations[0].message = '<style>secret-style</style>Review <i>service</i>\u0000';
+    hostile.boards[0].decision.directions[0].secondary[1].reason = '<script>secret-reason</script>Movement <b>unknown</b>';
+    const dependencies = createProductionDependencies({
+      dataDirectory: '.data-test-do-not-read', mode: 'validation', sources: {},
+    }, { clock: createFixedClock(DECIDED_AT), snapshotProvider: { capture: () => hostile } });
+    await withApi(createApp(dependencies), async ({ request }) => {
+      const body = await (await request('/api/v1/stations/A12/board')).json();
+      expect(body.data.alerts[0].text).toBe('A trains delayed.');
+      expect(body.data.explanations[0].message).toBe('Review service');
+      expect(body.data.directions[0].secondary[1].reason).toBe('Movement unknown');
+      expect(JSON.stringify(body)).not.toMatch(/<|>|credential-token|secret-style|secret-reason|\\u0000/i);
+    });
+  });
+
   test.each(['live', 'shadow'] as const)('keeps every %s operational surface locked and non-public', async (mode) => {
     const dependencies = createProductionDependencies({
       dataDirectory: '.data-test-do-not-read', mode, sources: {},
@@ -910,14 +1234,14 @@ describe('versioned subway API', () => {
     const oldSnapshot: DecisionSnapshot = {
       ...nearbySnapshot,
       identity: 'snapshot-before-walk',
-      sourceHealth: [{ ...nearbySnapshot.sourceHealth[0], sourceId: 'source-before-walk' }],
-      provenance: [{ ...nearbySnapshot.provenance[0], sourceId: 'source-before-walk' }],
+      sourceHealth: [{ ...nearbySnapshot.sourceHealth[0], sourceId: 'subway-rt-ace' }],
+      provenance: [{ ...nearbySnapshot.provenance[0], sourceId: 'subway-rt-ace' }],
     };
     const newSnapshot: DecisionSnapshot = {
       ...nearbySnapshot,
       identity: 'snapshot-after-walk',
-      sourceHealth: [{ ...nearbySnapshot.sourceHealth[0], sourceId: 'source-after-walk' }],
-      provenance: [{ ...nearbySnapshot.provenance[0], sourceId: 'source-after-walk' }],
+      sourceHealth: [{ ...nearbySnapshot.sourceHealth[0], sourceId: 'subway-rt-bdfm' }],
+      provenance: [{ ...nearbySnapshot.provenance[0], sourceId: 'subway-rt-bdfm' }],
       nearby: {
         ...nearbySnapshot.nearby,
         complexes: nearbySnapshot.nearby.complexes.map((value) => value.id === 'R20'
@@ -962,24 +1286,24 @@ describe('versioned subway API', () => {
       expect(now).toHaveBeenCalledTimes(1);
       expect(capture).toHaveBeenCalledTimes(1);
       expect(body).toMatchObject({
-        sourceHealth: [{ sourceId: 'source-after-walk' }],
-        provenance: [{ sourceId: 'source-after-walk' }],
+        sourceHealth: [{ sourceId: 'mta-realtime-bdfm' }],
+        provenance: [{ sourceId: 'mta-realtime-bdfm' }],
         practicalWalkEvidence: {
           kind: 'available',
           source: 'practical-walk',
-          sourceId: 'audited-walk-v1',
+          sourceId: 'audited-practical-walk',
           coverage: { kind: 'complete-universe' },
         },
         data: { cards: expect.any(Array) },
       });
       expect(body.data.cards[0]).toMatchObject({ complexId: 'R20', complexName: 'Canal St — new epoch' });
-      expect(JSON.stringify(body)).not.toContain('source-before-walk');
+      expect(JSON.stringify(body)).not.toContain('mta-realtime-ace');
 
       events.length = 0;
       const bootstrap = await (await request('/api/v1/bootstrap')).json();
       expect(events).toEqual(['clock', 'capture']);
-      expect(bootstrap.sourceHealth).toMatchObject([{ sourceId: 'source-after-walk' }]);
-      expect(bootstrap.provenance).toMatchObject([{ sourceId: 'source-after-walk' }]);
+      expect(bootstrap.sourceHealth).toMatchObject([{ sourceId: 'mta-realtime-bdfm' }]);
+      expect(bootstrap.provenance).toMatchObject([{ sourceId: 'mta-realtime-bdfm' }]);
       expect(bootstrap.data.contentVersions).toEqual({
         stationCatalog: 'catalog-empty-v1',
         maps: { day: 'map-day-empty-v1', night: 'map-night-empty-v1' },
