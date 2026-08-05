@@ -121,7 +121,7 @@ export function createFailClosedReconnectionStage(
     stage: stage as 1 | 2 | 3 | 4,
     ownerGate,
     changedFact,
-    scopes: [warningScope(ownerGate.scopeMembership)],
+    scopes: warningScopes(ownerGate.scopeMembership),
     consequence,
     lastVerifiedDecisionPoint: state.context.manualCursor
       ? { id: state.context.manualCursor.stopId, label: `Stored trip point ${state.context.manualCursor.stopId}` }
@@ -219,13 +219,10 @@ function bindLocalAcceptance<T>(value: T, acceptedAt: string): T {
   return bound as T;
 }
 
-function warningScope(scopes: readonly ReconnectionScopeMembership[]) {
-  const scope = scopes.find((candidate): candidate is ReconnectionScopeMembership & { readonly kind: ReconnectionScopeKind } => (
-    candidate.kind === 'path' || candidate.kind === 'transfer' || candidate.kind === 'train'
-  ))
-    ?? scopes.find(isInvalidationScopeMembership);
-  if (!scope) throw new Error('A fail-closed warning requires an eligible scope');
-  return { ...scope, label: `${scope.kind} ${scope.id}` };
+function warningScopes(scopes: readonly ReconnectionScopeMembership[]) {
+  const applicable = scopes.filter(isInvalidationScopeMembership);
+  if (applicable.length === 0) throw new Error('A fail-closed warning requires an eligible scope');
+  return applicable.map((scope) => ({ ...scope, label: `${scope.kind} ${scope.id}` }));
 }
 
 function isInvalidationScopeMembership(

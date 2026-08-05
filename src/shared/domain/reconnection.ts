@@ -705,6 +705,11 @@ function validateInvalidation(
   if (invalidation.scopes.some((scope) => !hasEligibleScope(ownership, scope))) {
     throw new Error('Active-trip invalidation scope must belong to the exact eligible recovery scope');
   }
+  if (invalidation.scopes.some((scope) => !invalidation.ownerGate.scopeMembership.some((owned) => (
+    owned.kind === scope.kind && owned.id === scope.id
+  )))) {
+    throw new Error('Every affected scope must be contained in the exact owner gate');
+  }
   if (!ownerGates.some((gate) => sameOwnerGate(gate, invalidation.ownerGate))) {
     throw new Error('Active-trip invalidation must retain a gate accepted by an owner in the current stage');
   }

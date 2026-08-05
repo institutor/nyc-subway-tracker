@@ -495,6 +495,23 @@ describe('owner-gated reconnection ordering', () => {
     expect(() => acceptReconnectionStage(state, widened)).toThrow(/exact affected scope kind/i);
   });
 
+  test('rejects an eligible invalidation scope that is not contained in its exact owner gate', () => {
+    let state = createReconnectionState(CONTEXT, { historicalPositioningGuidance: true });
+    state = finishStage(state, 1);
+    state = requestReconnectionStage(state, 2);
+    const result = invalidatingResult(2);
+    const donatedEligibleScope = {
+      ...result,
+      invalidation: {
+        ...result.invalidation,
+        scopes: [{ kind: 'route' as const, id: 'A', label: 'Unowned eligible A route' }],
+      },
+    };
+
+    expect(() => acceptReconnectionStage(state, donatedEligibleScope))
+      .toThrow(/affected scope.*exact owner gate/i);
+  });
+
   test.each([
     [1, (result: any) => {
       result.accessiblePath.disposition = 'optimistic';

@@ -148,6 +148,51 @@ describe('client reconnection runner', () => {
     }
   });
 
+  test('retains every exact applicable owner scope in multi-scope fail-closed warnings', async () => {
+    const multiScopeContext: PreservedReconnectionContext = {
+      ...context,
+      recovery: {
+        ...context.recovery,
+        eligibleScopes: [
+          ...context.recovery.eligibleScopes,
+          { kind: 'leg', id: 'leg-current' },
+          { kind: 'leg', id: 'leg-upcoming' },
+          { kind: 'transfer', id: 'transfer-8' },
+        ],
+        ownerScopes: {
+          ...context.recovery.ownerScopes,
+          'service-change': [
+            { kind: 'leg', id: 'leg-current' },
+            { kind: 'leg', id: 'leg-upcoming' },
+          ],
+          'transfer-guidance': [
+            { kind: 'transfer', id: 'transfer-7' },
+            { kind: 'transfer', id: 'transfer-8' },
+          ],
+        },
+      },
+    };
+
+    const result = await runReconnection({
+      context: multiScopeContext,
+      initial: { historicalTransferGuidance: true },
+      loadStage: async () => undefined,
+      now: () => new Date(ACCEPTED_AT),
+    });
+
+    expect(result.kind).toBe('complete');
+    const serviceWarning = result.state.visible.activeWarnings.find(({ stage }) => stage === 2);
+    const transferWarning = result.state.visible.activeWarnings.find(({ stage }) => stage === 4);
+    expect(serviceWarning?.scopes.map(({ kind, id }) => ({ kind, id }))).toEqual([
+      { kind: 'leg', id: 'leg-current' },
+      { kind: 'leg', id: 'leg-upcoming' },
+    ]);
+    expect(transferWarning?.scopes.map(({ kind, id }) => ({ kind, id }))).toEqual([
+      { kind: 'transfer', id: 'transfer-7' },
+      { kind: 'transfer', id: 'transfer-8' },
+    ]);
+  });
+
   test('continues later diagnostics but withholds current arrivals after trip service evidence fails closed', async () => {
     const loads: number[] = [];
     const result = await runReconnection({
