@@ -13,6 +13,7 @@ export function StationSearch({
   api,
   label,
   onSelect,
+  onSelectionClear,
   initialValue = '',
   catalog = [],
   offline = false,
@@ -20,6 +21,7 @@ export function StationSearch({
   readonly api: Pick<TransitApiClient, 'searchStations'>;
   readonly label: string;
   readonly onSelect: (station: StationChoice) => void;
+  readonly onSelectionClear?: () => void;
   readonly initialValue?: string;
   readonly catalog?: readonly CatalogComplexDto[];
   readonly offline?: boolean;
@@ -31,11 +33,16 @@ export function StationSearch({
   const [phase, setPhase] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
   const [options, setOptions] = useState<readonly SearchOption[]>([]);
   const [activeIndex, setActiveIndex] = useState(-1);
+  const [selected, setSelected] = useState<StationChoice>();
 
   useEffect(() => () => controller.current?.abort(), []);
 
   const search = (next: string) => {
     setQuery(next);
+    if (selected) {
+      setSelected(undefined);
+      onSelectionClear?.();
+    }
     controller.current?.abort();
     generation.current += 1;
     const requestId = generation.current;
@@ -82,7 +89,9 @@ export function StationSearch({
     setOptions([]);
     setActiveIndex(-1);
     setPhase('idle');
-    onSelect({ complexId: option.complexId, constituentId: option.constituentId, name: option.name });
+    const choice = { complexId: option.complexId, constituentId: option.constituentId, name: option.name };
+    setSelected(choice);
+    onSelect(choice);
   };
 
   return (

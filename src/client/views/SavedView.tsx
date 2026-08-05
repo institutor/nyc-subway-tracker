@@ -3,8 +3,8 @@ import { useMemo, useState } from 'react';
 import { compareCanonicalIdentity } from '../../shared/domain/canonical';
 import type { Direction, SavedRecord } from '../../shared/domain/types';
 import type { BoardEnvelopeDto, CatalogComplexDto } from '../api/client';
-import { formatClaimTime, sourceLabel } from '../components/ArrivalRow';
 import { RouteToken } from '../components/RouteToken';
+import { ServiceAlertTruth } from '../components/ServiceAlertTruth';
 import { StatusBanner } from '../components/StatusBanner';
 
 export function SavedView({
@@ -75,6 +75,7 @@ export function SavedView({
                     name={name}
                     record={draft}
                     routeIds={complex?.routeIds ?? record.routeFilters}
+                    catalog={catalog}
                     onChange={setDraft}
                     onCancel={() => { setEditingId(undefined); setDraft(undefined); }}
                     onCommit={() => {
@@ -91,13 +92,7 @@ export function SavedView({
                   <section className="saved-card__alerts" aria-label={`${name} ${retainedHistorical ? 'historical ' : ''}service alerts`}>
                     <h4>{retainedHistorical ? 'Historical service changes' : 'Service changes'}</h4>
                     {board.data.alerts.map((alert) => (
-                      <div key={alert.id}>
-                        <p><strong>{alert.routeIds.join(', ')}</strong> {alert.text}</p>
-                        <p className="claim-line">
-                          <span>{alert.demonstrationLabel}</span><span>{sourceLabel(alert.provenance)}</span>
-                          {retainedHistorical ? <time dateTime={alert.provenance.observedAt}>Last checked {formatClaimTime(alert.provenance.observedAt)}</time> : null}
-                        </p>
-                      </div>
+                      <ServiceAlertTruth alert={alert} historical={retainedHistorical} headingLevel={5} showRoutes key={alert.id} />
                     ))}
                   </section>
                 ) : null}
@@ -150,6 +145,7 @@ function SavedEditor({
   name,
   record,
   routeIds,
+  catalog,
   onChange,
   onCancel,
   onCommit,
@@ -157,10 +153,23 @@ function SavedEditor({
   readonly name: string;
   readonly record: SavedRecord;
   readonly routeIds: readonly string[];
+  readonly catalog: readonly CatalogComplexDto[];
   readonly onChange: (record: SavedRecord) => void;
   readonly onCancel: () => void;
   readonly onCommit: () => void;
 }) {
+  const stationChoices = catalog.flatMap((complex) => complex.constituents.map((constituent) => ({
+    value: stationChoiceValue(complex.id, constituent.id),
+    complexId: complex.id,
+    constituentId: constituent.id,
+    label: constituent.name === complex.name ? complex.name : `${complex.name} — ${constituent.name}`,
+  })));
+  const canCommit = (record.preferredEntrance === undefined || record.preferredEntrance.entranceId.trim().length > 0)
+    && (record.preferredRide === undefined || record.preferredRide.actualDestination.trim().length > 0)
+    && (record.timeWindow === undefined || (
+      record.timeWindow.weekdays.length > 0 && record.timeWindow.startsAt !== record.timeWindow.endsAt
+    ));
+
   return (
     <form className="saved-editor" onSubmit={(event) => { event.preventDefault(); onCommit(); }}>
       <fieldset>
@@ -187,27 +196,200 @@ function SavedEditor({
         <input type="checkbox" checked={record.accessibleRouteOnly} onChange={(event) => onChange({ ...record, accessibleRouteOnly: event.currentTarget.checked })} />
         Accessible Route Only
       </label>
+
+      <fieldset>
+        <legend>Preferred entrance</legend>
+        <label className="check-control">
+          <input
+            type="checkbox"
+            checked={record.preferredEntrance !== undefined}
+            onChange={(event) => onChange({
+              ...record,
+              ...(event.currentTarget.checked
+                ? { preferredEntrance: { entranceId: '', direction: 'northbound' } }
+                : { preferredEntrance: undefined }),
+            })}
+          />
+          Use preferred entrance
+        </label>
+        {record.preferredEntrance ? (
+          <>
+            <label>Preferred entrance ID
+              <input
+                required
+                value={record.preferredEntrance.entranceId}
+                onChange={(event) => onChange({
+                  ...record,
+                  preferredEntrance: { ...record.preferredEntrance!, entranceId: event.currentTarget.value },
+                })}
+              />
+            </label>
+            <label>Preferred entrance direction
+              <DirectionSelect
+                value={record.preferredEntrance.direction}
+                onChange={(direction) => onChange({
+                  ...record,
+                  preferredEntrance: { ...record.preferredEntrance!, direction },
+                })}
+              />
+            </label>
+          </>
+        ) : null}
+      </fieldset>
+
+      <fieldset>
+        <legend>Preferred ride</legend>
+        <label className="check-control">
+          <input
+            type="checkbox"
+            checked={record.preferredRide !== undefined}
+            onChange={(event) => onChange({
+              ...record,
+              ...(event.currentTarget.checked
+                ? { preferredRide: { direction: 'northbound', actualDestination: '' } }
+                : { preferredRide: undefined }),
+            })}
+          />
+          Use preferred ride
+        </label>
       {record.preferredRide ? (
         <>
           <label>Preferred direction
-            <select value={record.preferredRide.direction} onChange={(event) => onChange({
+            <DirectionSelect value={record.preferredRide.direction} onChange={(direction) => onChange({
               ...record,
-              preferredRide: { ...record.preferredRide!, direction: event.currentTarget.value as Direction },
-            })}>
-              {['northbound', 'southbound', 'eastbound', 'westbound', 'inbound', 'outbound'].map((direction) => <option value={direction} key={direction}>{titleDirection(direction)}</option>)}
-            </select>
+              preferredRide: { ...record.preferredRide!, direction },
+            })} />
           </label>
-          <label>Actual destination
-            <input value={record.preferredRide.actualDestination} onChange={(event) => onChange({ ...record, preferredRide: { ...record.preferredRide!, actualDestination: event.currentTarget.value } })} />
+          <label>Preferred actual destination
+            <input required value={record.preferredRide.actualDestination} onChange={(event) => onChange({ ...record, preferredRide: { ...record.preferredRide!, actualDestination: event.currentTarget.value } })} />
           </label>
         </>
       ) : null}
+      </fieldset>
+
+      <fieldset>
+        <legend>Common destination</legend>
+        <label className="check-control">
+          <input
+            type="checkbox"
+            checked={record.commonDestination !== undefined}
+            disabled={stationChoices.length === 0}
+            onChange={(event) => {
+              const first = stationChoices[0];
+              onChange({
+                ...record,
+                ...(event.currentTarget.checked && first
+                  ? { commonDestination: { complexId: first.complexId, constituentId: first.constituentId } }
+                  : { commonDestination: undefined }),
+              });
+            }}
+          />
+          Use common destination
+        </label>
+        {record.commonDestination ? (
+          <label>Common destination station
+            <select
+              value={stationChoiceValue(record.commonDestination.complexId, record.commonDestination.constituentId)}
+              onChange={(event) => {
+                const choice = stationChoices.find(({ value }) => value === event.currentTarget.value);
+                if (choice) onChange({ ...record, commonDestination: { complexId: choice.complexId, constituentId: choice.constituentId } });
+              }}
+            >
+              {stationChoices.map((choice) => <option value={choice.value} key={choice.value}>{choice.label}</option>)}
+            </select>
+          </label>
+        ) : null}
+      </fieldset>
+
+      <fieldset>
+        <legend>Commute window</legend>
+        <label className="check-control">
+          <input
+            type="checkbox"
+            checked={record.timeWindow !== undefined}
+            onChange={(event) => onChange({
+              ...record,
+              ...(event.currentTarget.checked
+                ? { timeWindow: { weekdays: [1, 2, 3, 4, 5], startsAt: '08:00', endsAt: '09:00' } }
+                : { timeWindow: undefined }),
+            })}
+          />
+          Use commute window
+        </label>
+        {record.timeWindow ? (
+          <>
+            <div className="saved-editor__weekdays" role="group" aria-label="Commute weekdays">
+              {WEEKDAYS.map(({ value, label }) => (
+                <label key={value}>
+                  <input
+                    type="checkbox"
+                    checked={record.timeWindow!.weekdays.includes(value)}
+                    onChange={(event) => onChange({
+                      ...record,
+                      timeWindow: {
+                        ...record.timeWindow!,
+                        weekdays: (event.currentTarget.checked
+                          ? [...record.timeWindow!.weekdays, value]
+                          : record.timeWindow!.weekdays.filter((weekday) => weekday !== value))
+                          .sort((left, right) => left - right),
+                      },
+                    })}
+                  />
+                  {label}
+                </label>
+              ))}
+            </div>
+            <label>Commute window starts
+              <input type="time" required value={record.timeWindow.startsAt} onChange={(event) => onChange({
+                ...record,
+                timeWindow: { ...record.timeWindow!, startsAt: event.currentTarget.value },
+              })} />
+            </label>
+            <label>Commute window ends
+              <input type="time" required value={record.timeWindow.endsAt} onChange={(event) => onChange({
+                ...record,
+                timeWindow: { ...record.timeWindow!, endsAt: event.currentTarget.value },
+              })} />
+            </label>
+          </>
+        ) : null}
+      </fieldset>
+
+      <label>Personalization state
+        <select value={record.state} onChange={(event) => onChange({ ...record, state: event.currentTarget.value as SavedRecord['state'] })}>
+          <option value="active">Active</option>
+          <option value="paused">Paused</option>
+        </select>
+      </label>
       <div className="saved-editor__actions">
-        <button type="submit" aria-label={`Save changes for ${name}`}>Save changes</button>
+        <button type="submit" aria-label={`Save changes for ${name}`} disabled={!canCommit}>Save changes</button>
         <button type="button" aria-label={`Cancel editing ${name}`} onClick={onCancel}>Cancel</button>
       </div>
     </form>
   );
+}
+
+function DirectionSelect({ value, onChange }: { readonly value: Direction; readonly onChange: (direction: Direction) => void }) {
+  return (
+    <select value={value} onChange={(event) => onChange(event.currentTarget.value as Direction)}>
+      {DIRECTIONS.map((direction) => <option value={direction} key={direction}>{titleDirection(direction)}</option>)}
+    </select>
+  );
+}
+
+const DIRECTIONS: readonly Direction[] = ['northbound', 'southbound', 'eastbound', 'westbound', 'inbound', 'outbound'];
+const WEEKDAYS = [
+  { value: 1, label: 'Monday' },
+  { value: 2, label: 'Tuesday' },
+  { value: 3, label: 'Wednesday' },
+  { value: 4, label: 'Thursday' },
+  { value: 5, label: 'Friday' },
+  { value: 6, label: 'Saturday' },
+  { value: 7, label: 'Sunday' },
+] as const;
+
+function stationChoiceValue(complexId: string, constituentId: string): string {
+  return `${complexId}\u0000${constituentId}`;
 }
 
 function compareSaved(left: SavedRecord, right: SavedRecord): number {

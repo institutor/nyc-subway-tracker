@@ -52,9 +52,16 @@ export function MapView({
   const [context, setContext] = useState<MapContext>(() => initialContext ?? {
     serviceMeaning: 'actual-now', spatialView: 'schematic', viewport: { centerX: 40.7128, centerY: -74.006, zoom: 1 },
   });
-  const [reference, setReference] = useState<MapReferenceDto>();
+  const desiredTheme = context.serviceMeaning === 'late-night' ? 'night' : 'day';
+  const desiredContentVersion = mapVersions?.[desiredTheme] ?? bootstrap?.data.contentVersions.maps[desiredTheme];
+  const referenceEligible = context.serviceMeaning !== 'actual-now' || connected;
+  const referenceKey = `${desiredTheme}:${desiredContentVersion ?? 'missing'}:${referenceEligible ? 'eligible' : 'unavailable'}`;
+  const [referenceState, setReferenceState] = useState<{
+    readonly key: string;
+    readonly phase: 'idle' | 'loading' | 'ready' | 'error';
+    readonly data?: MapReferenceDto;
+  }>({ key: '', phase: 'idle' });
   const [overlay, setOverlay] = useState<MapOverlayEnvelopeDto>();
-  const [mapPhase, setMapPhase] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
   const referenceGeneration = useRef(0);
   const referenceAbort = useRef<AbortController | undefined>(undefined);
   const overlayAbort = useRef<AbortController | undefined>(undefined);
@@ -64,7 +71,7 @@ export function MapView({
     setOverlay(undefined);
     if (!connected || context.serviceMeaning !== 'actual-now') return;
     if (recoveredOverlay?.cacheState === 'network'
-      && recoveredOverlay.data?.theme === 'night') {
+      && recoveredOverlay.data?.theme === 'day') {
       setOverlay(recoveredOverlay);
       return;
     }
@@ -77,6 +84,33 @@ export function MapView({
     });
     return () => controller.abort();
   }, [api, connected, context.serviceMeaning, recoveredOverlay]);
+
+  useEffect(() => {
+    referenceAbort.current?.abort();
+    const requestId = referenceGeneration.current + 1;
+    referenceGeneration.current = requestId;
+    if (!referenceEligible || !desiredContentVersion) {
+      setReferenceState({ key: referenceKey, phase: desiredContentVersion ? 'idle' : 'error' });
+      return undefined;
+    }
+    const controller = new AbortController();
+    referenceAbort.current = controller;
+    setReferenceState((current) => current.key === referenceKey && current.data
+      ? current
+      : { key: referenceKey, phase: 'loading' });
+    void api.mapReference(desiredTheme, desiredContentVersion, controller.signal).then((response) => {
+      if (controller.signal.aborted || requestId !== referenceGeneration.current) return;
+      setReferenceState({
+        key: referenceKey,
+        phase: response.data ? 'ready' : 'error',
+        ...(response.data ? { data: response.data } : {}),
+      });
+    }).catch(() => {
+      if (controller.signal.aborted || requestId !== referenceGeneration.current) return;
+      setReferenceState({ key: referenceKey, phase: 'error' });
+    });
+    return () => controller.abort();
+  }, [api, desiredContentVersion, desiredTheme, referenceEligible, referenceKey]);
 
   useEffect(() => () => {
     referenceAbort.current?.abort();
@@ -91,32 +125,6 @@ export function MapView({
   const chooseMeaning = (serviceMeaning: MapServiceMeaning) => {
     const next = { ...context, serviceMeaning };
     updateContext(next);
-    if (serviceMeaning === 'actual-now') {
-      setReference(undefined);
-      return;
-    }
-    const theme = serviceMeaning === 'typical-weekday' ? 'day' : 'night';
-    const contentVersion = mapVersions?.[theme] ?? bootstrap?.data.contentVersions.maps[theme];
-    if (!contentVersion) {
-      setReference(undefined);
-      setMapPhase('error');
-      return;
-    }
-    referenceAbort.current?.abort();
-    const controller = new AbortController();
-    referenceAbort.current = controller;
-    const requestId = referenceGeneration.current + 1;
-    referenceGeneration.current = requestId;
-    setMapPhase('loading');
-    void api.mapReference(theme, contentVersion, controller.signal).then((response) => {
-      if (controller.signal.aborted || requestId !== referenceGeneration.current) return;
-      setReference(response.data ?? undefined);
-      setMapPhase(response.data ? 'ready' : 'error');
-    }).catch(() => {
-      if (controller.signal.aborted || requestId !== referenceGeneration.current) return;
-      setReference(undefined);
-      setMapPhase('error');
-    });
   };
 
   const actualUnavailable = !connected;
@@ -125,6 +133,8 @@ export function MapView({
     ? 'Actual now'
     : context.serviceMeaning === 'typical-weekday' ? 'Typical weekday — reference' : 'Late night — reference';
   const offlineReference = !connected && context.serviceMeaning !== 'actual-now';
+  const reference = referenceState.key === referenceKey ? referenceState.data : undefined;
+  const mapPhase = referenceState.key === referenceKey ? referenceState.phase : 'loading';
 
   return (
     <section className="surface surface--map" aria-labelledby="map-heading" data-testid="map-context" data-selected-station={context.selectedStationId} data-selected-route={context.selectedRouteId}>
@@ -157,9 +167,10 @@ export function MapView({
       {mapPhase === 'loading' ? <p role="status">Opening stored subway reference…</p> : null}
       {mapPhase === 'error' && context.serviceMeaning !== 'actual-now' ? <StatusBanner tone="locked"><p>This map reference is not available on this device.</p></StatusBanner> : null}
       <VectorNetworkMap
-        reference={context.serviceMeaning === 'actual-now' ? undefined : reference}
+        reference={reference}
         overlay={context.serviceMeaning === 'actual-now' && overlay?.cacheState === 'network' ? overlay.data ?? undefined : undefined}
         viewport={context.viewport}
+        spatialView={context.spatialView}
         serviceLabel={offlineReference ? `${serviceLabel}. Reference pattern—not live.` : context.serviceMeaning === 'actual-now' ? serviceLabel : `${serviceLabel}. Not current`}
       />
       <div className="context-dock map-context-dock" role="toolbar" aria-label="Map controls">

@@ -106,7 +106,14 @@ export function JourneyPlanner({
         <h3 id="journey-planner-heading">Plan a trip</h3>
       </div>
       <p><strong>From:</strong> {origin?.name ?? 'Choose an origin station from Nearby or Saved.'}</p>
-      <StationSearch api={api} label="Destination station" onSelect={setDestination} catalog={catalog} offline={!connected} />
+      <StationSearch
+        api={api}
+        label="Destination station"
+        onSelect={setDestination}
+        onSelectionClear={() => setDestination(undefined)}
+        catalog={catalog}
+        offline={!connected}
+      />
       <label className="check-control">
         <input type="checkbox" checked={accessibleRouteOnly} onChange={(event) => setAccessibleRouteOnly(event.currentTarget.checked)} />
         Accessible Route Only

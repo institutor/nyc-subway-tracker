@@ -13,17 +13,19 @@ export function VectorNetworkMap({
   reference,
   overlay,
   viewport,
+  spatialView,
   serviceLabel,
 }: {
   readonly reference?: MapReferenceDto;
   readonly overlay?: NonNullable<MapOverlayEnvelopeDto['data']>;
   readonly viewport: MapViewport;
+  readonly spatialView: 'schematic' | 'geographic';
   readonly serviceLabel: string;
 }) {
-  const projection = useMemo(() => createProjection(reference?.features ?? []), [reference]);
+  const projection = useMemo(() => createProjection(reference?.features ?? [], spatialView), [reference, spatialView]);
   const overlayById = useMemo(() => new Map(overlay?.segments.map((segment) => [segment.id, segment]) ?? []), [overlay]);
   return (
-    <figure className="network-map" data-testid="vector-network-map" data-viewport={`${viewport.centerX},${viewport.centerY},${viewport.zoom}`}>
+    <figure className="network-map" data-testid="vector-network-map" data-spatial-view={spatialView} data-viewport={`${viewport.centerX},${viewport.centerY},${viewport.zoom}`}>
       <svg viewBox="0 0 1000 1000" role="img" aria-labelledby="network-map-title network-map-description">
         <title id="network-map-title">Original app-owned subway network reference</title>
         <desc id="network-map-description">{serviceLabel}. Route identity is shown through labels and line treatment as well as color.</desc>
@@ -74,20 +76,38 @@ function renderFeature(
   );
 }
 
-function createProjection(features: readonly MapFeatureDto[]) {
+function createProjection(features: readonly MapFeatureDto[], spatialView: 'schematic' | 'geographic') {
   const points = features.flatMap((feature): readonly (readonly [number, number])[] =>
     feature.geometry.type === 'Point' ? [feature.geometry.coordinates] : feature.geometry.coordinates);
   if (points.length === 0) return (_point: readonly [number, number]) => [500, 500] as const;
-  const longitudes = points.map(([longitude]) => longitude);
-  const latitudes = points.map(([, latitude]) => latitude);
-  const minimumLongitude = Math.min(...longitudes);
-  const maximumLongitude = Math.max(...longitudes);
-  const minimumLatitude = Math.min(...latitudes);
-  const maximumLatitude = Math.max(...latitudes);
-  const longitudeSpan = Math.max(0.000_001, maximumLongitude - minimumLongitude);
-  const latitudeSpan = Math.max(0.000_001, maximumLatitude - minimumLatitude);
-  return ([longitude, latitude]: readonly [number, number]) => [
-    60 + ((longitude - minimumLongitude) / longitudeSpan) * 880,
-    940 - ((latitude - minimumLatitude) / latitudeSpan) * 880,
-  ] as const;
+  const projectSource = spatialView === 'geographic' ? webMercator : identityProjection;
+  const projected = points.map(projectSource);
+  const horizontal = projected.map(([x]) => x);
+  const vertical = projected.map(([, y]) => y);
+  const minimumX = Math.min(...horizontal);
+  const maximumX = Math.max(...horizontal);
+  const minimumY = Math.min(...vertical);
+  const maximumY = Math.max(...vertical);
+  const xSpan = Math.max(0.000_001, maximumX - minimumX);
+  const ySpan = Math.max(0.000_001, maximumY - minimumY);
+  return (point: readonly [number, number]) => {
+    const [x, y] = projectSource(point);
+    return [
+      60 + ((x - minimumX) / xSpan) * 880,
+      940 - ((y - minimumY) / ySpan) * 880,
+    ] as const;
+  };
+}
+
+function identityProjection([longitude, latitude]: readonly [number, number]): readonly [number, number] {
+  return [longitude, latitude];
+}
+
+function webMercator([longitude, latitude]: readonly [number, number]): readonly [number, number] {
+  const clampedLatitude = Math.max(-85.051_129, Math.min(85.051_129, latitude));
+  const radians = clampedLatitude * Math.PI / 180;
+  return [
+    (longitude + 180) / 360,
+    (1 - Math.log(Math.tan(radians) + (1 / Math.cos(radians))) / Math.PI) / 2,
+  ];
 }

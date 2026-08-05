@@ -1,9 +1,10 @@
 import type { BoardEnvelopeDto } from '../api/client';
 import type { Direction } from '../../shared/domain/types';
 import type { StationChoice } from '../state/app-state';
-import { formatClaimTime, sourceLabel } from '../components/ArrivalRow';
+import { formatClaimTime } from '../components/ArrivalRow';
 import { DirectionTrack } from '../components/DirectionTrack';
 import { RouteToken } from '../components/RouteToken';
+import { ServiceAlertTruth } from '../components/ServiceAlertTruth';
 import { StatusBanner } from '../components/StatusBanner';
 import { useBoardClock } from '../hooks/use-board-clock';
 
@@ -59,14 +60,7 @@ export function StationView({
             ? `Historical board · last checked ${formatClaimTime(board.serverTime)}`
             : board.data.mode === 'live' ? 'Live and expected arrivals' : board.data.mode === 'scheduled-fallback' ? 'Schedule fallback' : 'Arrival status'}</p>
           {board.data.alerts.map((alert) => (
-            <section className="service-alert" aria-label={retainedHistorical ? 'Historical service alert' : 'Service alert'} key={alert.id}>
-              <span className="service-alert__mark" aria-hidden="true">!</span>
-              <div>
-                <h3>{retainedHistorical ? 'Historical service alert' : 'Service alert'}</h3>
-                <p>{alert.text}</p>
-                <p className="claim-line"><span>{alert.demonstrationLabel}</span><span>{sourceLabel(alert.provenance)}</span>{retainedHistorical ? <time dateTime={alert.provenance.observedAt}>Last checked {formatClaimTime(alert.provenance.observedAt)}</time> : null}</p>
-              </div>
-            </section>
+            <ServiceAlertTruth alert={alert} historical={retainedHistorical} className="service-alert" marked key={alert.id} />
           ))}
           <div className="station-board">
             {board.data.directions.map((direction) => <DirectionTrack key={direction.direction} direction={direction} reading={reading} historical={retainedHistorical} />)}

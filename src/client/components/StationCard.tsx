@@ -3,7 +3,8 @@ import type { StationChoice } from '../state/app-state';
 import { useBoardClock } from '../hooks/use-board-clock';
 import { directionLabel, DirectionTrack } from './DirectionTrack';
 import { RouteToken } from './RouteToken';
-import { formatClaimTime, sourceLabel } from './ArrivalRow';
+import { formatClaimTime } from './ArrivalRow';
+import { ServiceAlertTruth } from './ServiceAlertTruth';
 
 export type NearbyBoardState =
   | { readonly phase: 'loading' }
@@ -110,14 +111,7 @@ function NearbyDirection({
             : exactDirection ? <DirectionTrack direction={exactDirection} reading={reading} historical={retainedHistorical} />
               : <p className="unavailable-copy">Arrival information is unavailable for this exact platform.</p>}
       {board?.data?.alerts.map((alert) => (
-        <section className="inline-alert" aria-label={retainedHistorical ? 'Historical service alert' : 'Service alert'} key={alert.id}>
-          <strong>{retainedHistorical ? 'Historical service alert' : 'Service alert'}</strong>
-          <p>{alert.text}</p>
-          <p className="claim-line">
-            <span>{alert.demonstrationLabel}</span><span>{sourceLabel(alert.provenance)}</span>
-            {retainedHistorical ? <time dateTime={alert.provenance.observedAt}>Last checked {formatClaimTime(alert.provenance.observedAt)}</time> : null}
-          </p>
-        </section>
+        <ServiceAlertTruth alert={alert} historical={retainedHistorical} className="inline-alert" headingLevel={4} key={alert.id} />
       ))}
     </section>
   );

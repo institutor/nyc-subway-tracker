@@ -20,6 +20,16 @@ const records: readonly SavedRecord[] = [
   },
 ];
 
+const completeRecord: SavedRecord = {
+  id: 'saved-complete', complexId: 'B01', constituentId: 'B01',
+  preferredEntrance: { entranceId: 'entrance-dekalb-north', direction: 'northbound' },
+  preferredRide: { direction: 'southbound', actualDestination: 'Brighton Beach' },
+  routeFilters: ['B'], accessibleRouteOnly: true,
+  commonDestination: { complexId: 'A12', constituentId: 'A12' },
+  timeWindow: { weekdays: [1, 3, 5], startsAt: '08:00', endsAt: '09:00' },
+  state: 'active',
+};
+
 const catalog: readonly CatalogComplexDto[] = [
   { id: 'B01', name: 'DeKalb Av', routeIds: ['B', 'Q'], constituents: [{ id: 'B01', name: 'DeKalb Av', directionalStopIds: ['B01N', 'B01S'] }] },
   { id: 'A12', name: '125 St', routeIds: ['A', 'C'], constituents: [{ id: 'A12', name: '125 St', directionalStopIds: ['A12N', 'A12S'] }] },
@@ -66,6 +76,8 @@ describe('Saved device-only rider intent', () => {
     />);
 
     expect(screen.getByText('Q trains are rerouted via the R line.')).toBeInTheDocument();
+    expect(screen.getByText(/Demonstration data/)).toBeInTheDocument();
+    expect(screen.getByText(/Evidence observed/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Refresh all DeKalb Av routes and directions' }));
     expect(onRefreshAll).toHaveBeenCalledWith(records[0]);
   });
@@ -94,6 +106,51 @@ describe('Saved device-only rider intent', () => {
     fireEvent.click(screen.getByRole('checkbox', { name: 'Include Q' }));
     fireEvent.click(screen.getByRole('button', { name: 'Save changes for DeKalb Av' }));
     expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ id: 'saved-b', routeFilters: ['B', 'Q'] }));
+  });
+
+  test('edits every rider-owned field in a detached draft and Cancel preserves the original bytes', () => {
+    const onSave = vi.fn();
+    const originalBytes = JSON.stringify(completeRecord);
+    render(<SavedView
+      records={[completeRecord]}
+      catalog={catalog}
+      boards={new Map()}
+      onOpen={vi.fn()}
+      onRefreshAll={vi.fn()}
+      onSave={onSave}
+      onPause={vi.fn()}
+      onReset={vi.fn()}
+      onDelete={vi.fn()}
+    />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit saved station DeKalb Av' }));
+    fireEvent.change(screen.getByRole('textbox', { name: 'Preferred entrance ID' }), { target: { value: 'entrance-dekalb-south' } });
+    fireEvent.change(screen.getByRole('combobox', { name: 'Preferred entrance direction' }), { target: { value: 'southbound' } });
+    fireEvent.change(screen.getByRole('combobox', { name: 'Personalization state' }), { target: { value: 'paused' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel editing DeKalb Av' }));
+
+    expect(onSave).not.toHaveBeenCalled();
+    expect(JSON.stringify(completeRecord)).toBe(originalBytes);
+    expect(screen.getByText('Preferred entrance').closest('div')).toHaveTextContent('entrance-dekalb-north');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit saved station DeKalb Av' }));
+    fireEvent.change(screen.getByRole('textbox', { name: 'Preferred entrance ID' }), { target: { value: 'entrance-dekalb-south' } });
+    fireEvent.change(screen.getByRole('combobox', { name: 'Preferred entrance direction' }), { target: { value: 'southbound' } });
+    fireEvent.change(screen.getByRole('textbox', { name: 'Preferred actual destination' }), { target: { value: 'Coney Island' } });
+    fireEvent.change(screen.getByRole('combobox', { name: 'Common destination station' }), { target: { value: 'B01\u0000B01' } });
+    fireEvent.change(screen.getByLabelText('Commute window starts'), { target: { value: '07:30' } });
+    fireEvent.change(screen.getByLabelText('Commute window ends'), { target: { value: '08:30' } });
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Tuesday' }));
+    fireEvent.change(screen.getByRole('combobox', { name: 'Personalization state' }), { target: { value: 'paused' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes for DeKalb Av' }));
+
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({
+      preferredEntrance: { entranceId: 'entrance-dekalb-south', direction: 'southbound' },
+      preferredRide: { direction: 'southbound', actualDestination: 'Coney Island' },
+      commonDestination: { complexId: 'B01', constituentId: 'B01' },
+      timeWindow: { weekdays: [1, 2, 3, 5], startsAt: '07:30', endsAt: '08:30' },
+      state: 'paused',
+    }));
   });
 
   test('pause, reset, and delete target only the selected record', () => {
