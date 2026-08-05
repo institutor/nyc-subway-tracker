@@ -11,6 +11,7 @@ import {
   type JourneyEnvelopeDto,
   type JourneyItineraryDto,
   type LocationFixDto,
+  type MapOverlayEnvelopeDto,
   TransitApiError,
   type TransitApiClient,
 } from './api/client';
@@ -20,8 +21,20 @@ import { OfflineBanner } from './components/OfflineBanner';
 import { StatusBanner } from './components/StatusBanner';
 import { boardRequestKey, type NearbyBoardState } from './components/StationCard';
 import { ThumbDock } from './components/ThumbDock';
-import { useConnectivity, type ConnectivityState } from './hooks/use-connectivity';
+import {
+  useConnectivity,
+  type ConnectivityState,
+  type UseConnectivityOptions,
+} from './hooks/use-connectivity';
 import { useLocation } from './hooks/use-location';
+import {
+  createAppReconnectionStageLoader,
+  type AppReconnectionArtifacts,
+} from './recovery/app-reconnection-loader';
+import {
+  runReconnection,
+  type ReconnectionTransition,
+} from './recovery/run-reconnection';
 import {
   appReducer,
   createInitialAppState,
@@ -44,12 +57,20 @@ import { MapView, type MapContext } from './views/MapView';
 import { NearbyView } from './views/NearbyView';
 import { SavedView } from './views/SavedView';
 import { StationView } from './views/StationView';
+import type {
+  PreservedReconnectionContext,
+  ReconnectionScopeMembership,
+  ReconnectionState,
+} from '../shared/domain/reconnection';
 
 export interface AppProps {
   readonly api?: TransitApiClient;
   readonly geolocation?: Pick<Geolocation, 'getCurrentPosition'> | null;
   readonly storage?: Storage;
   readonly connectivity?: ConnectivityState;
+  readonly connectivityOptions?: UseConnectivityOptions;
+  readonly recoveryNow?: () => Date;
+  readonly onReconnectionTransition?: (transition: ReconnectionTransition) => void;
 }
 
 interface SelectedBoardState {
@@ -63,7 +84,15 @@ const DEFAULT_MAP_CONTEXT: MapContext = Object.freeze({
   viewport: Object.freeze({ centerX: 40.7128, centerY: -74.006, zoom: 1 }),
 });
 
-export function App({ api, geolocation, storage: providedStorage, connectivity: connectivityOverride }: AppProps = {}) {
+export function App({
+  api,
+  geolocation,
+  storage: providedStorage,
+  connectivity: connectivityOverride,
+  connectivityOptions,
+  recoveryNow,
+  onReconnectionTransition,
+}: AppProps = {}) {
   const apiClient = useMemo(() => api ?? createTransitApiClient(), [api]);
   const storage = useMemo(() => providedStorage ?? browserStorage(), [providedStorage]);
   const savedStore = useMemo(() => createBrowserSavedStore(storage as BrowserStorage), [storage]);
@@ -73,9 +102,10 @@ export function App({ api, geolocation, storage: providedStorage, connectivity: 
     () => readLocalState(storage, savedStore, activeTripStore, structuralStore),
     [activeTripStore, savedStore, storage, structuralStore],
   );
-  const connectivity = useConnectivity();
+  const connectivity = useConnectivity(connectivityOptions);
   const connectivityState = connectivityOverride ?? connectivity.state;
-  const connected = connectivityState === 'online';
+  const [retainedHistorical, setRetainedHistorical] = useState(false);
+  const connected = connectivityState === 'online' && !retainedHistorical;
   const offline = connectivityState === 'offline';
   const connectedRef = useRef(connected);
   connectedRef.current = connected;
@@ -96,6 +126,8 @@ export function App({ api, geolocation, storage: providedStorage, connectivity: 
   const [activeTripOpen, setActiveTripOpen] = useState(offline);
   const [captureMessage, setCaptureMessage] = useState<string>();
   const [mapContext, setMapContext] = useState<MapContext>(DEFAULT_MAP_CONTEXT);
+  const [recoveredMapOverlay, setRecoveredMapOverlay] = useState<MapOverlayEnvelopeDto>();
+  const [reconnectionState, setReconnectionState] = useState<ReconnectionState>();
   const [nearbyBoards, setNearbyBoards] = useState<ReadonlyMap<string, NearbyBoardState>>(() => new Map());
   const [selectedBoard, setSelectedBoard] = useState<SelectedBoardState>({ phase: 'idle' });
   const [savedBoards, setSavedBoards] = useState<ReadonlyMap<string, BoardEnvelopeDto>>(() => new Map());
@@ -106,6 +138,8 @@ export function App({ api, geolocation, storage: providedStorage, connectivity: 
   const selectedGeneration = useRef(0);
   const selectedAbort = useRef<AbortController | undefined>(undefined);
   const savedAbort = useRef(new Map<string, AbortController>());
+  const recoveryAbort = useRef<AbortController | undefined>(undefined);
+  const recoveryGeneration = useRef(0);
 
   useEffect(() => {
     if (offline) setActiveTripOpen(Boolean(activeTrip));
@@ -259,9 +293,100 @@ export function App({ api, geolocation, storage: providedStorage, connectivity: 
     savedAbort.current.clear();
   }, [connected]);
 
+  const recoveryInputKey = reconnectionInputKey({
+    state,
+    stationOpen,
+    mapContext,
+    mapVersions,
+    savedRecords,
+    activeTrip,
+  });
+
+  useEffect(() => {
+    if (connectivityState !== 'checking') return undefined;
+    setRetainedHistorical(true);
+    recoveryAbort.current?.abort();
+    const controller = new AbortController();
+    recoveryAbort.current = controller;
+    const generation = recoveryGeneration.current + 1;
+    recoveryGeneration.current = generation;
+    const startedAt = exactRecoveryInstant(recoveryNow);
+    const stationId = recoveryStationId(state, activeTrip, savedRecords);
+    const context = createAppReconnectionContext({
+      state,
+      stationOpen,
+      mapContext,
+      mapVersions,
+      savedRecords,
+      activeTrip,
+      stationId,
+      recoveryInputKey,
+      generation,
+      startedAt,
+    });
+    const artifacts: AppReconnectionArtifacts = {};
+    const loadStage = createAppReconnectionStageLoader({
+      api: apiClient,
+      stationId,
+      filters: state.filters,
+      hasUnrelatedSavedRecords: savedRecords.some(({ constituentId }) => constituentId !== stationId),
+      artifacts,
+    });
+
+    void runReconnection({
+      context,
+      initial: {
+        historicalPositioningGuidance: Boolean(activeTrip?.platformGuidance),
+        historicalTransferGuidance: Boolean(activeTrip?.transfers.length),
+      },
+      loadStage,
+      signal: controller.signal,
+      now: recoveryNow,
+      onTransition: (transition) => {
+        if (controller.signal.aborted || recoveryGeneration.current !== generation) return;
+        setReconnectionState(transition.state);
+        onReconnectionTransition?.(transition);
+      },
+    }).then((result) => {
+      if (controller.signal.aborted || recoveryGeneration.current !== generation) return;
+      if (result.kind === 'network-unreachable') {
+        connectivity.reportRequestResult('network-unreachable');
+        return;
+      }
+      if (result.kind !== 'complete') return;
+      setReconnectionState(result.state);
+      if (result.state.visible.currentArrivalsRestored && artifacts.selectedBoard) {
+        setSelectedBoard({ phase: 'ready', board: artifacts.selectedBoard });
+      }
+      const mapStage = result.state.stages.find(({ stage }) => stage === 5)?.result;
+      if (mapStage?.stage === 5 && mapStage.maps.disposition === 'refreshed' && artifacts.mapOverlay) {
+        setRecoveredMapOverlay(artifacts.mapOverlay);
+      }
+      setRetainedHistorical(!result.state.visible.currentArrivalsRestored);
+      connectivity.completeRecovery();
+    });
+
+    return () => controller.abort();
+  }, [
+    activeTrip,
+    apiClient,
+    connectivity.completeRecovery,
+    connectivity.reportRequestResult,
+    connectivityState,
+    mapContext,
+    mapVersions,
+    onReconnectionTransition,
+    recoveryInputKey,
+    recoveryNow,
+    savedRecords,
+    state,
+    stationOpen,
+  ]);
+
   useEffect(() => () => {
     nearbyAbort.current?.abort();
     selectedAbort.current?.abort();
+    recoveryAbort.current?.abort();
     for (const controller of savedAbort.current.values()) controller.abort();
   }, []);
 
@@ -400,7 +525,14 @@ export function App({ api, geolocation, storage: providedStorage, connectivity: 
       <div className="app-frame">
         <AppHeader runtime={currentRuntime} />
         {offline ? <OfflineBanner /> : null}
+        {reconnectionState?.visible.activeWarnings.map((warning) => (
+          <StatusBanner tone="warning" key={warning.id}>
+            <p><strong>Trip update:</strong> {warning.changedFact}</p>
+            <p>{warning.consequence}</p>
+          </StatusBanner>
+        ))}
         {connectivityState === 'checking' ? <StatusBanner tone="warning"><p>Connection restored. Rechecking subway information before showing anything as current.</p></StatusBanner> : null}
+        {connectivityState === 'online' && retainedHistorical ? <StatusBanner tone="warning"><p>Connection is available, but current subway information could not be reverified. Stored information remains historical.</p></StatusBanner> : null}
         {captureMessage ? <p className="capture-message" role="status">{captureMessage}</p> : null}
         {activeTrip ? (
           <section className="active-trip-shell" aria-label="Device-held active trip">
@@ -429,21 +561,21 @@ export function App({ api, geolocation, storage: providedStorage, connectivity: 
                 board={selectedBoard.board}
                 phase={selectedBoard.phase}
                 filters={state.filters}
-                historical={offline || selectedBoard.board?.cacheState === 'historical'}
+                historical={!connected || selectedBoard.board?.cacheState === 'historical'}
                 onFiltersChange={changeFilters}
                 onRefresh={() => runSelectedBoard(selectedStation, stateRef.current.filters)}
                 onSave={saveCurrentStation}
                 saved={selectedSaved}
               />
             </>
-          ) : state.surface === 'nearby' && offline && !state.nearby.response ? (
+          ) : state.surface === 'nearby' && !connected && !state.nearby.response ? (
             <OfflineNearbyEmpty hasSaved={savedRecords.length > 0} hasTrip={Boolean(activeTrip)} />
           ) : state.surface === 'nearby' ? (
             <NearbyView
               phase={state.nearby.phase}
               response={state.nearby.response}
               boards={nearbyBoards}
-              historical={offline}
+              historical={!connected}
               savedChoices={savedChoices}
               pickerChoices={catalog?.data.complexes ?? []}
               fallback={fallback}
@@ -464,6 +596,7 @@ export function App({ api, geolocation, storage: providedStorage, connectivity: 
               mapVersions={mapVersions}
               catalog={catalog?.data.complexes ?? []}
               connected={connected}
+              recoveredOverlay={recoveredMapOverlay}
               origin={state.selectedStation ?? state.lastUsedStation ?? savedChoices[0]}
               initialContext={mapContext}
               onContextChange={setMapContext}
@@ -474,7 +607,7 @@ export function App({ api, geolocation, storage: providedStorage, connectivity: 
               records={savedRecords}
               catalog={catalog?.data.complexes ?? []}
               boards={savedBoards}
-              offline={offline}
+              offline={!connected}
               onOpen={openSaved}
               onRefreshAll={refreshSaved}
               onSave={saveRecord}
@@ -662,6 +795,146 @@ function newYorkServiceDate(value: string): string {
   }).formatToParts(new Date(value));
   const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((candidate) => candidate.type === type)?.value;
   return `${part('year')}-${part('month')}-${part('day')}`;
+}
+
+function reconnectionInputKey(input: {
+  readonly state: AppState;
+  readonly stationOpen: boolean;
+  readonly mapContext: MapContext;
+  readonly mapVersions?: BootstrapDataDto['contentVersions']['maps'];
+  readonly savedRecords: readonly SavedRecord[];
+  readonly activeTrip: ActiveTripRecord | null;
+}): string {
+  return JSON.stringify({
+    surface: input.state.surface,
+    stationOpen: input.stationOpen,
+    selectedStation: input.state.selectedStation,
+    lastUsedStation: input.state.lastUsedStation,
+    nearbyResponseIdentity: input.state.nearby.response?.responseIdentity ?? null,
+    filters: input.state.filters,
+    mapContext: input.mapContext,
+    mapVersions: input.mapVersions ?? null,
+    savedRecordIds: input.savedRecords.map(({ id, constituentId, state }) => [id, constituentId, state]),
+    activeTrip: input.activeTrip ? { id: input.activeTrip.id, cursor: input.activeTrip.cursor } : null,
+  });
+}
+
+function recoveryStationId(
+  state: AppState,
+  activeTrip: ActiveTripRecord | null,
+  savedRecords: readonly SavedRecord[],
+): string | null {
+  const activePoint = activeTrip?.legs.flatMap(({ points }) => points)
+    .find(({ id }) => id === activeTrip.cursor.pointId);
+  const nearby = state.nearby.response?.data?.kind === 'ranked'
+    ? state.nearby.response.data.cards[0]?.directions[0]?.constituentId
+    : undefined;
+  return state.selectedStation?.constituentId
+    ?? state.lastUsedStation?.constituentId
+    ?? activePoint?.constituentId
+    ?? savedRecords[0]?.constituentId
+    ?? nearby
+    ?? null;
+}
+
+function createAppReconnectionContext(input: {
+  readonly state: AppState;
+  readonly stationOpen: boolean;
+  readonly mapContext: MapContext;
+  readonly mapVersions?: BootstrapDataDto['contentVersions']['maps'];
+  readonly savedRecords: readonly SavedRecord[];
+  readonly activeTrip: ActiveTripRecord | null;
+  readonly stationId: string | null;
+  readonly recoveryInputKey: string;
+  readonly generation: number;
+  readonly startedAt: string;
+}): PreservedReconnectionContext {
+  const cursor = input.activeTrip?.legs
+    .map((leg, legIndex) => ({ leg, legIndex }))
+    .find(({ leg }) => leg.points.some(({ id }) => id === input.activeTrip?.cursor.pointId));
+  const direction = input.state.filters.direction ?? cursor?.leg.boundDirection ?? 'unknown';
+  const routeFilters = input.state.filters.routeIds.length > 0
+    ? input.state.filters.routeIds
+    : cursor ? [cursor.leg.route.id] : [];
+  const theme = input.mapContext.serviceMeaning === 'typical-weekday' ? 'day' as const : 'night' as const;
+  const viewportKey = `viewport-${fingerprint(JSON.stringify({
+    viewport: input.mapContext.viewport,
+    selectedStationId: input.mapContext.selectedStationId ?? null,
+    selectedRouteId: input.mapContext.selectedRouteId ?? null,
+  }))}`;
+  const contextKey = `context-${fingerprint(input.recoveryInputKey)}`;
+  const scopes: ReconnectionScopeMembership[] = [
+    { kind: 'context', id: contextKey },
+    { kind: 'map', id: viewportKey },
+    ...(input.stationId ? [{ kind: 'station' as const, id: input.stationId }] : []),
+    ...routeFilters.map((id) => ({ kind: 'route' as const, id })),
+    { kind: 'direction', id: direction },
+    ...input.savedRecords.map(({ id }) => ({ kind: 'saved-record' as const, id })),
+    ...(input.activeTrip?.legs.map(({ id }) => ({ kind: 'leg' as const, id })) ?? []),
+    ...(input.activeTrip?.transfers.map(({ id }) => ({ kind: 'transfer' as const, id })) ?? []),
+    ...(input.activeTrip?.accessiblePath
+      ? [{ kind: 'path' as const, id: input.activeTrip.accessiblePath.ownerRecordId }]
+      : []),
+  ];
+  const eligibleScopes = scopes.filter((scope, index) => scopes.findIndex((candidate) => (
+    candidate.kind === scope.kind && candidate.id === scope.id
+  )) === index);
+  const focusTarget = typeof document !== 'undefined' && document.activeElement instanceof HTMLElement
+    ? document.activeElement.id || null
+    : null;
+  return {
+    stationId: input.stationId,
+    direction,
+    routeFilters,
+    accessibleRouteOnly: input.activeTrip?.accessibleRouteOnly ?? false,
+    mapTuple: {
+      referenceMode: input.mapContext.serviceMeaning === 'actual-now'
+        ? 'actual'
+        : input.mapContext.serviceMeaning,
+      theme,
+      contentVersion: input.mapVersions?.[theme] ?? 'not-stored',
+      viewportKey,
+    },
+    activeTripId: input.activeTrip?.id ?? null,
+    manualCursor: cursor && input.activeTrip
+      ? { legIndex: cursor.legIndex, stopId: input.activeTrip.cursor.pointId }
+      : null,
+    hasStoredTrainChoice: false,
+    guidanceRequirements: {
+      positioning: input.activeTrip?.platformGuidance ? 'optional' : 'none',
+      transfer: input.activeTrip?.transfers.length ? 'required' : 'none',
+    },
+    activeSurface: input.state.surface === 'nearby' && input.stationOpen ? 'station' : input.state.surface,
+    scrollOffset: typeof window === 'undefined' ? 0 : Math.max(0, window.scrollY || 0),
+    focusTargetId: focusTarget,
+    readingAnchorId: input.activeTrip?.cursor.pointId ?? null,
+    recovery: {
+      epochId: `epoch-${input.generation}-${fingerprint(input.startedAt)}`,
+      requestIdentity: `recovery-${input.generation}-${fingerprint(`${input.startedAt}:${contextKey}`)}`,
+      generation: input.generation,
+      startedAt: input.startedAt,
+      activeTripId: input.activeTrip?.id ?? null,
+      contextKey,
+      eligibleScopes,
+    },
+  };
+}
+
+function exactRecoveryInstant(now: (() => Date) | undefined): string {
+  const value = now?.() ?? new Date();
+  if (!(value instanceof Date) || !Number.isFinite(value.getTime())) {
+    throw new Error('Recovery clock returned an invalid instant');
+  }
+  return new Date(value.getTime()).toISOString();
+}
+
+function fingerprint(value: string): string {
+  let hash = 2_166_136_261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16_777_619);
+  }
+  return (hash >>> 0).toString(36);
 }
 
 function classifyRequestFailure(error: unknown): 'network-unreachable' | 'domain-unavailable' {

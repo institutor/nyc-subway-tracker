@@ -30,6 +30,8 @@ describe('governed global connectivity', () => {
     act(() => events.report('network-unreachable'));
     expect(screen.getByText('offline')).toBeTruthy();
     act(() => events.report('accepted'));
+    expect(screen.getByText('checking')).toBeTruthy();
+    act(() => events.completeRecovery());
     expect(screen.getByText('online')).toBeTruthy();
   });
 
@@ -45,6 +47,8 @@ describe('governed global connectivity', () => {
     act(() => events.report('domain-unavailable'));
     expect(screen.getByText('checking')).toBeTruthy();
     act(() => events.report('accepted'));
+    expect(screen.getByText('checking')).toBeTruthy();
+    act(() => events.completeRecovery());
     expect(screen.getByText('online')).toBeTruthy();
   });
 
@@ -56,6 +60,7 @@ describe('governed global connectivity', () => {
     navigatorState.onLine = false;
     act(() => events.dispatch('offline'));
     act(() => events.report('accepted'));
+    act(() => events.completeRecovery());
     expect(screen.getByText('offline')).toBeTruthy();
   });
 
@@ -83,13 +88,14 @@ function Harness({
   readonly events: ControlledConnectivityEvents;
 }) {
   const connectivity = useConnectivity({ navigator: navigatorState, eventTarget: events });
-  events.bind(connectivity.reportRequestResult);
+  events.bind(connectivity.reportRequestResult, connectivity.completeRecovery);
   return <p>{connectivity.state}</p>;
 }
 
 class ControlledConnectivityEvents implements Pick<Window, 'addEventListener' | 'removeEventListener'> {
   private readonly listeners = new Map<string, Set<EventListenerOrEventListenerObject>>();
   private reporter: ((result: ConnectivityRequestResult) => void) | undefined;
+  private completion: (() => void) | undefined;
 
   addEventListener(type: string, listener: EventListenerOrEventListenerObject): void {
     const listeners = this.listeners.get(type) ?? new Set<EventListenerOrEventListenerObject>();
@@ -101,13 +107,19 @@ class ControlledConnectivityEvents implements Pick<Window, 'addEventListener' | 
     this.listeners.get(type)?.delete(listener);
   }
 
-  bind(reporter: (result: ConnectivityRequestResult) => void): void {
+  bind(reporter: (result: ConnectivityRequestResult) => void, completion: () => void): void {
     this.reporter = reporter;
+    this.completion = completion;
   }
 
   report(result: ConnectivityRequestResult): void {
     if (!this.reporter) throw new Error('Connectivity reporter is not bound.');
     this.reporter(result);
+  }
+
+  completeRecovery(): void {
+    if (!this.completion) throw new Error('Connectivity recovery completion is not bound.');
+    this.completion();
   }
 
   dispatch(type: 'online' | 'offline'): void {

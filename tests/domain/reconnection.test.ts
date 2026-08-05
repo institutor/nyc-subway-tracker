@@ -15,6 +15,24 @@ import {
 } from '../../src/shared/domain/reconnection';
 
 const AT = '2026-08-05T12:00:00.000Z';
+const RECOVERY = {
+  epochId: 'recovery-epoch-7',
+  requestIdentity: 'recovery-request-7',
+  generation: 7,
+  startedAt: '2026-08-05T11:59:59.000Z',
+  activeTripId: 'trip-a27-a32',
+  contextKey: 'context:a27:trip-a27-a32:map',
+  eligibleScopes: [
+    { kind: 'station', id: 'A27' },
+    { kind: 'route', id: 'A' },
+    { kind: 'route', id: 'C' },
+    { kind: 'route', id: 'A-southbound' },
+    { kind: 'direction', id: 'southbound' },
+    { kind: 'path', id: 'path-a27-a32' },
+    { kind: 'train', id: 'trip-a-1200' },
+    { kind: 'transfer', id: 'A32-transfer' },
+  ],
+} as const;
 
 const CONTEXT: PreservedReconnectionContext = {
   stationId: 'A27',
@@ -29,10 +47,13 @@ const CONTEXT: PreservedReconnectionContext = {
   },
   activeTripId: 'trip-a27-a32',
   manualCursor: { legIndex: 0, stopId: 'A27' },
+  hasStoredTrainChoice: true,
+  guidanceRequirements: { positioning: 'optional', transfer: 'required' },
   activeSurface: 'map',
   scrollOffset: 384,
   focusTargetId: 'active-trip-next-stop',
   readingAnchorId: 'trip-leg-1-stop-a27',
+  recovery: RECOVERY,
 };
 
 function gate(domain: OwnerAcceptance['domain']): Extract<OwnerAcceptance, { disposition: 'accepted-fresh' }>;
@@ -48,9 +69,19 @@ function gate(
   domain: OwnerAcceptance['domain'],
   disposition: OwnerAcceptance['disposition'] = 'accepted-fresh',
 ): OwnerAcceptance {
+  const owner = {
+    recoveryEpochId: RECOVERY.epochId,
+    requestIdentity: RECOVERY.requestIdentity,
+    generation: RECOVERY.generation,
+    activeTripId: RECOVERY.activeTripId,
+    contextKey: RECOVERY.contextKey,
+    scopeMembership: RECOVERY.eligibleScopes,
+    evidenceAt: AT,
+  } as const;
   return disposition === 'accepted-fresh'
-    ? { domain, ownerId: `${domain}-owner`, evidenceId: `${domain}-evidence`, acceptedAt: AT, disposition }
+    ? { ...owner, domain, ownerId: `${domain}-owner`, evidenceId: `${domain}-evidence`, acceptedAt: AT, disposition }
     : {
+        ...owner,
         domain,
         ownerId: `${domain}-owner`,
         evidenceId: `${domain}-failure`,
@@ -58,6 +89,13 @@ function gate(
         disposition,
         reason: `${domain} unavailable`,
       };
+}
+
+function arrivalSnapshots(): readonly [OwnerAcceptance, OwnerAcceptance] {
+  return [
+    { ...gate('arrivals'), evidenceId: 'arrivals-snapshot-1' },
+    { ...gate('arrivals'), evidenceId: 'arrivals-snapshot-2' },
+  ];
 }
 
 function invalidation(
@@ -114,7 +152,7 @@ function validResult(stage: ReconnectionStageResult['stage']): ReconnectionStage
         stage,
         feedRecovery: { gate: gate('feed-health'), disposition: 'readmitted' },
         trainReadmission: { gate: gate('train-admission'), disposition: 'admitted' },
-        arrivals: { gate: gate('arrivals'), disposition: 'current', freshSnapshotCount: 2 },
+        arrivals: { gate: gate('arrivals'), disposition: 'current', freshSnapshotCount: 2, freshSnapshots: arrivalSnapshots() },
         storedTrainChoice: 'verified',
         invalidation: null,
       };
@@ -177,7 +215,7 @@ function invalidatingResult(stage: 1 | 2 | 3 | 4): Exclude<ReconnectionStageResu
         stage,
         feedRecovery: { gate: gate('feed-health'), disposition: 'blocked' },
         trainReadmission: { gate: trainGate, disposition: 'blocked' },
-        arrivals: { gate: gate('arrivals'), disposition: 'withheld', freshSnapshotCount: 1 },
+        arrivals: { gate: gate('arrivals'), disposition: 'withheld', freshSnapshotCount: 1, freshSnapshots: [arrivalSnapshots()[0]] },
         storedTrainChoice: 'unverified',
         invalidation: invalidation(stage, trainGate),
       };
@@ -294,6 +332,7 @@ describe('owner-gated reconnection ordering', () => {
           gate: gate('arrivals', 'governed-fail-closed'),
           disposition: 'withheld',
           freshSnapshotCount: 0,
+          freshSnapshots: [],
         },
         storedTrainChoice: 'none',
         invalidation: null,
@@ -326,6 +365,25 @@ describe('owner-gated reconnection ordering', () => {
       state = presentReconnectionStage(state, result.stage);
     }
     expect(state.status).toBe('complete');
+  });
+
+  test.each([
+    ['recovery epoch', (result: any) => { result.equipment.gate.recoveryEpochId = 'recovery-epoch-6'; }, /epoch/i],
+    ['request identity', (result: any) => { result.equipment.gate.requestIdentity = 'recovery-request-prior'; }, /request identity/i],
+    ['generation', (result: any) => { result.equipment.gate.generation = 6; }, /generation/i],
+    ['active trip', (result: any) => { result.equipment.gate.activeTripId = 'trip-someone-else'; }, /active trip/i],
+    ['context', (result: any) => { result.equipment.gate.contextKey = 'context:another-rider'; }, /context/i],
+    ['pre-epoch evidence', (result: any) => { result.equipment.gate.evidenceAt = '2026-08-05T11:59:58.000Z'; }, /predate.*epoch/i],
+    ['outside scope', (result: any) => { result.equipment.gate.scopeMembership = [{ kind: 'station', id: 'R20' }]; }, /eligible scope/i],
+  ])('rejects %s owner evidence before accepting a stage', (_name, corrupt, expected) => {
+    const state = requestReconnectionStage(createReconnectionState(CONTEXT, {
+      historicalPositioningGuidance: true,
+    }), 1);
+    const result = structuredClone(validResult(1)) as any;
+    corrupt(result);
+
+    expect(() => acceptReconnectionStage(state, result)).toThrow(expected);
+    expect(state.stages[0].status).toBe('requested');
   });
 
   test('never treats an incomplete accessible-path result as a verified complete exact path', () => {
@@ -447,7 +505,7 @@ describe('owner-gated reconnection ordering', () => {
       stage: 3,
       feedRecovery: { gate: gate('feed-health'), disposition: 'blocked' },
       trainReadmission: { gate: gate('train-admission'), disposition: 'blocked' },
-      arrivals: { gate: gate('arrivals'), disposition: 'withheld', freshSnapshotCount: 1 },
+      arrivals: { gate: gate('arrivals'), disposition: 'withheld', freshSnapshotCount: 1, freshSnapshots: [arrivalSnapshots()[0]] },
       storedTrainChoice: 'none',
       invalidation: null,
     };
@@ -475,7 +533,7 @@ describe('owner-gated reconnection ordering', () => {
     const overtakingReadmission: Extract<ReconnectionStageResult, { stage: 3 }> = {
       ...validResult(3),
       feedRecovery: { gate: gate('feed-health'), disposition: 'blocked' },
-      arrivals: { gate: gate('arrivals'), disposition: 'withheld', freshSnapshotCount: 2 },
+      arrivals: { gate: gate('arrivals'), disposition: 'withheld', freshSnapshotCount: 2, freshSnapshots: arrivalSnapshots() },
     };
 
     expect(() => acceptReconnectionStage(state, overtakingReadmission))

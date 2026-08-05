@@ -29,6 +29,7 @@ export function MapView({
   mapVersions,
   catalog,
   connected,
+  recoveredOverlay,
   origin,
   initialContext,
   onContextChange,
@@ -39,6 +40,7 @@ export function MapView({
   readonly mapVersions?: BootstrapDataDto['contentVersions']['maps'];
   readonly catalog: readonly CatalogComplexDto[];
   readonly connected: boolean;
+  readonly recoveredOverlay?: MapOverlayEnvelopeDto;
   readonly origin?: StationChoice;
   readonly initialContext?: MapContext;
   readonly onContextChange: (context: MapContext) => void;
@@ -58,6 +60,11 @@ export function MapView({
     overlayAbort.current?.abort();
     setOverlay(undefined);
     if (!connected || context.serviceMeaning !== 'actual-now') return;
+    if (recoveredOverlay?.cacheState === 'network'
+      && recoveredOverlay.data?.theme === 'night') {
+      setOverlay(recoveredOverlay);
+      return;
+    }
     const controller = new AbortController();
     overlayAbort.current = controller;
     void api.mapOverlay('day', controller.signal).then((response) => {
@@ -66,7 +73,7 @@ export function MapView({
       if (!controller.signal.aborted) setOverlay(undefined);
     });
     return () => controller.abort();
-  }, [api, connected, context.serviceMeaning]);
+  }, [api, connected, context.serviceMeaning, recoveredOverlay]);
 
   useEffect(() => () => {
     referenceAbort.current?.abort();

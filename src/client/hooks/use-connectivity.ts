@@ -11,6 +11,7 @@ export interface UseConnectivityOptions {
 export interface ConnectivityController {
   readonly state: ConnectivityState;
   readonly reportRequestResult: (result: ConnectivityRequestResult) => void;
+  readonly completeRecovery: () => void;
 }
 
 /**
@@ -47,8 +48,12 @@ export function useConnectivity(options: UseConnectivityOptions = {}): Connectiv
       setState('offline');
       return;
     }
+    if (!browserOffline.current) setState((current) => current === 'offline' ? 'checking' : current);
+  }, []);
+
+  const completeRecovery = useCallback(() => {
     if (!browserOffline.current) setState('online');
   }, []);
 
-  return Object.freeze({ state, reportRequestResult });
+  return Object.freeze({ state, reportRequestResult, completeRecovery });
 }

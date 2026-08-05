@@ -12,11 +12,48 @@ export type ReconnectionOwnerDomain =
   | 'maps'
   | 'saved';
 
+export type ReconnectionScopeKind =
+  | 'route'
+  | 'direction'
+  | 'station'
+  | 'segment'
+  | 'leg'
+  | 'transfer'
+  | 'entrance'
+  | 'passage'
+  | 'platform'
+  | 'machine'
+  | 'connection'
+  | 'path'
+  | 'train';
+
+export interface ReconnectionScopeMembership {
+  readonly kind: ReconnectionScopeKind | 'context' | 'map' | 'saved-record';
+  readonly id: string;
+}
+
+export interface ReconnectionRequestOwnership {
+  readonly epochId: string;
+  readonly requestIdentity: string;
+  readonly generation: number;
+  readonly startedAt: string;
+  readonly activeTripId: string | null;
+  readonly contextKey: string;
+  readonly eligibleScopes: readonly ReconnectionScopeMembership[];
+}
+
 interface OwnerAcceptanceBase {
   readonly domain: ReconnectionOwnerDomain;
   readonly ownerId: string;
   readonly evidenceId: string;
+  readonly evidenceAt: string;
   readonly acceptedAt: string;
+  readonly recoveryEpochId: string;
+  readonly requestIdentity: string;
+  readonly generation: number;
+  readonly activeTripId: string | null;
+  readonly contextKey: string;
+  readonly scopeMembership: readonly ReconnectionScopeMembership[];
 }
 
 export type OwnerAcceptance =
@@ -30,20 +67,7 @@ export type OwnerAcceptance =
     });
 
 export interface ReconnectionInvalidationScope {
-  readonly kind:
-    | 'route'
-    | 'direction'
-    | 'station'
-    | 'segment'
-    | 'leg'
-    | 'transfer'
-    | 'entrance'
-    | 'passage'
-    | 'platform'
-    | 'machine'
-    | 'connection'
-    | 'path'
-    | 'train';
+  readonly kind: ReconnectionScopeKind;
   readonly id: string;
   readonly label: string;
 }
@@ -94,7 +118,7 @@ export interface ServiceChangesStageResult {
     readonly disposition: 'resolved' | 'unresolved-fail-closed';
     readonly vetoesApplied: boolean;
   };
-  readonly tripServicePattern: 'verified' | 'unusable' | 'unverified';
+  readonly tripServicePattern: 'verified' | 'unusable' | 'unverified' | 'not-applicable';
   readonly invalidation: ReconnectionInvalidation | null;
 }
 
@@ -112,6 +136,7 @@ export interface ArrivalsStageResult {
     readonly gate: OwnerAcceptance;
     readonly disposition: 'current' | 'withheld';
     readonly freshSnapshotCount: number;
+    readonly freshSnapshots: readonly OwnerAcceptance[];
   };
   readonly storedTrainChoice: 'none' | 'verified' | 'unusable' | 'unverified';
   readonly invalidation: ReconnectionInvalidation | null;
@@ -152,7 +177,7 @@ export type ReconnectionStageResult =
   | BackgroundStageResult;
 
 export interface PreservedReconnectionContext {
-  readonly stationId: string;
+  readonly stationId: string | null;
   readonly direction: string;
   readonly routeFilters: readonly string[];
   readonly accessibleRouteOnly: boolean;
@@ -162,15 +187,21 @@ export interface PreservedReconnectionContext {
     readonly contentVersion: string;
     readonly viewportKey: string;
   };
-  readonly activeTripId: string;
+  readonly activeTripId: string | null;
   readonly manualCursor: {
     readonly legIndex: number;
     readonly stopId: string;
+  } | null;
+  readonly hasStoredTrainChoice: boolean;
+  readonly guidanceRequirements: {
+    readonly positioning: 'required' | 'optional' | 'none';
+    readonly transfer: 'required' | 'optional' | 'none';
   };
-  readonly activeSurface: 'nearby' | 'station' | 'saved' | 'map';
+  readonly activeSurface: 'nearby' | 'station' | 'saved' | 'map' | 'commute';
   readonly scrollOffset: number;
   readonly focusTargetId: string | null;
   readonly readingAnchorId: string | null;
+  readonly recovery: ReconnectionRequestOwnership;
 }
 
 export interface ReconnectionAuditEvent {
@@ -232,6 +263,7 @@ export function createReconnectionState(
   context: PreservedReconnectionContext,
   initial: ReconnectionInitialPresentation,
 ): ReconnectionState {
+  validateRequestOwnership(context);
   return immutableState({
     status: 'reconnecting',
     currentStage: 1,
@@ -264,8 +296,8 @@ export function acceptReconnectionStage(
   const stage = result.stage;
   assertCurrentStage(state, stage);
   assertStageStatus(state, stage, 'requested', `Stage ${stage} must be requested before owner acceptance`);
-  validateStageOwnerGates(result);
-  validateStageSemantics(result);
+  validateStageOwnerGates(result, state.context.recovery);
+  validateStageSemantics(result, state.context.recovery);
   return transitionStage(state, stage, 'accepted', result, 'stage-owner-accepted');
 }
 
@@ -326,7 +358,7 @@ export function resolveReconnectionWarning(
   if (!warning) throw new Error('Exact active reconnection warning is required');
   const resolution = input.resolution as ReconnectionWarningResolution | undefined;
   if (resolution?.kind === 'owner-resolved') {
-    validateOwnerGate(resolution.gate, warning.ownerGate.domain, 'Warning resolution');
+    validateOwnerGate(resolution.gate, warning.ownerGate.domain, 'Warning resolution', state.context.recovery);
     if (resolution.gate.disposition !== 'accepted-fresh') {
       throw new Error('Warning resolution requires fresh owner-accepted evidence');
     }
@@ -368,31 +400,31 @@ function transitionStage(
   });
 }
 
-function validateStageOwnerGates(result: ReconnectionStageResult): void {
+function validateStageOwnerGates(result: ReconnectionStageResult, ownership: ReconnectionRequestOwnership): void {
   switch (result.stage) {
     case 1:
-      validateOwnerGate(result.equipment?.gate, 'equipment', 'Equipment');
-      validateOwnerGate(result.accessiblePath?.gate, 'accessible-path', 'Accessible path');
+      validateOwnerGate(result.equipment?.gate, 'equipment', 'Equipment', ownership);
+      validateOwnerGate(result.accessiblePath?.gate, 'accessible-path', 'Accessible path', ownership);
       return;
     case 2:
-      validateOwnerGate(result.serviceChanges?.gate, 'service-change', 'Service change');
+      validateOwnerGate(result.serviceChanges?.gate, 'service-change', 'Service change', ownership);
       return;
     case 3:
-      validateOwnerGate(result.feedRecovery?.gate, 'feed-health', 'Feed recovery');
-      validateOwnerGate(result.trainReadmission?.gate, 'train-admission', 'Train readmission');
-      validateOwnerGate(result.arrivals?.gate, 'arrivals', 'Arrivals');
+      validateOwnerGate(result.feedRecovery?.gate, 'feed-health', 'Feed recovery', ownership);
+      validateOwnerGate(result.trainReadmission?.gate, 'train-admission', 'Train readmission', ownership);
+      validateOwnerGate(result.arrivals?.gate, 'arrivals', 'Arrivals', ownership);
       return;
     case 4:
-      validateOwnerGate(result.positioning?.gate, 'positioning', 'Positioning');
-      validateOwnerGate(result.transferGuidance?.gate, 'transfer-guidance', 'Transfer guidance');
+      validateOwnerGate(result.positioning?.gate, 'positioning', 'Positioning', ownership);
+      validateOwnerGate(result.transferGuidance?.gate, 'transfer-guidance', 'Transfer guidance', ownership);
       return;
     case 5:
-      validateOwnerGate(result.maps?.gate, 'maps', 'Maps');
-      validateOwnerGate(result.unrelatedSaved?.gate, 'saved', 'Saved');
+      validateOwnerGate(result.maps?.gate, 'maps', 'Maps', ownership);
+      validateOwnerGate(result.unrelatedSaved?.gate, 'saved', 'Saved', ownership);
   }
 }
 
-function validateStageSemantics(result: ReconnectionStageResult): void {
+function validateStageSemantics(result: ReconnectionStageResult, ownership: ReconnectionRequestOwnership): void {
   switch (result.stage) {
     case 1: {
       if (typeof result.accessiblePath.requiredForActiveTrip !== 'boolean') {
@@ -436,6 +468,7 @@ function validateStageSemantics(result: ReconnectionStageResult): void {
         result.invalidation,
         result.stage,
         [result.equipment.gate, result.accessiblePath.gate],
+        ownership,
       );
       return;
     }
@@ -446,8 +479,12 @@ function validateStageSemantics(result: ReconnectionStageResult): void {
       }
       if (result.tripServicePattern !== 'verified'
         && result.tripServicePattern !== 'unusable'
-        && result.tripServicePattern !== 'unverified') {
+        && result.tripServicePattern !== 'unverified'
+        && result.tripServicePattern !== 'not-applicable') {
         throw new Error('Trip service pattern must be an exact governed state');
+      }
+      if ((ownership.activeTripId === null) !== (result.tripServicePattern === 'not-applicable')) {
+        throw new Error('Trip service pattern applicability must match the exact active trip');
       }
       if (result.serviceChanges.vetoesApplied !== true) {
         throw new Error('Every service-change veto must be applied before stage 2 owner acceptance');
@@ -457,10 +494,11 @@ function validateStageSemantics(result: ReconnectionStageResult): void {
         throw new Error('Service-change resolution must match its owner acceptance gate');
       }
       validateInvalidation(
-        result.tripServicePattern !== 'verified',
+        ownership.activeTripId !== null && result.tripServicePattern !== 'verified',
         result.invalidation,
         result.stage,
         [result.serviceChanges.gate],
+        ownership,
       );
       return;
     case 3:
@@ -484,6 +522,20 @@ function validateStageSemantics(result: ReconnectionStageResult): void {
       if (!Number.isSafeInteger(result.arrivals.freshSnapshotCount)
         || result.arrivals.freshSnapshotCount < 0) {
         throw new Error('Arrival recovery snapshot count must be a nonnegative whole number');
+      }
+      if (!Array.isArray(result.arrivals.freshSnapshots)
+        || result.arrivals.freshSnapshots.length !== result.arrivals.freshSnapshotCount) {
+        throw new Error('Arrival recovery requires exact fresh snapshot evidence for every counted snapshot');
+      }
+      for (const snapshot of result.arrivals.freshSnapshots) {
+        validateOwnerGate(snapshot, 'arrivals', 'Arrival snapshot', ownership);
+        if (snapshot.disposition !== 'accepted-fresh') {
+          throw new Error('Arrival snapshots must be owner-accepted fresh evidence');
+        }
+      }
+      if (new Set(result.arrivals.freshSnapshots.map(({ evidenceId }) => evidenceId)).size
+        !== result.arrivals.freshSnapshots.length) {
+        throw new Error('Arrival recovery snapshots require distinct evidence identities');
       }
       if (result.arrivals.disposition === 'current' && result.arrivals.freshSnapshotCount < 2) {
         throw new Error('One fresh arrival snapshot restores nothing');
@@ -517,6 +569,7 @@ function validateStageSemantics(result: ReconnectionStageResult): void {
         result.invalidation,
         result.stage,
         [result.feedRecovery.gate, result.trainReadmission.gate, result.arrivals.gate],
+        ownership,
       );
       return;
     case 4: {
@@ -531,6 +584,7 @@ function validateStageSemantics(result: ReconnectionStageResult): void {
         result.invalidation,
         result.stage,
         [result.positioning.gate, result.transferGuidance.gate],
+        ownership,
       );
       return;
     }
@@ -573,6 +627,7 @@ function validateInvalidation(
   invalidation: ReconnectionInvalidation | null,
   stage: 1 | 2 | 3 | 4,
   ownerGates: readonly OwnerAcceptance[],
+  ownership: ReconnectionRequestOwnership,
 ): void {
   if (required && invalidation === null) {
     throw new Error(`Stage ${stage} requires a required active-trip invalidation warning`);
@@ -592,6 +647,9 @@ function validateInvalidation(
   if (invalidation.scopes.some((scope) => !validInvalidationScopeKind(scope.kind))) {
     throw new Error('Active-trip invalidation requires an exact affected scope kind');
   }
+  if (invalidation.scopes.some((scope) => !hasEligibleScope(ownership, scope))) {
+    throw new Error('Active-trip invalidation scope must belong to the exact eligible recovery scope');
+  }
   if (!ownerGates.some((gate) => sameOwnerGate(gate, invalidation.ownerGate))) {
     throw new Error('Active-trip invalidation must retain a gate accepted by an owner in the current stage');
   }
@@ -605,7 +663,7 @@ function validateInvalidation(
     if (!nonempty(alternative.id) || !nonempty(alternative.summary)) {
       throw new Error('Owner-verified alternative requires an exact identity and summary');
     }
-    validateOwnerGate(alternative.gate, alternative.gate?.domain, 'Alternative');
+    validateOwnerGate(alternative.gate, alternative.gate?.domain, 'Alternative', ownership);
     if (alternative.gate.disposition !== 'accepted-fresh') {
       throw new Error('An alternative must be freshly verified by its owner');
     }
@@ -616,12 +674,19 @@ function sameOwnerGate(left: OwnerAcceptance, right: OwnerAcceptance): boolean {
   return left.domain === right?.domain
     && left.ownerId === right.ownerId
     && left.evidenceId === right.evidenceId
+    && left.evidenceAt === right.evidenceAt
     && left.acceptedAt === right.acceptedAt
+    && left.recoveryEpochId === right.recoveryEpochId
+    && left.requestIdentity === right.requestIdentity
+    && left.generation === right.generation
+    && left.activeTripId === right.activeTripId
+    && left.contextKey === right.contextKey
+    && sameScopeMembership(left.scopeMembership, right.scopeMembership)
     && left.disposition === right.disposition
     && left.reason === right.reason;
 }
 
-function validInvalidationScopeKind(value: unknown): value is ReconnectionInvalidationScope['kind'] {
+function validInvalidationScopeKind(value: unknown): value is ReconnectionScopeKind {
   return value === 'route'
     || value === 'direction'
     || value === 'station'
@@ -641,12 +706,27 @@ function validateOwnerGate(
   candidate: OwnerAcceptance | undefined,
   expectedDomain: ReconnectionOwnerDomain,
   label: string,
+  ownership: ReconnectionRequestOwnership,
 ): asserts candidate is OwnerAcceptance {
   if (!candidate || candidate.domain !== expectedDomain) {
     throw new Error(`${label} owner gate must come from the exact ${expectedDomain} owner`);
   }
-  if (!nonempty(candidate.ownerId) || !nonempty(candidate.evidenceId) || !canonicalInstant(candidate.acceptedAt)) {
+  if (!nonempty(candidate.ownerId) || !nonempty(candidate.evidenceId)
+    || !canonicalInstant(candidate.evidenceAt) || !canonicalInstant(candidate.acceptedAt)) {
     throw new Error(`${label} owner gate requires exact owner, evidence, and acceptance time`);
+  }
+  if (candidate.recoveryEpochId !== ownership.epochId) throw new Error(`${label} recovery epoch does not match the active request`);
+  if (candidate.requestIdentity !== ownership.requestIdentity) throw new Error(`${label} request identity does not match the active request`);
+  if (candidate.generation !== ownership.generation) throw new Error(`${label} generation does not match the active request`);
+  if (candidate.activeTripId !== ownership.activeTripId) throw new Error(`${label} active trip does not match the preserved context`);
+  if (candidate.contextKey !== ownership.contextKey) throw new Error(`${label} context does not match the preserved request`);
+  if (Date.parse(candidate.evidenceAt) < Date.parse(ownership.startedAt)
+    || Date.parse(candidate.acceptedAt) < Date.parse(ownership.startedAt)) {
+    throw new Error(`${label} evidence cannot predate the recovery epoch`);
+  }
+  if (!Array.isArray(candidate.scopeMembership) || candidate.scopeMembership.length === 0
+    || candidate.scopeMembership.some((scope) => !hasEligibleScope(ownership, scope))) {
+    throw new Error(`${label} evidence must belong to the exact eligible scope`);
   }
   if (candidate.disposition !== 'accepted-fresh' && candidate.disposition !== 'governed-fail-closed') {
     throw new Error(`${label} result must be owner-accepted fresh or governed fail-closed`);
@@ -654,6 +734,43 @@ function validateOwnerGate(
   if (candidate.disposition === 'governed-fail-closed' && !nonempty(candidate.reason)) {
     throw new Error(`${label} governed fail-closed result requires a reason`);
   }
+}
+
+function validateRequestOwnership(context: PreservedReconnectionContext): void {
+  const ownership = context.recovery;
+  if (!ownership || !nonempty(ownership.epochId) || !nonempty(ownership.requestIdentity)
+    || !Number.isSafeInteger(ownership.generation) || ownership.generation < 1
+    || !canonicalInstant(ownership.startedAt)
+    || (ownership.activeTripId !== null && !nonempty(ownership.activeTripId))
+    || !nonempty(ownership.contextKey) || ownership.activeTripId !== context.activeTripId) {
+    throw new Error('Reconnection requires exact epoch, request, generation, active-trip, and context ownership');
+  }
+  if (!Array.isArray(ownership.eligibleScopes) || ownership.eligibleScopes.length === 0
+    || ownership.eligibleScopes.some((scope) => !scope || !validScopeMembershipKind(scope.kind) || !nonempty(scope.id))) {
+    throw new Error('Reconnection requires an exact bounded eligible scope');
+  }
+  const keys = ownership.eligibleScopes.map((scope) => `${scope.kind}\u0000${scope.id}`);
+  if (new Set(keys).size !== keys.length) throw new Error('Reconnection eligible scopes must be unique');
+}
+
+function hasEligibleScope(
+  ownership: ReconnectionRequestOwnership,
+  scope: ReconnectionScopeMembership | undefined,
+): boolean {
+  return Boolean(scope && validScopeMembershipKind(scope.kind) && nonempty(scope.id)
+    && ownership.eligibleScopes.some((eligible) => eligible.kind === scope.kind && eligible.id === scope.id));
+}
+
+function validScopeMembershipKind(value: unknown): value is ReconnectionScopeMembership['kind'] {
+  return validInvalidationScopeKind(value) || value === 'context' || value === 'map' || value === 'saved-record';
+}
+
+function sameScopeMembership(
+  left: readonly ReconnectionScopeMembership[],
+  right: readonly ReconnectionScopeMembership[],
+): boolean {
+  return left.length === right.length
+    && left.every((scope, index) => scope.kind === right[index]?.kind && scope.id === right[index]?.id);
 }
 
 function nonempty(value: unknown): value is string {

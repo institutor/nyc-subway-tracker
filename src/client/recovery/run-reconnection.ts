@@ -1,0 +1,224 @@
+import { TransitApiError } from '../api/client';
+import {
+  acceptReconnectionStage,
+  commitReconnectionStage,
+  createReconnectionState,
+  presentReconnectionStage,
+  requestReconnectionStage,
+  type OwnerAcceptance,
+  type PreservedReconnectionContext,
+  type ReconnectionInitialPresentation,
+  type ReconnectionInvalidation,
+  type ReconnectionScopeKind,
+  type ReconnectionScopeMembership,
+  type ReconnectionStage,
+  type ReconnectionStageResult,
+  type ReconnectionState,
+} from '../../shared/domain/reconnection';
+
+export interface ReconnectionStageRequest {
+  readonly stage: ReconnectionStage;
+  readonly state: ReconnectionState;
+  readonly context: PreservedReconnectionContext;
+}
+
+export interface ReconnectionTransition {
+  readonly phase: 'requested' | 'presented';
+  readonly stage: ReconnectionStage;
+  readonly state: ReconnectionState;
+}
+
+export interface RunReconnectionOptions {
+  readonly context: PreservedReconnectionContext;
+  readonly initial: ReconnectionInitialPresentation;
+  readonly loadStage: (
+    request: ReconnectionStageRequest,
+    signal: AbortSignal,
+  ) => Promise<ReconnectionStageResult | undefined>;
+  readonly onTransition?: (transition: ReconnectionTransition) => void;
+  readonly signal?: AbortSignal;
+  readonly now?: () => Date;
+}
+
+export type RunReconnectionResult =
+  | { readonly kind: 'complete'; readonly state: ReconnectionState }
+  | { readonly kind: 'network-unreachable'; readonly state: ReconnectionState }
+  | { readonly kind: 'aborted'; readonly state: ReconnectionState };
+
+export async function runReconnection(options: RunReconnectionOptions): Promise<RunReconnectionResult> {
+  const signal = options.signal ?? new AbortController().signal;
+  const now = options.now ?? (() => new Date());
+  let state = createReconnectionState(options.context, options.initial);
+
+  for (const stage of [1, 2, 3, 4, 5] as const) {
+    if (signal.aborted) return { kind: 'aborted', state };
+    state = requestReconnectionStage(state, stage);
+    options.onTransition?.({ phase: 'requested', stage, state });
+
+    let result: ReconnectionStageResult;
+    try {
+      result = await options.loadStage({ stage, state, context: state.context }, signal)
+        ?? createFailClosedReconnectionStage(state, stage, 'Owner endpoint is unavailable.', exactNow(now));
+      if (signal.aborted) return { kind: 'aborted', state };
+    } catch (error) {
+      if (signal.aborted || isAbort(error)) return { kind: 'aborted', state };
+      if (error instanceof TransitApiError && error.category === 'network-unreachable') {
+        return { kind: 'network-unreachable', state };
+      }
+      result = createFailClosedReconnectionStage(state, stage, 'Owner result is unavailable.', exactNow(now));
+    }
+
+    try {
+      state = acceptReconnectionStage(state, result);
+    } catch {
+      state = acceptReconnectionStage(
+        state,
+        createFailClosedReconnectionStage(state, stage, 'Owner evidence was rejected.', exactNow(now)),
+      );
+    }
+    state = commitReconnectionStage(state, stage);
+    state = presentReconnectionStage(state, stage);
+    options.onTransition?.({ phase: 'presented', stage, state });
+  }
+
+  return { kind: 'complete', state };
+}
+
+export function createFailClosedReconnectionStage(
+  state: ReconnectionState,
+  stage: ReconnectionStage,
+  reason: string,
+  acceptedAt: string,
+): ReconnectionStageResult {
+  const gate = (domain: OwnerAcceptance['domain'], suffix = domain): OwnerAcceptance => ({
+    domain,
+    ownerId: `${domain}-owner`,
+    evidenceId: `${state.context.recovery.requestIdentity}:${stage}:${suffix}:unavailable`,
+    evidenceAt: acceptedAt,
+    acceptedAt,
+    recoveryEpochId: state.context.recovery.epochId,
+    requestIdentity: state.context.recovery.requestIdentity,
+    generation: state.context.recovery.generation,
+    activeTripId: state.context.recovery.activeTripId,
+    contextKey: state.context.recovery.contextKey,
+    scopeMembership: state.context.recovery.eligibleScopes,
+    disposition: 'governed-fail-closed',
+    reason,
+  });
+  const warning = (
+    ownerGate: OwnerAcceptance,
+    changedFact: string,
+    consequence: string,
+  ): ReconnectionInvalidation => ({
+    id: `${state.context.recovery.requestIdentity}:warning:${stage}`,
+    stage: stage as 1 | 2 | 3 | 4,
+    ownerGate,
+    changedFact,
+    scopes: [warningScope(state.context.recovery.eligibleScopes)],
+    consequence,
+    lastVerifiedDecisionPoint: state.context.manualCursor
+      ? { id: state.context.manualCursor.stopId, label: `Stored trip point ${state.context.manualCursor.stopId}` }
+      : null,
+    verifiedAlternative: null,
+  });
+
+  if (stage === 1) {
+    const equipment = gate('equipment');
+    const accessiblePath = gate('accessible-path');
+    const required = state.context.activeTripId !== null && state.context.accessibleRouteOnly;
+    return {
+      stage,
+      equipment: { gate: equipment, disposition: 'unknown' },
+      accessiblePath: {
+        gate: accessiblePath,
+        requiredForActiveTrip: required,
+        completeness: 'incomplete-or-unknown',
+        disposition: 'unverified',
+      },
+      invalidation: required
+        ? warning(accessiblePath, 'The required accessible path could not be reverified.', 'Do not continue on the stored accessible path.')
+        : null,
+    };
+  }
+  if (stage === 2) {
+    const serviceChanges = gate('service-change');
+    const active = state.context.activeTripId !== null;
+    return {
+      stage,
+      serviceChanges: { gate: serviceChanges, disposition: 'unresolved-fail-closed', vetoesApplied: true },
+      tripServicePattern: active ? 'unverified' : 'not-applicable',
+      invalidation: active
+        ? warning(serviceChanges, 'Service changes could not be resolved for the stored trip.', 'Do not rely on the stored service pattern.')
+        : null,
+    };
+  }
+  if (stage === 3) {
+    const feed = gate('feed-health');
+    const train = gate('train-admission');
+    const arrivals = gate('arrivals');
+    const active = state.context.hasStoredTrainChoice;
+    return {
+      stage,
+      feedRecovery: { gate: feed, disposition: 'blocked' },
+      trainReadmission: { gate: train, disposition: 'blocked' },
+      arrivals: { gate: arrivals, disposition: 'withheld', freshSnapshotCount: 0, freshSnapshots: [] },
+      storedTrainChoice: active ? 'unverified' : 'none',
+      invalidation: active
+        ? warning(train, 'The stored train choice could not be readmitted.', 'Use the historical arrival only as a past observation.')
+        : null,
+    };
+  }
+  if (stage === 4) {
+    const positioning = gate('positioning');
+    const transferGuidance = gate('transfer-guidance');
+    const requiredOwner = state.context.guidanceRequirements.positioning === 'required'
+      ? positioning
+      : state.context.guidanceRequirements.transfer === 'required' ? transferGuidance : null;
+    return {
+      stage,
+      positioning: {
+        gate: positioning,
+        requirement: state.context.guidanceRequirements.positioning,
+        disposition: 'removed',
+      },
+      transferGuidance: {
+        gate: transferGuidance,
+        requirement: state.context.guidanceRequirements.transfer,
+        disposition: 'removed',
+      },
+      invalidation: requiredOwner
+        ? warning(requiredOwner, 'Required positioning or transfer guidance could not be reverified.', 'Stop at the last verified decision point.')
+        : null,
+    };
+  }
+  return {
+    stage,
+    maps: { gate: gate('maps'), disposition: 'unchanged-fail-closed' },
+    unrelatedSaved: { gate: gate('saved'), disposition: 'unchanged-fail-closed' },
+  };
+}
+
+function warningScope(scopes: readonly ReconnectionScopeMembership[]) {
+  const scope = scopes.find((candidate): candidate is ReconnectionScopeMembership & { readonly kind: ReconnectionScopeKind } => (
+    candidate.kind === 'path' || candidate.kind === 'transfer' || candidate.kind === 'train'
+  ))
+    ?? scopes.find(isInvalidationScopeMembership);
+  if (!scope) throw new Error('A fail-closed warning requires an eligible scope');
+  return { ...scope, label: `${scope.kind} ${scope.id}` };
+}
+
+function isInvalidationScopeMembership(
+  scope: ReconnectionScopeMembership,
+): scope is ReconnectionScopeMembership & { readonly kind: ReconnectionScopeKind } {
+  return scope.kind !== 'context' && scope.kind !== 'map' && scope.kind !== 'saved-record';
+}
+
+function exactNow(now: () => Date): string {
+  const value = now();
+  if (!(value instanceof Date) || !Number.isFinite(value.getTime())) throw new Error('Recovery clock returned an invalid instant');
+  return new Date(value.getTime()).toISOString();
+}
+
+function isAbort(error: unknown): boolean {
+  return error instanceof DOMException && error.name === 'AbortError';
+}
