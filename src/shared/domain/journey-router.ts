@@ -118,7 +118,7 @@ export interface RoutedJourney {
 
 export type JourneyRouteDecision =
   | { readonly kind: 'planned'; readonly label?: 'Reference itinerary'; readonly itineraries: readonly RoutedJourney[] }
-  | { readonly kind: 'untimed'; readonly label: 'Structural route only'; readonly itineraries: readonly RoutedJourney[] }
+  | { readonly kind: 'untimed'; readonly label: 'Untimed structural route'; readonly itineraries: readonly RoutedJourney[] }
   | { readonly kind: 'no-path'; readonly reason: 'no-service-path' }
   | { readonly kind: 'unavailable'; readonly reason: 'no-verified-accessible-path' | 'incomparable-evidence' | 'search-limit-reached' };
 
@@ -258,7 +258,7 @@ export function routeJourney(rawGraph: JourneyGraph, rawQuery: JourneyQuery): Jo
   const itineraries = deepFreeze(routed.slice(0, MAX_ALTERNATIVES));
   if (query.mode === 'offline-reference') {
     if (itineraries[0].timing === 'timed') return deepFreeze({ kind: 'planned', label: 'Reference itinerary', itineraries });
-    return deepFreeze({ kind: 'untimed', label: 'Structural route only', itineraries });
+    return deepFreeze({ kind: 'untimed', label: 'Untimed structural route', itineraries });
   }
   return deepFreeze({ kind: 'planned', itineraries });
 }

@@ -44,6 +44,7 @@ export function useBoardClock(
   validThrough: string,
   monotonicNow: () => number = readPerformanceNow,
   receivedAtMonotonicMs?: number,
+  running = true,
 ): BoardClockReading {
   const anchor = useMemo(
     () => createBoardClockAnchor(serverTime, validThrough, receivedAtMonotonicMs ?? monotonicNow()),
@@ -52,6 +53,7 @@ export function useBoardClock(
   const [reading, setReading] = useState(() => readBoardClock(anchor, monotonicNow()));
 
   useEffect(() => {
+    if (!running) return undefined;
     let active = true;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const tick = () => {
@@ -67,7 +69,7 @@ export function useBoardClock(
       active = false;
       if (timer !== undefined) clearTimeout(timer);
     };
-  }, [anchor, monotonicNow]);
+  }, [anchor, monotonicNow, running]);
 
   return reading;
 }

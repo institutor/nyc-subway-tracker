@@ -1,7 +1,7 @@
 import type { BoardEnvelopeDto } from '../api/client';
 import type { Direction } from '../../shared/domain/types';
 import type { StationChoice } from '../state/app-state';
-import { sourceLabel } from '../components/ArrivalRow';
+import { formatClaimTime, sourceLabel } from '../components/ArrivalRow';
 import { DirectionTrack } from '../components/DirectionTrack';
 import { RouteToken } from '../components/RouteToken';
 import { StatusBanner } from '../components/StatusBanner';
@@ -14,6 +14,9 @@ export function StationView({
   filters,
   onFiltersChange,
   onRefresh,
+  historical = false,
+  onSave,
+  saved = false,
 }: {
   readonly station: StationChoice;
   readonly board?: BoardEnvelopeDto;
@@ -21,10 +24,13 @@ export function StationView({
   readonly filters: { readonly routeIds: readonly string[]; readonly direction?: Direction };
   readonly onFiltersChange: (filters: { readonly routeIds: readonly string[]; readonly direction?: Direction }) => void;
   readonly onRefresh: () => void;
+  readonly historical?: boolean;
+  readonly onSave?: () => void;
+  readonly saved?: boolean;
 }) {
   const firstRow = board?.data?.directions.flatMap((direction) => [...direction.primary, ...direction.secondary])[0];
   const validThrough = firstRow?.validThrough ?? board?.serverTime ?? '1970-01-01T00:00:00.000Z';
-  const reading = useBoardClock(board?.serverTime ?? validThrough, validThrough, undefined, board?.receivedAtMonotonicMs);
+  const reading = useBoardClock(board?.serverTime ?? validThrough, validThrough, undefined, board?.receivedAtMonotonicMs, !historical);
   const routeIds = board?.data?.station?.routeIds ?? [];
   const directions = board?.data?.directions.map(({ direction }) => direction) ?? [];
   const reversed = reverseDirection(filters.direction, directions);
@@ -48,27 +54,34 @@ export function StationView({
 
       {board?.data ? (
         <>
-          <p className="board-mode">{board.data.mode === 'live' ? 'Live and expected arrivals' : board.data.mode === 'scheduled-fallback' ? 'Schedule fallback' : 'Arrival status'}</p>
+          <p className="board-mode">{historical
+            ? `Historical board · last checked ${formatClaimTime(board.serverTime)}`
+            : board.data.mode === 'live' ? 'Live and expected arrivals' : board.data.mode === 'scheduled-fallback' ? 'Schedule fallback' : 'Arrival status'}</p>
           {board.data.alerts.map((alert) => (
-            <section className="service-alert" aria-label="Service alert" key={alert.id}>
+            <section className="service-alert" aria-label={historical ? 'Historical service alert' : 'Service alert'} key={alert.id}>
               <span className="service-alert__mark" aria-hidden="true">!</span>
               <div>
-                <h3>Service alert</h3>
+                <h3>{historical ? 'Historical service alert' : 'Service alert'}</h3>
                 <p>{alert.text}</p>
-                <p className="claim-line"><span>{alert.demonstrationLabel}</span><span>{sourceLabel(alert.provenance)}</span></p>
+                <p className="claim-line"><span>{alert.demonstrationLabel}</span><span>{sourceLabel(alert.provenance)}</span>{historical ? <time dateTime={alert.provenance.observedAt}>Last checked {formatClaimTime(alert.provenance.observedAt)}</time> : null}</p>
               </div>
             </section>
           ))}
           <div className="station-board">
-            {board.data.directions.map((direction) => <DirectionTrack key={direction.direction} direction={direction} reading={reading} />)}
+            {board.data.directions.map((direction) => <DirectionTrack key={direction.direction} direction={direction} reading={reading} historical={historical} />)}
           </div>
         </>
       ) : null}
 
       <div className="context-dock" role="toolbar" aria-label="Board controls">
-        <button type="button" aria-label="Refresh train times" onClick={onRefresh}>
+        <button type="button" aria-label="Refresh train times" onClick={onRefresh} disabled={historical}>
           <span aria-hidden="true">↻</span><span>Refresh</span>
         </button>
+        {onSave ? (
+          <button type="button" aria-label={saved ? 'Station saved' : 'Save this station'} onClick={onSave} disabled={saved}>
+            <span aria-hidden="true">★</span><span>{saved ? 'Saved' : 'Save'}</span>
+          </button>
+        ) : null}
         <div className="context-dock__routes" aria-label="Route filter">
           {routeIds.map((routeId) => {
             const pressed = filters.routeIds.length === 1 && filters.routeIds[0] === routeId;

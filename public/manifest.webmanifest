@@ -1,0 +1,20 @@
+{
+  "id": "/",
+  "name": "Subway First — NYC Subway Times",
+  "short_name": "Subway First",
+  "description": "Nearby NYC subway arrivals, saved stations, and device-held reference journeys.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#0b0f13",
+  "theme_color": "#101519",
+  "icons": [
+    {
+      "src": "/icons/app-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

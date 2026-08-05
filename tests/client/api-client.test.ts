@@ -18,6 +18,18 @@ const gates = {
   'commute-delivery': { ...gateDecision, reasonCode: 'COMMUTE_PREREQUISITES_INCOMPLETE' },
 } as const;
 
+test('retains only a safe transport category when fetch cannot reach the network', async () => {
+  const client = createTransitApiClient(vi.fn(async () => {
+    throw new TypeError('provider detail must not escape');
+  }));
+
+  await expect(client.bootstrap()).rejects.toMatchObject({
+    name: 'TransitApiError',
+    message: 'Transit information is unavailable.',
+    category: 'network-unreachable',
+  });
+});
+
 const nearbyEnvelope = {
   apiVersion: 'v1',
   schemaVersion: '2026-08-04',

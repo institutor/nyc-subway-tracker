@@ -1,17 +1,26 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 
+import type { Direction, SavedRecord } from '../shared/domain/types';
 import {
   createTransitApiClient,
   type BoardEnvelopeDto,
+  type BootstrapDataDto,
   type BootstrapEnvelopeDto,
+  type CatalogComplexDto,
   type CatalogEnvelopeDto,
+  type JourneyEnvelopeDto,
+  type JourneyItineraryDto,
   type LocationFixDto,
+  TransitApiError,
   type TransitApiClient,
 } from './api/client';
+import { ActiveTripCard } from './components/ActiveTripCard';
 import { AppHeader } from './components/AppHeader';
+import { OfflineBanner } from './components/OfflineBanner';
 import { StatusBanner } from './components/StatusBanner';
 import { boardRequestKey, type NearbyBoardState } from './components/StationCard';
 import { ThumbDock } from './components/ThumbDock';
+import { useConnectivity, type ConnectivityState } from './hooks/use-connectivity';
 import { useLocation } from './hooks/use-location';
 import {
   appReducer,
@@ -21,14 +30,26 @@ import {
   type AppState,
   type StationChoice,
 } from './state/app-state';
-import { createBrowserSavedStore, type BrowserStorage } from './storage/browser-store';
+import {
+  createBrowserActiveTripStore,
+  type ActiveTripRecord,
+} from './storage/active-trip-store';
+import {
+  createBrowserSavedStore,
+  type BrowserStorage,
+  type BrowserStoreMutation,
+} from './storage/browser-store';
+import { createBrowserStructuralStore } from './storage/structural-store';
+import { MapView, type MapContext } from './views/MapView';
 import { NearbyView } from './views/NearbyView';
+import { SavedView } from './views/SavedView';
 import { StationView } from './views/StationView';
 
 export interface AppProps {
   readonly api?: TransitApiClient;
   readonly geolocation?: Pick<Geolocation, 'getCurrentPosition'> | null;
   readonly storage?: Storage;
+  readonly connectivity?: ConnectivityState;
 }
 
 interface SelectedBoardState {
@@ -36,10 +57,29 @@ interface SelectedBoardState {
   readonly board?: BoardEnvelopeDto;
 }
 
-export function App({ api, geolocation, storage: providedStorage }: AppProps = {}) {
+const DEFAULT_MAP_CONTEXT: MapContext = Object.freeze({
+  serviceMeaning: 'actual-now',
+  spatialView: 'schematic',
+  viewport: Object.freeze({ centerX: 40.7128, centerY: -74.006, zoom: 1 }),
+});
+
+export function App({ api, geolocation, storage: providedStorage, connectivity: connectivityOverride }: AppProps = {}) {
   const apiClient = useMemo(() => api ?? createTransitApiClient(), [api]);
   const storage = useMemo(() => providedStorage ?? browserStorage(), [providedStorage]);
-  const local = useMemo(() => readLocalState(storage), [storage]);
+  const savedStore = useMemo(() => createBrowserSavedStore(storage as BrowserStorage), [storage]);
+  const activeTripStore = useMemo(() => createBrowserActiveTripStore(storage as BrowserStorage), [storage]);
+  const structuralStore = useMemo(() => createBrowserStructuralStore(storage as BrowserStorage), [storage]);
+  const local = useMemo(
+    () => readLocalState(storage, savedStore, activeTripStore, structuralStore),
+    [activeTripStore, savedStore, storage, structuralStore],
+  );
+  const connectivity = useConnectivity();
+  const connectivityState = connectivityOverride ?? connectivity.state;
+  const connected = connectivityState === 'online';
+  const offline = connectivityState === 'offline';
+  const connectedRef = useRef(connected);
+  connectedRef.current = connected;
+
   const [state, dispatch] = useReducer(appReducer, undefined, () => createInitialAppState({
     lastUsedStation: local.lastUsedStation,
     savedStations: local.savedRecords.map((record) => ({
@@ -49,30 +89,52 @@ export function App({ api, geolocation, storage: providedStorage }: AppProps = {
   const stateRef = useRef(state);
   stateRef.current = state;
   const [bootstrap, setBootstrap] = useState<BootstrapEnvelopeDto>();
-  const [catalog, setCatalog] = useState<CatalogEnvelopeDto>();
+  const [catalog, setCatalog] = useState<CatalogEnvelopeDto | undefined>(local.structural?.catalog);
+  const [mapVersions, setMapVersions] = useState<BootstrapDataDto['contentVersions']['maps'] | undefined>(local.structural?.contentVersions.maps);
+  const [savedRecords, setSavedRecords] = useState<readonly SavedRecord[]>(local.savedRecords);
+  const [activeTrip, setActiveTrip] = useState<ActiveTripRecord | null>(local.activeTrip);
+  const [activeTripOpen, setActiveTripOpen] = useState(offline);
+  const [captureMessage, setCaptureMessage] = useState<string>();
+  const [mapContext, setMapContext] = useState<MapContext>(DEFAULT_MAP_CONTEXT);
   const [nearbyBoards, setNearbyBoards] = useState<ReadonlyMap<string, NearbyBoardState>>(() => new Map());
   const [selectedBoard, setSelectedBoard] = useState<SelectedBoardState>({ phase: 'idle' });
+  const [savedBoards, setSavedBoards] = useState<ReadonlyMap<string, BoardEnvelopeDto>>(() => new Map());
   const [stationOpen, setStationOpen] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const nearbyGeneration = useRef(0);
   const nearbyAbort = useRef<AbortController | undefined>(undefined);
   const selectedGeneration = useRef(0);
   const selectedAbort = useRef<AbortController | undefined>(undefined);
+  const savedAbort = useRef(new Map<string, AbortController>());
 
   useEffect(() => {
+    if (offline) setActiveTripOpen(Boolean(activeTrip));
+  }, [activeTrip, offline]);
+
+  useEffect(() => {
+    if (!connected) return undefined;
     const controller = new AbortController();
     let active = true;
     void (async () => {
       try {
         const nextBootstrap = await apiClient.bootstrap(controller.signal);
         if (!active) return;
+        connectivity.reportRequestResult('accepted');
         setBootstrap(nextBootstrap);
         const nextCatalog = await apiClient.catalog(nextBootstrap.data.contentVersions.stationCatalog, controller.signal);
-        if (active) setCatalog(nextCatalog);
+        if (!active) return;
+        connectivity.reportRequestResult('accepted');
+        setCatalog(nextCatalog);
+        setMapVersions(nextBootstrap.data.contentVersions.maps);
+        structuralStore.write(nextBootstrap.data.contentVersions, nextCatalog);
+        void Promise.allSettled([
+          apiClient.mapReference('day', nextBootstrap.data.contentVersions.maps.day, controller.signal),
+          apiClient.mapReference('night', nextBootstrap.data.contentVersions.maps.night, controller.signal),
+        ]);
       } catch (error) {
         if (!isAbort(error) && active) {
+          connectivity.reportRequestResult(classifyRequestFailure(error));
           setBootstrap(undefined);
-          setCatalog(undefined);
         }
       }
     })();
@@ -80,9 +142,10 @@ export function App({ api, geolocation, storage: providedStorage }: AppProps = {
       active = false;
       controller.abort();
     };
-  }, [apiClient]);
+  }, [apiClient, connected, connectivity.reportRequestResult, structuralStore]);
 
   const runNearby = useCallback((fix: LocationFixDto) => {
+    if (!connectedRef.current) return;
     nearbyAbort.current?.abort();
     const controller = new AbortController();
     nearbyAbort.current = controller;
@@ -93,6 +156,7 @@ export function App({ api, geolocation, storage: providedStorage }: AppProps = {
       try {
         const response = await apiClient.nearby(fix, false, controller.signal);
         if (controller.signal.aborted || nearbyGeneration.current !== requestId) return;
+        connectivity.reportRequestResult('accepted');
         dispatch({ type: 'nearby-resolved', requestId, responseIdentity: response.responseIdentity, response });
         if (response.data?.kind !== 'ranked') {
           setNearbyBoards(new Map());
@@ -108,9 +172,13 @@ export function App({ api, geolocation, storage: providedStorage }: AppProps = {
                 routeIds: direction.routeIds,
                 direction: direction.direction,
               }, controller.signal);
+              connectivity.reportRequestResult('accepted');
               settleNearbyBoard(key, { phase: 'ready', board });
             } catch (error) {
-              if (!isAbort(error)) settleNearbyBoard(key, { phase: 'unavailable' });
+              if (!isAbort(error)) {
+                connectivity.reportRequestResult(classifyRequestFailure(error));
+                settleNearbyBoard(key, { phase: 'unavailable' });
+              }
             }
           })();
         }
@@ -124,12 +192,16 @@ export function App({ api, geolocation, storage: providedStorage }: AppProps = {
           });
         }
       } catch (error) {
-        if (!isAbort(error) && nearbyGeneration.current === requestId) dispatch({ type: 'nearby-failed', requestId });
+        if (!isAbort(error) && nearbyGeneration.current === requestId) {
+          connectivity.reportRequestResult(classifyRequestFailure(error));
+          dispatch({ type: 'nearby-failed', requestId });
+        }
       }
     })();
-  }, [apiClient]);
+  }, [apiClient, connectivity.reportRequestResult]);
 
   const runSelectedBoard = useCallback((station: StationChoice, filters: AppState['filters']) => {
+    if (!connectedRef.current) return;
     selectedAbort.current?.abort();
     const controller = new AbortController();
     selectedAbort.current = controller;
@@ -137,11 +209,17 @@ export function App({ api, geolocation, storage: providedStorage }: AppProps = {
     selectedGeneration.current = requestId;
     setSelectedBoard((current) => ({ phase: 'loading', ...(current.board ? { board: current.board } : {}) }));
     void apiClient.board(station.constituentId, filters, controller.signal).then((board) => {
-      if (!controller.signal.aborted && selectedGeneration.current === requestId) setSelectedBoard({ phase: 'ready', board });
+      if (!controller.signal.aborted && selectedGeneration.current === requestId) {
+        connectivity.reportRequestResult('accepted');
+        setSelectedBoard({ phase: 'ready', board });
+      }
     }).catch((error: unknown) => {
-      if (!isAbort(error) && selectedGeneration.current === requestId) setSelectedBoard((current) => ({ phase: 'error', ...(current.board ? { board: current.board } : {}) }));
+      if (!isAbort(error) && selectedGeneration.current === requestId) {
+        connectivity.reportRequestResult(classifyRequestFailure(error));
+        setSelectedBoard((current) => ({ phase: 'error', ...(current.board ? { board: current.board } : {}) }));
+      }
     });
-  }, [apiClient]);
+  }, [apiClient, connectivity.reportRequestResult]);
 
   const openFallbackStation = useCallback((kind: 'denied' | 'failed', requestId: number) => {
     const current = stateRef.current;
@@ -159,6 +237,7 @@ export function App({ api, geolocation, storage: providedStorage }: AppProps = {
 
   const location = useLocation({
     geolocation,
+    autoStart: connected,
     onRequest: (requestId) => dispatch({ type: 'location-requested', requestId }),
     onFix: (requestId, fix) => {
       const explicitSelection = stateRef.current.selectionOwner === 'explicit';
@@ -172,25 +251,23 @@ export function App({ api, geolocation, storage: providedStorage }: AppProps = {
     onFailure: (requestId) => openFallbackStation('failed', requestId),
   });
 
+  useEffect(() => {
+    if (connected) return;
+    nearbyAbort.current?.abort();
+    selectedAbort.current?.abort();
+    for (const controller of savedAbort.current.values()) controller.abort();
+    savedAbort.current.clear();
+  }, [connected]);
+
   useEffect(() => () => {
     nearbyAbort.current?.abort();
     selectedAbort.current?.abort();
+    for (const controller of savedAbort.current.values()) controller.abort();
   }, []);
 
-  const savedChoices = useMemo(() => local.savedRecords.map((record) => {
-    const complex = catalog?.data.complexes.find(({ id }) => id === record.complexId);
-    const constituent = complex?.constituents.find(({ id }) => id === record.constituentId);
-    return {
-      complexId: record.complexId,
-      constituentId: record.constituentId,
-      name: constituent ? complex!.name : record.constituentId,
-    };
-  }), [catalog, local.savedRecords]);
+  const savedChoices = useMemo(() => savedRecords.map((record) => stationChoice(record, catalog?.data.complexes ?? [])), [catalog, savedRecords]);
 
-  const selectStation = useCallback((
-    station: StationChoice,
-    filters: AppState['filters'],
-  ) => {
+  const selectStation = useCallback((station: StationChoice, filters: AppState['filters']) => {
     nearbyAbort.current?.abort();
     nearbyGeneration.current += 1;
     dispatch({ type: 'station-selected', station, owner: 'explicit', filters });
@@ -206,19 +283,137 @@ export function App({ api, geolocation, storage: providedStorage }: AppProps = {
     if (station) runSelectedBoard(station, filters);
   }, [runSelectedBoard]);
 
+  const acceptSavedMutation = useCallback((result: BrowserStoreMutation) => {
+    if (result.kind === 'saved') setSavedRecords(result.records);
+    else dispatch({ type: 'warning-added', warning: 'Saved station changes could not be stored on this device.' });
+  }, []);
+
+  const saveCurrentStation = useCallback(() => {
+    const station = stateRef.current.selectedStation;
+    if (!station) return;
+    const existing = savedRecords.find(({ complexId, constituentId }) => complexId === station.complexId && constituentId === station.constituentId);
+    const direction = stateRef.current.filters.direction;
+    const exactDirection = direction ? selectedBoard.board?.data?.directions.find((candidate) => candidate.direction === direction) : undefined;
+    const actualDestination = exactDirection?.primary[0]?.destination ?? exactDirection?.secondary[0]?.destination;
+    const record: SavedRecord = {
+      id: existing?.id ?? `saved-${station.complexId}-${station.constituentId}`,
+      complexId: station.complexId,
+      constituentId: station.constituentId,
+      ...(existing?.preferredEntrance ? { preferredEntrance: existing.preferredEntrance } : {}),
+      ...(direction && actualDestination ? { preferredRide: { direction, actualDestination } } : existing?.preferredRide ? { preferredRide: existing.preferredRide } : {}),
+      routeFilters: stateRef.current.filters.routeIds,
+      accessibleRouteOnly: existing?.accessibleRouteOnly ?? false,
+      ...(existing?.commonDestination ? { commonDestination: existing.commonDestination } : {}),
+      ...(existing?.timeWindow ? { timeWindow: existing.timeWindow } : {}),
+      state: existing?.state ?? 'active',
+    };
+    acceptSavedMutation(savedStore.upsert(record));
+  }, [acceptSavedMutation, savedRecords, savedStore, selectedBoard.board]);
+
+  const openSaved = useCallback((record: SavedRecord) => {
+    dispatch({ type: 'surface-changed', surface: 'nearby' });
+    selectStation(stationChoice(record, catalog?.data.complexes ?? []), {
+      routeIds: record.routeFilters,
+      ...(record.preferredRide ? { direction: record.preferredRide.direction } : {}),
+    });
+  }, [catalog, selectStation]);
+
+  const refreshSaved = useCallback((record: SavedRecord) => {
+    if (!connectedRef.current) return;
+    savedAbort.current.get(record.id)?.abort();
+    const controller = new AbortController();
+    savedAbort.current.set(record.id, controller);
+    void apiClient.board(record.constituentId, { routeIds: [] }, controller.signal).then((board) => {
+      if (controller.signal.aborted || savedAbort.current.get(record.id) !== controller) return;
+      connectivity.reportRequestResult('accepted');
+      setSavedBoards((current) => new Map(current).set(record.id, board));
+    }).catch((error: unknown) => {
+      if (!isAbort(error)) connectivity.reportRequestResult(classifyRequestFailure(error));
+    });
+  }, [apiClient, connectivity.reportRequestResult]);
+
+  const saveRecord = useCallback((record: SavedRecord) => acceptSavedMutation(savedStore.upsert(record)), [acceptSavedMutation, savedStore]);
+  const setSavedState = useCallback((id: string, nextState: SavedRecord['state']) => {
+    const record = savedRecords.find((candidate) => candidate.id === id);
+    if (record) acceptSavedMutation(savedStore.upsert({ ...record, state: nextState }));
+  }, [acceptSavedMutation, savedRecords, savedStore]);
+  const resetSaved = useCallback((id: string) => {
+    const record = savedRecords.find((candidate) => candidate.id === id);
+    if (!record) return;
+    acceptSavedMutation(savedStore.upsert({
+      id: record.id,
+      complexId: record.complexId,
+      constituentId: record.constituentId,
+      routeFilters: [],
+      accessibleRouteOnly: record.accessibleRouteOnly,
+      state: record.state,
+    }));
+  }, [acceptSavedMutation, savedRecords, savedStore]);
+  const deleteSaved = useCallback((id: string) => {
+    acceptSavedMutation(savedStore.delete(id));
+    setSavedBoards((current) => {
+      const next = new Map(current);
+      next.delete(id);
+      return next;
+    });
+  }, [acceptSavedMutation, savedStore]);
+
+  const activateTrip = useCallback((itinerary: JourneyItineraryDto, response: JourneyEnvelopeDto) => {
+    const candidate = captureActiveTrip(itinerary, response, catalog?.data.complexes ?? [], mapContext.serviceMeaning);
+    if (!candidate) {
+      setCaptureMessage('This trip cannot be stored until every required path and evidence field is available.');
+      return;
+    }
+    const result = activeTripStore.capture(candidate);
+    if (result.kind === 'saved') {
+      setActiveTrip(result.trip);
+      setActiveTripOpen(true);
+      setCaptureMessage('Trip saved on this device for underground use.');
+    } else {
+      setCaptureMessage('This trip could not be stored on this device.');
+    }
+  }, [activeTripStore, catalog, mapContext.serviceMeaning]);
+
+  const moveTripCursor = useCallback((pointId: string) => {
+    const result = activeTripStore.setCursor(pointId);
+    if (result.kind === 'saved') setActiveTrip(result.trip);
+  }, [activeTripStore]);
+  const clearActiveTrip = useCallback(() => {
+    const result = activeTripStore.clear();
+    if (result.kind === 'saved') {
+      setActiveTrip(null);
+      setActiveTripOpen(false);
+      setCaptureMessage(undefined);
+    }
+  }, [activeTripStore]);
+
   const currentRuntime = selectedBoard.board?.runtime ?? state.nearby.response?.runtime ?? bootstrap?.runtime;
   const fallback = state.location.phase === 'denied' ? 'denied' as const
     : state.location.phase === 'failed' ? 'failed' as const : undefined;
   const selectedStation = state.selectedStation;
+  const selectedSaved = selectedStation
+    ? savedRecords.some(({ complexId, constituentId }) => complexId === selectedStation.complexId && constituentId === selectedStation.constituentId)
+    : false;
 
   return (
     <main className="app-shell" aria-labelledby="app-title">
       <div className="app-frame">
         <AppHeader runtime={currentRuntime} />
+        {offline ? <OfflineBanner /> : null}
+        {connectivityState === 'checking' ? <StatusBanner tone="warning"><p>Connection restored. Rechecking subway information before showing anything as current.</p></StatusBanner> : null}
+        {captureMessage ? <p className="capture-message" role="status">{captureMessage}</p> : null}
+        {activeTrip ? (
+          <section className="active-trip-shell" aria-label="Device-held active trip">
+            <button type="button" aria-expanded={activeTripOpen} onClick={() => setActiveTripOpen((value) => !value)}>
+              {activeTripOpen ? 'Hide active trip' : `Open active trip to ${activeTrip.destination.name}`}
+            </button>
+            {activeTripOpen ? <ActiveTripCard trip={activeTrip} offline={!connected} onSetCursor={moveTripCursor} onClear={clearActiveTrip} /> : null}
+          </section>
+        ) : null}
         <div className="surface-frame">
           {state.surface === 'nearby' && stationOpen && selectedStation ? (
             <>
-              {fallback ? (
+              {fallback && !offline ? (
                 <StatusBanner tone="warning" actions={(
                   <>
                     {fallback === 'failed' ? <button type="button" onClick={location.retry}>Try location again</button> : null}
@@ -226,9 +421,7 @@ export function App({ api, geolocation, storage: providedStorage }: AppProps = {
                   </>
                 )}>
                   <p>Location unavailable. Showing your last station.</p>
-                  {fallback === 'denied'
-                    ? <p>Location permission is off. Enable location in your device settings to refresh Nearby.</p>
-                    : null}
+                  {fallback === 'denied' ? <p>Location permission is off. Enable location in your device settings to refresh Nearby.</p> : null}
                 </StatusBanner>
               ) : null}
               <StationView
@@ -236,15 +429,21 @@ export function App({ api, geolocation, storage: providedStorage }: AppProps = {
                 board={selectedBoard.board}
                 phase={selectedBoard.phase}
                 filters={state.filters}
+                historical={offline}
                 onFiltersChange={changeFilters}
                 onRefresh={() => runSelectedBoard(selectedStation, stateRef.current.filters)}
+                onSave={saveCurrentStation}
+                saved={selectedSaved}
               />
             </>
+          ) : state.surface === 'nearby' && offline && !state.nearby.response ? (
+            <OfflineNearbyEmpty hasSaved={savedRecords.length > 0} hasTrip={Boolean(activeTrip)} />
           ) : state.surface === 'nearby' ? (
             <NearbyView
               phase={state.nearby.phase}
               response={state.nearby.response}
               boards={nearbyBoards}
+              historical={offline}
               savedChoices={savedChoices}
               pickerChoices={catalog?.data.complexes ?? []}
               fallback={fallback}
@@ -253,12 +452,37 @@ export function App({ api, geolocation, storage: providedStorage }: AppProps = {
               onRetryLocation={location.retry}
               onOpenPicker={() => setPickerOpen(true)}
               onRefresh={() => {
-                if (stateRef.current.location.phase === 'denied') return;
+                if (!connectedRef.current || stateRef.current.location.phase === 'denied') return;
                 if (stateRef.current.location.fix) runNearby(stateRef.current.location.fix);
                 else location.retry();
               }}
             />
-          ) : <FutureSurface surface={state.surface} savedCount={savedChoices.length} />}
+          ) : state.surface === 'map' ? (
+            <MapView
+              api={apiClient}
+              bootstrap={bootstrap}
+              mapVersions={mapVersions}
+              catalog={catalog?.data.complexes ?? []}
+              connected={connected}
+              origin={state.selectedStation ?? state.lastUsedStation ?? savedChoices[0]}
+              initialContext={mapContext}
+              onContextChange={setMapContext}
+              onActivateTrip={activateTrip}
+            />
+          ) : state.surface === 'saved' ? (
+            <SavedView
+              records={savedRecords}
+              catalog={catalog?.data.complexes ?? []}
+              boards={savedBoards}
+              offline={offline}
+              onOpen={openSaved}
+              onRefreshAll={refreshSaved}
+              onSave={saveRecord}
+              onPause={setSavedState}
+              onReset={resetSaved}
+              onDelete={deleteSaved}
+            />
+          ) : <FutureSurface />}
         </div>
       </div>
       <ThumbDock
@@ -272,28 +496,178 @@ export function App({ api, geolocation, storage: providedStorage }: AppProps = {
   );
 }
 
-function FutureSurface({ surface, savedCount }: { readonly surface: Exclude<AppState['surface'], 'nearby'>; readonly savedCount: number }) {
-  const copy = surface === 'map'
-    ? { title: 'Map', body: 'Day and Night reference maps arrive with offline journey tools.' }
-    : surface === 'commute'
-      ? { title: 'Commute', body: 'Commute alerts remain locked until their safety stage is enabled.' }
-      : { title: 'Saved', body: `${savedCount} saved ${savedCount === 1 ? 'station is' : 'stations are'} on this device. Editing arrives with offline tools.` };
+function OfflineNearbyEmpty({ hasSaved, hasTrip }: { readonly hasSaved: boolean; readonly hasTrip: boolean }) {
   return (
-    <section className="surface future-surface" aria-labelledby={`${surface}-heading`}>
-      <p className="section-kicker">Next subway tool</p>
-      <h2 id={`${surface}-heading`}>{copy.title}</h2>
-      <StatusBanner tone="locked"><p>{copy.body}</p></StatusBanner>
+    <section className="surface offline-empty" aria-labelledby="nearby-heading">
+      <p className="section-kicker">Device-held subway tools</p>
+      <h2 id="nearby-heading">Nearby</h2>
+      <StatusBanner tone="locked">
+        <p>No current subway information is stored on this device.</p>
+        <p>{hasSaved || hasTrip
+          ? 'Your saved stations and active trip remain available without claiming current service.'
+          : 'Map references become available only after an eligible stored map has been deliberately opened.'}</p>
+      </StatusBanner>
     </section>
   );
 }
 
-function readLocalState(storage: Storage) {
-  const savedStore = createBrowserSavedStore(storage as BrowserStorage);
+function FutureSurface() {
+  return (
+    <section className="surface future-surface" aria-labelledby="commute-heading">
+      <p className="section-kicker">Safety-gated subway tool</p>
+      <h2 id="commute-heading">Commute</h2>
+      <StatusBanner tone="locked"><p>Commute alerts remain locked until their safety stage is enabled.</p></StatusBanner>
+    </section>
+  );
+}
+
+function readLocalState(
+  storage: Storage,
+  savedStore: ReturnType<typeof createBrowserSavedStore>,
+  activeTripStore: ReturnType<typeof createBrowserActiveTripStore>,
+  structuralStore: ReturnType<typeof createBrowserStructuralStore>,
+) {
   const saved = savedStore.read();
+  const active = activeTripStore.read();
+  const structural = structuralStore.read();
   return Object.freeze({
     lastUsedStation: readLastUsedStation(storage),
     savedRecords: saved.kind === 'ready' ? saved.records : [],
+    activeTrip: active.kind === 'ready' ? active.trip : null,
+    structural: structural.kind === 'ready' ? structural.value : null,
   });
+}
+
+function stationChoice(record: SavedRecord, catalog: readonly CatalogComplexDto[]): StationChoice {
+  const complex = catalog.find(({ id }) => id === record.complexId);
+  return {
+    complexId: record.complexId,
+    constituentId: record.constituentId,
+    name: complex?.name ?? record.constituentId,
+  };
+}
+
+function captureActiveTrip(
+  itinerary: JourneyItineraryDto,
+  response: JourneyEnvelopeDto,
+  catalog: readonly CatalogComplexDto[],
+  serviceMeaning: MapContext['serviceMeaning'],
+): ActiveTripRecord | undefined {
+  if (!response.data || (response.data.kind !== 'planned' && response.data.kind !== 'untimed')) return undefined;
+  if (response.data.scope.accessibleRouteOnly || itinerary.legs.length === 0) return undefined;
+  const transferByLeg = new Map(itinerary.transferInstructions.map((transfer, index) => [index, transfer]));
+  if (itinerary.legs.length > 1 && itinerary.transferInstructions.length !== itinerary.legs.length - 1) return undefined;
+  const capturedAtMs = Math.max(Date.now(), Date.parse(response.decidedAt));
+  if (!Number.isFinite(capturedAtMs)) return undefined;
+  const capturedAt = new Date(capturedAtMs).toISOString();
+  const tripId = `trip-${capturedAtMs}`;
+  const legs: ActiveTripRecord['legs'] = itinerary.legs.map((leg, legIndex) => ({
+    id: `leg-${legIndex + 1}`,
+    route: { id: leg.routeId, label: leg.routeLabel, spokenIdentity: `${leg.routeLabel} train`, shape: 'circle' },
+    boundDirection: leg.direction,
+    actualDestination: leg.actualDestination,
+    points: leg.orderedStationIds.map((stationId, pointIndex) => {
+      const place = resolvePlace(stationId, catalog);
+      const lastPoint = pointIndex === leg.orderedStationIds.length - 1;
+      return {
+        id: `point-${legIndex + 1}-${pointIndex + 1}`,
+        kind: (lastPoint && legIndex < itinerary.legs.length - 1) || (pointIndex === 0 && legIndex > 0) ? 'decision' as const : 'stop' as const,
+        stationName: place.name,
+        complexId: place.complexId,
+        constituentId: place.constituentId,
+        instruction: pointIndex === 0
+          ? `Board the ${leg.routeLabel} train toward ${leg.actualDestination}.`
+          : lastPoint ? legIndex < itinerary.legs.length - 1 ? `Leave the ${leg.routeLabel} train for the transfer.` : 'Leave the train at your destination.'
+            : `Remain on the ${leg.routeLabel} train.`,
+      };
+    }),
+  }));
+  if (legs.some(({ points }) => points.length < 2)) return undefined;
+  const transfers: ActiveTripRecord['transfers'] = itinerary.legs.slice(0, -1).map((leg, index) => {
+    const instruction = transferByLeg.get(index);
+    const incoming = legs[index];
+    const outgoing = legs[index + 1];
+    if (!instruction || !incoming || !outgoing) throw new Error('Incomplete transfer capture');
+    return {
+      id: `transfer-${index + 1}`,
+      atPointId: incoming.points[incoming.points.length - 1]!.id,
+      incomingLegId: incoming.id,
+      outgoingLegId: outgoing.id,
+      incomingDirection: instruction.fromDirection,
+      incomingDestination: instruction.fromActualDestination,
+      outgoingDirection: instruction.toDirection,
+      outgoingDestination: instruction.toActualDestination,
+      steps: [`At ${resolvePlace(instruction.stationId, catalog).name}, transfer from ${instruction.fromRouteId} to ${instruction.toRouteId}.`],
+    };
+  });
+  const origin = resolvePlace(response.data.scope.originStationId, catalog);
+  const destination = resolvePlace(response.data.scope.destinationStationId, catalog);
+  const serviceDate = response.data.scope.serviceDate ?? newYorkServiceDate(response.decidedAt);
+  return {
+    id: tripId,
+    capturedAt,
+    origin,
+    destination,
+    accessibleRouteOnly: false,
+    legs,
+    transfers,
+    serviceClaims: [{
+      id: 'service-capture',
+      scope: { kind: 'trip', tripId },
+      state: itinerary.risk === 'clear' ? 'normal' : itinerary.risk === 'blocked' ? 'unresolved' : 'changed',
+      consequence: itinerary.risk === 'clear'
+        ? 'No service conflict was present in the accepted itinerary response at capture.'
+        : 'The accepted itinerary response retained service limitations at capture.',
+      lastCheckedAt: response.decidedAt,
+    }],
+    equipmentClaims: [{
+      id: 'equipment-context',
+      equipmentId: 'not-supplied',
+      connectionId: 'trip-structural-path',
+      pathId: itinerary.id,
+      observation: 'unknown',
+      lastCheckedAt: response.decidedAt,
+    }],
+    cursor: { pointId: legs[0]!.points[0]!.id },
+    validity: {
+      result: 'untimed-structural-route',
+      serviceDate,
+      pattern: serviceMeaning,
+      schedule: { kind: 'none' },
+      warnings: [{
+        id: 'capture-limitation',
+        scope: { kind: 'trip', tripId },
+        message: 'No current arrivals or equipment operation are stored with this structural trip.',
+        ownerRecordId: response.responseIdentity,
+        lastCheckedAt: response.decidedAt,
+      }],
+      vetoes: [],
+    },
+  };
+}
+
+function resolvePlace(stationId: string, catalog: readonly CatalogComplexDto[]): ActiveTripRecord['origin'] {
+  const complex = catalog.find(({ id, constituents }) => id === stationId || constituents.some(({ id: constituentId }) => constituentId === stationId));
+  const constituent = complex?.constituents.find(({ id }) => id === stationId) ?? complex?.constituents[0];
+  return {
+    name: complex?.name ?? stationId,
+    complexId: complex?.id ?? stationId,
+    constituentId: constituent?.id ?? stationId,
+  };
+}
+
+function newYorkServiceDate(value: string): string {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(new Date(value));
+  const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((candidate) => candidate.type === type)?.value;
+  return `${part('year')}-${part('month')}-${part('day')}`;
+}
+
+function classifyRequestFailure(error: unknown): 'network-unreachable' | 'domain-unavailable' {
+  if (error instanceof TransitApiError) return error.category;
+  if (error instanceof TypeError || (error instanceof DOMException && error.name === 'NetworkError')) return 'network-unreachable';
+  return 'domain-unavailable';
 }
 
 function browserStorage(): Storage {

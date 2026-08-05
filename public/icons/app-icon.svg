@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title description">
+  <title id="title">Subway First</title>
+  <desc id="description">Two illuminated platform rails joined by an orange crossing marker.</desc>
+  <rect width="512" height="512" rx="112" fill="#0b0f13"/>
+  <path d="M146 92h72v328h-72zM294 92h72v328h-72z" fill="#f4f7f8"/>
+  <path d="M110 182h292v72H110z" fill="#ff6319"/>
+  <path d="M110 290h292v30H110z" fill="#4d5357"/>
+  <path d="m256 348 54 72H202z" fill="#ff6319"/>
+</svg>

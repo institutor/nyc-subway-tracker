@@ -109,6 +109,12 @@ describe('strict device-local saved-state migrations', () => {
     { version: 2, records: [{ ...record('a'), alerts: [] }] },
     { version: 2, records: [{ ...record('a'), entranceAvailability: 'open' }] },
     { version: 2, records: [{ ...record('a'), accessibility: { pathId: 'p' } }] },
+    { version: 2, records: [{ ...record('a'), equipment: { elevator: 'working' } }] },
+    { version: 2, records: [{ ...record('a'), platform: 'uptown' }] },
+    { version: 2, records: [{ ...record('a'), positioning: 'front' }] },
+    { version: 2, records: [{ ...record('a'), guidance: { transfer: 'stairs' } }] },
+    { version: 2, records: [{ ...record('a'), disruption: { status: 'resolved' } }] },
+    { version: 2, records: [{ ...record('a'), walkRank: 1 }] },
     { version: 2, records: [{ ...record('a'), lastOpenedAt: '2026-08-04T00:00:00Z' }] },
     { version: 2, records: [{ ...record('a'), preferredRide: { direction: 'northbound', actualDestination: 'Terminal', risk: 'low' } }] },
   ])('recursively rejects unknown and operational-truth fields %#', (envelope) => {

@@ -85,6 +85,126 @@ export interface CatalogEnvelopeDto {
   readonly data: { readonly complexes: readonly CatalogComplexDto[] };
 }
 
+export interface StationSearchEnvelopeDto {
+  readonly apiVersion: typeof API_VERSION;
+  readonly schemaVersion: typeof SCHEMA_VERSION;
+  readonly contentVersion: string;
+  readonly query: string;
+  readonly results: readonly CatalogComplexDto[];
+}
+
+export type MapThemeDto = 'day' | 'night';
+
+export type MapGeometryDto =
+  | { readonly type: 'Point'; readonly coordinates: readonly [number, number] }
+  | { readonly type: 'LineString'; readonly coordinates: readonly (readonly [number, number])[] };
+
+export interface MapFeatureDto {
+  readonly id: string;
+  readonly kind: 'line' | 'station' | 'transfer';
+  readonly routeIds: readonly string[];
+  readonly geometry: MapGeometryDto;
+}
+
+export interface MapReferenceDto {
+  readonly theme: MapThemeDto;
+  readonly contentVersion: string;
+  readonly attribution: string;
+  readonly features: readonly MapFeatureDto[];
+}
+
+export type MapReferenceEnvelopeDto =
+  | {
+      readonly apiVersion: typeof API_VERSION;
+      readonly schemaVersion: typeof SCHEMA_VERSION;
+      readonly contentVersion: string;
+      readonly demonstrationLabel: typeof DEMONSTRATION_LABEL;
+      readonly data: MapReferenceDto;
+    }
+  | (DynamicEnvelopeBase & { readonly data: null });
+
+export interface MapOverlaySegmentDto {
+  readonly id: string;
+  readonly routeIds: readonly string[];
+  readonly state: 'normal' | 'affected' | 'unavailable';
+  readonly alertIds: readonly string[];
+}
+
+export interface MapOverlayEnvelopeDto extends DynamicEnvelopeBase {
+  readonly data: {
+    readonly theme: MapThemeDto;
+    readonly serviceEpoch: string | null;
+    readonly segments: readonly MapOverlaySegmentDto[];
+  } | null;
+}
+
+export interface JourneyRequestDto {
+  readonly mode: 'online-current' | 'online-future' | 'offline-reference';
+  readonly originStationId: string;
+  readonly destinationStationId: string;
+  readonly requiredFirstDirection?: Direction;
+  readonly requiredActualDestination?: string;
+  readonly serviceDate?: string;
+  readonly accessibleRouteOnly: boolean;
+}
+
+export interface JourneyLegDto {
+  readonly patternId: string;
+  readonly routeId: string;
+  readonly routeLabel: string;
+  readonly direction: Direction;
+  readonly actualDestination: string;
+  readonly fromOccurrenceId: string;
+  readonly toOccurrenceId: string;
+  readonly orderedOccurrenceIds: readonly string[];
+  readonly fromStationId: string;
+  readonly toStationId: string;
+  readonly orderedStationIds: readonly string[];
+}
+
+export interface JourneyTransferInstructionDto {
+  readonly transferId: string;
+  readonly stationId: string;
+  readonly fromRouteId: string;
+  readonly fromDirection: Direction;
+  readonly fromActualDestination: string;
+  readonly toRouteId: string;
+  readonly toDirection: Direction;
+  readonly toActualDestination: string;
+}
+
+export interface JourneyItineraryDto {
+  readonly id: string;
+  readonly legs: readonly JourneyLegDto[];
+  readonly transferIds: readonly string[];
+  readonly transferInstructions: readonly JourneyTransferInstructionDto[];
+  readonly transfers: number;
+  readonly validity: 'valid' | 'limited';
+  readonly accessibility: 'eligible' | 'unknown' | 'ineligible';
+  readonly risk: 'clear' | 'affected' | 'uncertain' | 'blocked';
+  readonly timing: 'timed' | 'untimed';
+  readonly practicalWalkRange?: WalkRangeDto;
+  readonly arrivalSeconds?: number;
+}
+
+export interface JourneyScopeDto {
+  readonly mode: JourneyRequestDto['mode'];
+  readonly originStationId: string;
+  readonly destinationStationId: string;
+  readonly accessibleRouteOnly: boolean;
+  readonly serviceDate?: string;
+}
+
+export type JourneyDecisionDto =
+  | { readonly kind: 'planned'; readonly label?: 'Reference itinerary'; readonly scope: JourneyScopeDto; readonly itineraries: readonly JourneyItineraryDto[] }
+  | { readonly kind: 'untimed'; readonly label: 'Untimed structural route'; readonly scope: JourneyScopeDto; readonly itineraries: readonly JourneyItineraryDto[] }
+  | { readonly kind: 'no-path'; readonly reason: 'no-service-path'; readonly scope: JourneyScopeDto }
+  | { readonly kind: 'unavailable'; readonly reason: 'no-verified-accessible-path' | 'incomparable-evidence' | 'search-limit-reached'; readonly scope: JourneyScopeDto };
+
+export interface JourneyEnvelopeDto extends DynamicEnvelopeBase {
+  readonly data: JourneyDecisionDto | null;
+}
+
 export interface WalkRangeDto {
   readonly minimumSeconds: number;
   readonly maximumSeconds: number;
@@ -253,6 +373,10 @@ export interface BoardEnvelopeDto extends DynamicEnvelopeBase {
 export interface TransitApiClient {
   bootstrap(signal?: AbortSignal): Promise<BootstrapEnvelopeDto>;
   catalog(contentVersion: string, signal?: AbortSignal): Promise<CatalogEnvelopeDto>;
+  searchStations(query: string, limit?: number, signal?: AbortSignal): Promise<StationSearchEnvelopeDto>;
+  mapReference(theme: MapThemeDto, contentVersion: string, signal?: AbortSignal): Promise<MapReferenceEnvelopeDto>;
+  mapOverlay(theme: MapThemeDto, signal?: AbortSignal): Promise<MapOverlayEnvelopeDto>;
+  planJourney(query: JourneyRequestDto, signal?: AbortSignal): Promise<JourneyEnvelopeDto>;
   nearby(fix: LocationFixDto, accessibleRouteOnly: boolean, signal?: AbortSignal): Promise<NearbyEnvelopeDto>;
   board(
     stationId: string,
@@ -262,7 +386,7 @@ export interface TransitApiClient {
 }
 
 export class TransitApiError extends Error {
-  constructor() {
+  constructor(readonly category: 'network-unreachable' | 'domain-unavailable' = 'domain-unavailable') {
     super(GENERIC_ERROR);
     this.name = 'TransitApiError';
   }
@@ -278,6 +402,32 @@ export function createTransitApiClient(fetcher: Fetcher = globalThis.fetch.bind(
     },
     async catalog(contentVersion: string, signal?: AbortSignal) {
       return parseCatalog(await get(`/api/v1/stations/catalog/${encodeIdentifier(contentVersion)}`, signal));
+    },
+    async searchStations(query: string, limit = 10, signal?: AbortSignal) {
+      const capturedQuery = searchQuery(query);
+      if (!Number.isSafeInteger(limit) || limit < 1 || limit > 25) invalid();
+      const params = new URLSearchParams({ q: capturedQuery, limit: String(limit) });
+      return parseStationSearch(await get(`/api/v1/stations/search?${params.toString()}`, signal), capturedQuery);
+    },
+    async mapReference(theme: MapThemeDto, contentVersion: string, signal?: AbortSignal) {
+      const capturedTheme = parseMapTheme(theme);
+      const capturedVersion = encodeIdentity(contentVersion);
+      return parseMapReference(
+        await get(`/api/v1/maps/${capturedTheme}/reference/${encodeURIComponent(capturedVersion)}`, signal),
+        capturedTheme,
+        capturedVersion,
+      );
+    },
+    async mapOverlay(theme: MapThemeDto, signal?: AbortSignal) {
+      const capturedTheme = parseMapTheme(theme);
+      return parseMapOverlay(await get(`/api/v1/maps/${capturedTheme}/overlay`, signal), capturedTheme);
+    },
+    async planJourney(query: JourneyRequestDto, signal?: AbortSignal) {
+      const captured = captureJourneyRequest(query);
+      const value = await requestJson(fetcher, '/api/v1/journeys', {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(captured), signal,
+      });
+      return parseJourney(value, captured);
     },
     async nearby(fix: LocationFixDto, accessibleRouteOnly: boolean, signal?: AbortSignal) {
       const captured = captureLocationFix(fix);
@@ -320,15 +470,19 @@ export function createTransitApiClient(fetcher: Fetcher = globalThis.fetch.bind(
 }
 
 async function requestJson(fetcher: Fetcher, url: string, init: RequestInit): Promise<unknown> {
+  let response: Response;
   try {
-    const response = await fetcher(url, init);
-    if (!response.ok || !response.headers.get('content-type')?.toLocaleLowerCase('en-US').startsWith('application/json')) {
-      throw new TransitApiError();
-    }
-    return await response.json();
+    response = await fetcher(url, init);
   } catch (error) {
     if (isAbort(error)) throw error;
-    if (error instanceof TransitApiError) throw error;
+    throw new TransitApiError('network-unreachable');
+  }
+  if (!response.ok || !response.headers.get('content-type')?.toLocaleLowerCase('en-US').startsWith('application/json')) {
+    throw new TransitApiError();
+  }
+  try {
+    return await response.json();
+  } catch {
     throw new TransitApiError();
   }
 }
@@ -358,6 +512,214 @@ function parseCatalog(value: unknown): CatalogEnvelopeDto {
     apiVersion: API_VERSION, schemaVersion: SCHEMA_VERSION, contentVersion: identity(root.contentVersion),
     data: { complexes },
   });
+}
+
+function parseStationSearch(value: unknown, requestQuery: string): StationSearchEnvelopeDto {
+  const root = strictRecord(value, ['apiVersion', 'schemaVersion', 'contentVersion', 'query', 'results']);
+  apiHeader(root);
+  const query = searchQuery(root.query);
+  if (query !== requestQuery) invalid();
+  const results = boundedArray(root.results, 25).map(parseCatalogComplex);
+  assertUnique(results.map(({ id }) => id));
+  return freeze({
+    apiVersion: API_VERSION, schemaVersion: SCHEMA_VERSION, contentVersion: identity(root.contentVersion), query, results,
+  });
+}
+
+function parseMapReference(value: unknown, requestedTheme: MapThemeDto, requestedVersion: string): MapReferenceEnvelopeDto {
+  const candidate = record(value);
+  if (Object.hasOwn(candidate, 'runtime')) {
+    const root = dynamicRoot(value, ['data']);
+    const base = dynamicBase(root);
+    if (base.runtime.availability !== 'locked' || root.data !== null) invalid();
+    return freeze({ ...base, data: null });
+  }
+  const root = strictRecord(value, ['apiVersion', 'schemaVersion', 'contentVersion', 'demonstrationLabel', 'data']);
+  apiHeader(root);
+  if (root.demonstrationLabel !== DEMONSTRATION_LABEL) invalid();
+  const contentVersion = identity(root.contentVersion);
+  if (contentVersion !== requestedVersion) invalid();
+  const data = parseMapReferenceData(root.data);
+  if (data.theme !== requestedTheme || data.contentVersion !== contentVersion) invalid();
+  return freeze({ apiVersion: API_VERSION, schemaVersion: SCHEMA_VERSION, contentVersion, demonstrationLabel: DEMONSTRATION_LABEL, data });
+}
+
+function parseMapReferenceData(value: unknown): MapReferenceDto {
+  const row = strictRecord(value, ['theme', 'contentVersion', 'attribution', 'features']);
+  const features = boundedArray(row.features, 50_000).map(parseMapFeature);
+  assertUnique(features.map(({ id }) => id));
+  return {
+    theme: parseMapTheme(row.theme), contentVersion: identity(row.contentVersion), attribution: display(row.attribution), features,
+  };
+}
+
+function parseMapFeature(value: unknown): MapFeatureDto {
+  const row = strictRecord(value, ['id', 'kind', 'routeIds', 'geometry']);
+  return {
+    id: identity(row.id), kind: enumeration(row.kind, ['line', 'station', 'transfer'] as const),
+    routeIds: identities(row.routeIds, 32), geometry: parseMapGeometry(row.geometry),
+  };
+}
+
+function parseMapGeometry(value: unknown): MapGeometryDto {
+  const row = strictRecord(value, ['type', 'coordinates']);
+  if (row.type === 'Point') return { type: 'Point', coordinates: mapPoint(row.coordinates) };
+  if (row.type !== 'LineString') invalid();
+  const coordinates = boundedArray(row.coordinates, 10_000);
+  if (coordinates.length < 2) invalid();
+  return { type: 'LineString', coordinates: coordinates.map(mapPoint) };
+}
+
+function mapPoint(value: unknown): readonly [number, number] {
+  if (!Array.isArray(value) || value.length !== 2) invalid();
+  const [longitude, latitude] = value;
+  if (typeof longitude !== 'number' || !Number.isFinite(longitude) || longitude < -180 || longitude > 180
+    || typeof latitude !== 'number' || !Number.isFinite(latitude) || latitude < -90 || latitude > 90) invalid();
+  return [longitude, latitude];
+}
+
+function parseMapOverlay(value: unknown, requestedTheme: MapThemeDto): MapOverlayEnvelopeDto {
+  const root = dynamicRoot(value, ['data']);
+  const base = dynamicBase(root);
+  const data = root.data === null ? null : parseMapOverlayData(root.data);
+  if ((base.runtime.availability === 'locked') !== (data === null)) invalid();
+  if (data && data.theme !== requestedTheme) invalid();
+  return freeze({ ...base, data });
+}
+
+function parseMapOverlayData(value: unknown): NonNullable<MapOverlayEnvelopeDto['data']> {
+  const row = strictRecord(value, ['theme', 'serviceEpoch', 'segments']);
+  const segments = boundedArray(row.segments, 50_000).map((candidate): MapOverlaySegmentDto => {
+    const segment = strictRecord(candidate, ['id', 'routeIds', 'state', 'alertIds']);
+    return {
+      id: identity(segment.id), routeIds: identities(segment.routeIds, 32),
+      state: enumeration(segment.state, ['normal', 'affected', 'unavailable'] as const),
+      alertIds: identities(segment.alertIds, 256),
+    };
+  });
+  assertUnique(segments.map(({ id }) => id));
+  return {
+    theme: parseMapTheme(row.theme), serviceEpoch: row.serviceEpoch === null ? null : identity(row.serviceEpoch), segments,
+  };
+}
+
+function parseJourney(value: unknown, request: JourneyRequestDto): JourneyEnvelopeDto {
+  const root = dynamicRoot(value, ['data']);
+  const base = dynamicBase(root);
+  const data = root.data === null ? null : parseJourneyDecision(root.data, request);
+  if ((base.runtime.availability === 'locked') !== (data === null)) invalid();
+  return freeze({ ...base, data });
+}
+
+function parseJourneyDecision(value: unknown, request: JourneyRequestDto): JourneyDecisionDto {
+  const candidate = record(value);
+  const kind = enumeration(candidate.kind, ['planned', 'untimed', 'no-path', 'unavailable'] as const);
+  if (kind === 'planned' || kind === 'untimed') {
+    const row = strictRecord(value, ['kind', 'scope', 'itineraries'], ['label']);
+    const scope = parseJourneyScope(row.scope, request);
+    const itineraries = boundedArray(row.itineraries, 8).map((itinerary) => parseJourneyItinerary(itinerary, scope));
+    if (itineraries.length === 0) invalid();
+    assertUnique(itineraries.map(({ id }) => id));
+    if (kind === 'planned') {
+      if (request.mode === 'offline-reference' ? row.label !== 'Reference itinerary' : row.label !== undefined) invalid();
+      return { kind, ...(row.label === undefined ? {} : { label: 'Reference itinerary' }), scope, itineraries };
+    }
+    if (row.label !== 'Untimed structural route' || itineraries.some(({ timing }) => timing !== 'untimed')) invalid();
+    return { kind, label: 'Untimed structural route', scope, itineraries };
+  }
+  const row = strictRecord(value, ['kind', 'reason', 'scope']);
+  const scope = parseJourneyScope(row.scope, request);
+  if (kind === 'no-path') {
+    if (row.reason !== 'no-service-path') invalid();
+    return { kind, reason: 'no-service-path', scope };
+  }
+  return {
+    kind, reason: enumeration(row.reason, ['no-verified-accessible-path', 'incomparable-evidence', 'search-limit-reached'] as const), scope,
+  };
+}
+
+function parseJourneyScope(value: unknown, request: JourneyRequestDto): JourneyScopeDto {
+  const row = strictRecord(value, ['mode', 'originStationId', 'destinationStationId', 'accessibleRouteOnly'], ['serviceDate']);
+  const scope: JourneyScopeDto = {
+    mode: enumeration(row.mode, ['online-current', 'online-future', 'offline-reference'] as const),
+    originStationId: identity(row.originStationId), destinationStationId: identity(row.destinationStationId),
+    accessibleRouteOnly: bool(row.accessibleRouteOnly),
+    ...(row.serviceDate === undefined ? {} : { serviceDate: parseServiceDate(row.serviceDate) }),
+  };
+  if (scope.mode !== request.mode || scope.originStationId !== request.originStationId
+    || scope.destinationStationId !== request.destinationStationId || scope.accessibleRouteOnly !== request.accessibleRouteOnly
+    || scope.serviceDate !== request.serviceDate) invalid();
+  return scope;
+}
+
+function parseJourneyItinerary(value: unknown, scope: JourneyScopeDto): JourneyItineraryDto {
+  const row = strictRecord(value, [
+    'id', 'legs', 'transferIds', 'transferInstructions', 'transfers', 'validity', 'accessibility', 'risk', 'timing',
+  ], ['practicalWalkRange', 'arrivalSeconds']);
+  const legs = boundedArray(row.legs, 8).map(parseJourneyLeg);
+  if (legs.length === 0 || legs[0].fromStationId !== scope.originStationId || legs.at(-1)!.toStationId !== scope.destinationStationId) invalid();
+  for (let index = 1; index < legs.length; index += 1) {
+    if (legs[index - 1].toStationId !== legs[index].fromStationId) invalid();
+  }
+  if (!Number.isSafeInteger(row.transfers) || Number(row.transfers) < 0 || Number(row.transfers) > 4) invalid();
+  const transfers = Number(row.transfers);
+  const transferIds = identities(row.transferIds, 4);
+  const transferInstructions = boundedArray(row.transferInstructions, 4).map(parseJourneyTransferInstruction);
+  if (transferIds.length !== transfers || transferInstructions.length !== transfers || transfers !== Math.max(0, legs.length - 1)) invalid();
+  for (let index = 0; index < transferInstructions.length; index += 1) {
+    const instruction = transferInstructions[index];
+    if (instruction.transferId !== transferIds[index] || instruction.stationId !== legs[index].toStationId
+      || instruction.stationId !== legs[index + 1].fromStationId || instruction.fromRouteId !== legs[index].routeId
+      || instruction.toRouteId !== legs[index + 1].routeId || instruction.fromDirection !== legs[index].direction
+      || instruction.toDirection !== legs[index + 1].direction
+      || instruction.fromActualDestination !== legs[index].actualDestination
+      || instruction.toActualDestination !== legs[index + 1].actualDestination) invalid();
+  }
+  const timing = enumeration(row.timing, ['timed', 'untimed'] as const);
+  const arrivalSeconds = row.arrivalSeconds === undefined ? undefined : boundedSeconds(row.arrivalSeconds);
+  if (timing === 'untimed' && arrivalSeconds !== undefined) invalid();
+  return {
+    id: identity(row.id), legs, transferIds, transferInstructions, transfers,
+    validity: enumeration(row.validity, ['valid', 'limited'] as const),
+    accessibility: enumeration(row.accessibility, ['eligible', 'unknown', 'ineligible'] as const),
+    risk: enumeration(row.risk, ['clear', 'affected', 'uncertain', 'blocked'] as const), timing,
+    ...(row.practicalWalkRange === undefined ? {} : { practicalWalkRange: walkRange(row.practicalWalkRange) }),
+    ...(arrivalSeconds === undefined ? {} : { arrivalSeconds }),
+  };
+}
+
+function parseJourneyLeg(value: unknown): JourneyLegDto {
+  const row = strictRecord(value, [
+    'patternId', 'routeId', 'routeLabel', 'direction', 'actualDestination', 'fromOccurrenceId', 'toOccurrenceId',
+    'orderedOccurrenceIds', 'fromStationId', 'toStationId', 'orderedStationIds',
+  ]);
+  const orderedOccurrenceIds = identities(row.orderedOccurrenceIds, 256);
+  const orderedStationIds = identities(row.orderedStationIds, 256);
+  const fromOccurrenceId = identity(row.fromOccurrenceId);
+  const toOccurrenceId = identity(row.toOccurrenceId);
+  const fromStationId = identity(row.fromStationId);
+  const toStationId = identity(row.toStationId);
+  if (orderedOccurrenceIds.length < 2 || orderedStationIds.length !== orderedOccurrenceIds.length
+    || orderedOccurrenceIds[0] !== fromOccurrenceId || orderedOccurrenceIds.at(-1) !== toOccurrenceId
+    || orderedStationIds[0] !== fromStationId || orderedStationIds.at(-1) !== toStationId) invalid();
+  return {
+    patternId: identity(row.patternId), routeId: identity(row.routeId), routeLabel: display(row.routeLabel),
+    direction: parseDirection(row.direction), actualDestination: display(row.actualDestination),
+    fromOccurrenceId, toOccurrenceId, orderedOccurrenceIds, fromStationId, toStationId, orderedStationIds,
+  };
+}
+
+function parseJourneyTransferInstruction(value: unknown): JourneyTransferInstructionDto {
+  const row = strictRecord(value, [
+    'transferId', 'stationId', 'fromRouteId', 'fromDirection', 'fromActualDestination',
+    'toRouteId', 'toDirection', 'toActualDestination',
+  ]);
+  return {
+    transferId: identity(row.transferId), stationId: identity(row.stationId),
+    fromRouteId: identity(row.fromRouteId), fromDirection: parseDirection(row.fromDirection),
+    fromActualDestination: display(row.fromActualDestination), toRouteId: identity(row.toRouteId),
+    toDirection: parseDirection(row.toDirection), toActualDestination: display(row.toActualDestination),
+  };
 }
 
 function parseCatalogComplex(value: unknown): CatalogComplexDto {
@@ -689,6 +1051,49 @@ function captureLocationFix(value: LocationFixDto): LocationFixDto {
   if (![latitude, longitude, value.accuracyMeters].every((candidate) => typeof candidate === 'number' && Number.isFinite(candidate))) invalid();
   if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180 || value.accuracyMeters <= 0) invalid();
   return { coordinate: { latitude, longitude }, accuracyMeters: value.accuracyMeters };
+}
+
+function captureJourneyRequest(value: JourneyRequestDto): JourneyRequestDto {
+  const row = strictRecord(value, ['mode', 'originStationId', 'destinationStationId', 'accessibleRouteOnly'], [
+    'requiredFirstDirection', 'requiredActualDestination', 'serviceDate',
+  ]);
+  const mode = enumeration(row.mode, ['online-current', 'online-future', 'offline-reference'] as const);
+  if (typeof row.accessibleRouteOnly !== 'boolean') invalid();
+  if (mode === 'online-future' && row.serviceDate === undefined) invalid();
+  const result: JourneyRequestDto = {
+    mode, originStationId: encodeIdentity(row.originStationId), destinationStationId: encodeIdentity(row.destinationStationId),
+    accessibleRouteOnly: row.accessibleRouteOnly,
+    ...(row.requiredFirstDirection === undefined ? {} : { requiredFirstDirection: parseDirection(row.requiredFirstDirection) }),
+    ...(row.requiredActualDestination === undefined ? {} : { requiredActualDestination: display(row.requiredActualDestination) }),
+    ...(row.serviceDate === undefined ? {} : { serviceDate: parseServiceDate(row.serviceDate) }),
+  };
+  if (result.originStationId === result.destinationStationId) invalid();
+  return result;
+}
+
+function searchQuery(value: unknown): string {
+  if (typeof value !== 'string') invalid();
+  const normalized = value.normalize('NFC').trim();
+  if ([...normalized].length < 1 || [...normalized].length > 100
+    || new TextEncoder().encode(normalized).byteLength > 256 || /[\u0000-\u001f\u007f]/u.test(normalized)) invalid();
+  return normalized;
+}
+
+function parseMapTheme(value: unknown): MapThemeDto {
+  return enumeration(value, ['day', 'night'] as const);
+}
+
+function parseServiceDate(value: unknown): string {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/u.test(value)) invalid();
+  const [year, month, day] = value.split('-').map(Number);
+  const parsed = new Date(Date.UTC(year, month - 1, day));
+  if (parsed.getUTCFullYear() !== year || parsed.getUTCMonth() !== month - 1 || parsed.getUTCDate() !== day) invalid();
+  return value;
+}
+
+function boundedSeconds(value: unknown): number {
+  if (!Number.isSafeInteger(value) || Number(value) < 0 || Number(value) > 86_400) invalid();
+  return Number(value);
 }
 
 function walkRange(value: unknown): WalkRangeDto {

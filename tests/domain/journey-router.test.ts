@@ -88,7 +88,7 @@ describe('exact directional occurrence journey graph', () => {
         risk: 'uncertain',
       };
       const result = routeJourney(graph, query({ mode: 'offline-reference' }));
-      expect(result).toMatchObject({ kind: 'untimed', label: 'Structural route only', itineraries: [{ timing: 'untimed' }] });
+      expect(result).toMatchObject({ kind: 'untimed', label: 'Untimed structural route', itineraries: [{ timing: 'untimed' }] });
       expect(JSON.stringify(result)).not.toContain('arrivalSeconds');
     },
   );

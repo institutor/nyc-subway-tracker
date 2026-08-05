@@ -15,6 +15,7 @@ export function NearbyView({
   onRetryLocation,
   onOpenPicker,
   onRefresh,
+  historical = false,
 }: {
   readonly phase: 'idle' | 'loading' | 'ready' | 'error';
   readonly response?: NearbyEnvelopeDto;
@@ -27,6 +28,7 @@ export function NearbyView({
   readonly onRetryLocation: () => void;
   readonly onOpenPicker: () => void;
   readonly onRefresh: () => void;
+  readonly historical?: boolean;
 }) {
   const showSaved = Boolean(fallback) && savedChoices.length > 0 && !pickerOpen;
   const showPicker = pickerOpen || (Boolean(fallback) && savedChoices.length === 0);
@@ -87,7 +89,7 @@ export function NearbyView({
       ) : null}
 
       {!fallback && !showPicker ? (
-        <NearbyResults phase={phase} response={response} boards={boards} pickerChoices={pickerChoices} onSelect={onSelect} />
+        <NearbyResults phase={phase} response={response} boards={boards} pickerChoices={pickerChoices} onSelect={onSelect} historical={historical} />
       ) : null}
       <div className="context-dock nearby-context-dock" role="toolbar" aria-label="Nearby controls">
         <button type="button" aria-label="Refresh nearby stations" onClick={onRefresh} disabled={fallback === 'denied'}>
@@ -107,12 +109,14 @@ function NearbyResults({
   boards,
   pickerChoices,
   onSelect,
+  historical,
 }: {
   readonly phase: 'idle' | 'loading' | 'ready' | 'error';
   readonly response?: NearbyEnvelopeDto;
   readonly boards: ReadonlyMap<string, NearbyBoardState>;
   readonly pickerChoices: readonly CatalogComplexDto[];
   readonly onSelect: StationSelection;
+  readonly historical: boolean;
 }) {
   if (!response && (phase === 'idle' || phase === 'loading')) return <NearbySkeleton />;
   if (!response || phase === 'error') {
@@ -154,7 +158,7 @@ function NearbyResults({
   return (
     <div className="station-stack" aria-live="polite">
       {response.demonstrationLabel ? <p className="surface-disclosure">{response.demonstrationLabel}</p> : null}
-      {response.data.cards.map((card) => <StationCard key={card.complexId} card={card} boards={boards} onSelect={onSelect} />)}
+      {response.data.cards.map((card) => <StationCard key={card.complexId} card={card} boards={boards} onSelect={onSelect} historical={historical} />)}
     </div>
   );
 }

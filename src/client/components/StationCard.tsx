@@ -23,10 +23,12 @@ export function StationCard({
   card,
   boards,
   onSelect,
+  historical = false,
 }: {
   readonly card: NearbyStationCardDto;
   readonly boards: ReadonlyMap<string, NearbyBoardState>;
   readonly onSelect: StationSelection;
+  readonly historical?: boolean;
 }) {
   return (
     <article className="station-card" data-testid="nearby-station-card">
@@ -46,6 +48,7 @@ export function StationCard({
           direction={direction}
           boardState={boards.get(boardRequestKey(direction))}
           onSelect={onSelect}
+          historical={historical}
         />
       ))}
     </article>
@@ -58,12 +61,14 @@ function NearbyDirection({
   direction,
   boardState,
   onSelect,
+  historical,
 }: {
   readonly complexId: string;
   readonly complexName: string;
   readonly direction: NearbyDirectionDto;
   readonly boardState?: NearbyBoardState;
   readonly onSelect: StationSelection;
+  readonly historical: boolean;
 }) {
   const board = boardState?.phase === 'ready' ? boardState.board : undefined;
   const exactDirection = board?.data?.station?.id === direction.constituentId
@@ -73,7 +78,7 @@ function NearbyDirection({
     ?? exactDirection?.secondary[0]?.validThrough
     ?? board?.serverTime
     ?? '1970-01-01T00:00:00.000Z';
-  const reading = useBoardClock(board?.serverTime ?? validThrough, validThrough, undefined, board?.receivedAtMonotonicMs);
+  const reading = useBoardClock(board?.serverTime ?? validThrough, validThrough, undefined, board?.receivedAtMonotonicMs, !historical);
   return (
     <section className="nearby-direction" aria-label={`${directionLabel(direction.direction)} nearby service`}>
       <div className="nearby-direction__summary">
@@ -101,7 +106,7 @@ function NearbyDirection({
           : !board ? <DirectionSkeleton label={directionLabel(direction.direction)} />
           : board.runtime.availability === 'locked' || board.data === null
             ? <p className="unavailable-copy">Live arrivals are not released yet.</p>
-            : exactDirection ? <DirectionTrack direction={exactDirection} reading={reading} />
+            : exactDirection ? <DirectionTrack direction={exactDirection} reading={reading} historical={historical} />
               : <p className="unavailable-copy">Arrival information is unavailable for this exact platform.</p>}
       {board?.data?.alerts.map((alert) => (
         <section className="inline-alert" aria-label="Service alert" key={alert.id}>

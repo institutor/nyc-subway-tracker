@@ -6,19 +6,24 @@ export function ArrivalRow({
   arrival,
   reading,
   secondary = false,
+  historical = false,
 }: {
   readonly arrival: ArrivalDto;
   readonly reading: BoardClockReading;
   readonly secondary?: boolean;
+  readonly historical?: boolean;
 }) {
-  const display = arrival.kind === 'live'
+  const display = historical
+    ? historicalDisplay(arrival)
+    : arrival.kind === 'live'
     ? formatArrivalDisplay({ kind: arrival.kind, displayAuthority: arrival.displayAuthority, at: arrival.at }, reading)
     : arrival.kind === 'expected'
       ? formatArrivalDisplay({ kind: arrival.kind, displayAuthority: arrival.displayAuthority, range: arrival.range }, reading)
       : arrival.kind === 'scheduled'
         ? formatArrivalDisplay({ kind: arrival.kind, displayAuthority: arrival.displayAuthority, at: arrival.at }, reading)
         : formatArrivalDisplay({ kind: arrival.kind, displayAuthority: arrival.displayAuthority }, reading);
-  const status = arrival.kind === 'live' ? 'Live'
+  const status = historical ? 'Historical arrival'
+    : arrival.kind === 'live' ? 'Live'
     : arrival.kind === 'expected' ? 'Expected'
       : arrival.kind === 'scheduled' ? 'Scheduled'
         : arrival.kind === 'holding' ? 'Position not advancing'
@@ -58,8 +63,16 @@ export function sourceLabel(provenance: ProvenanceDto): string {
   return 'Source unavailable';
 }
 
-function formatClaimTime(value: string): string {
+export function formatClaimTime(value: string): string {
   return new Intl.DateTimeFormat('en-US', {
     timeZone: 'America/New_York', hour: 'numeric', minute: '2-digit', hour12: true,
   }).format(new Date(value));
+}
+
+function historicalDisplay(arrival: ArrivalDto): string {
+  if (arrival.kind === 'live' || arrival.kind === 'scheduled') return `Was due ${formatClaimTime(arrival.at)}`;
+  if (arrival.kind === 'expected') {
+    return `Was expected ${formatClaimTime(arrival.range.startsAt)}–${formatClaimTime(arrival.range.endsAt)}`;
+  }
+  return 'Historical status';
 }

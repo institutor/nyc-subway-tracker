@@ -12,7 +12,15 @@ export function directionLabel(direction: BoardDirectionDto['direction']): strin
   return 'Direction not confirmed';
 }
 
-export function DirectionTrack({ direction, reading }: { readonly direction: BoardDirectionDto; readonly reading: BoardClockReading }) {
+export function DirectionTrack({
+  direction,
+  reading,
+  historical = false,
+}: {
+  readonly direction: BoardDirectionDto;
+  readonly reading: BoardClockReading;
+  readonly historical?: boolean;
+}) {
   const label = directionLabel(direction.direction);
   return (
     <section className="direction-track" aria-label={`${label} trains`}>
@@ -22,14 +30,14 @@ export function DirectionTrack({ direction, reading }: { readonly direction: Boa
       </div>
       <div className="direction-track__rows">
         {direction.primary.length > 0
-          ? direction.primary.map((arrival) => <ArrivalRow key={arrival.id} arrival={arrival} reading={reading} />)
+          ? direction.primary.map((arrival) => <ArrivalRow key={arrival.id} arrival={arrival} reading={reading} historical={historical} />)
           : <p className="empty-track">No supported arrival times for this direction.</p>}
       </div>
       {direction.secondary.length > 0 ? (
         <section className="secondary-track" aria-label="Additional train context">
           <h4>Holding / uncertain</h4>
           {direction.secondary.map((arrival) => (
-            <ArrivalRow key={arrival.id} arrival={arrival} reading={reading} secondary />
+            <ArrivalRow key={arrival.id} arrival={arrival} reading={reading} secondary historical={historical} />
           ))}
         </section>
       ) : null}

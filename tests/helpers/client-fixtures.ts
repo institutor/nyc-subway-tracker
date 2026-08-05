@@ -198,6 +198,10 @@ export function createClientApi(overrides: Partial<TransitApiClient> = {}): Tran
     catalog: overrides.catalog ?? (async () => catalogEnvelope),
     nearby: overrides.nearby ?? (async () => nearbyEnvelope),
     board: overrides.board ?? (async (stationId) => boardEnvelope(stationId)),
+    searchStations: overrides.searchStations ?? (async () => { throw new Error('Station search fixture is not configured.'); }),
+    mapReference: overrides.mapReference ?? (async () => { throw new Error('Map reference fixture is not configured.'); }),
+    mapOverlay: overrides.mapOverlay ?? (async () => { throw new Error('Map overlay fixture is not configured.'); }),
+    planJourney: overrides.planJourney ?? (async () => { throw new Error('Journey fixture is not configured.'); }),
   };
 }
 
