@@ -374,12 +374,23 @@ export function presentReconnectionStage(state: ReconnectionState, stage: Reconn
 export function resolveReconnectionWarning(
   state: ReconnectionState,
   input: ResolveReconnectionWarningInput,
+  acceptedThrough: string,
 ): ReconnectionState {
   const warning = state.visible.activeWarnings.find((candidate) => candidate.id === input?.warningId);
   if (!warning) throw new Error('Exact active reconnection warning is required');
+  if (!canonicalInstant(acceptedThrough)
+    || Date.parse(acceptedThrough) < Date.parse(state.context.recovery.startedAt)) {
+    throw new Error('Warning resolution requires an exact local receipt time inside the recovery epoch');
+  }
   const resolution = input.resolution as ReconnectionWarningResolution | undefined;
   if (resolution?.kind === 'owner-resolved') {
-    validateOwnerGate(resolution.gate, warning.ownerGate.domain, 'Warning resolution', state.context.recovery);
+    validateOwnerGate(
+      resolution.gate,
+      warning.ownerGate.domain,
+      'Warning resolution',
+      state.context.recovery,
+      acceptedThrough,
+    );
     if (resolution.gate.disposition !== 'accepted-fresh') {
       throw new Error('Warning resolution requires fresh owner-accepted evidence');
     }
@@ -392,6 +403,13 @@ export function resolveReconnectionWarning(
   } else if (resolution?.kind === 'rider-replaced-decision') {
     if (!nonempty(resolution.actionId) || !canonicalInstant(resolution.actedAt)) {
       throw new Error('Governed rider replacement requires an exact action and time');
+    }
+    if (Date.parse(resolution.actedAt) < Date.parse(state.context.recovery.startedAt)
+      || Date.parse(resolution.actedAt) < Date.parse(warning.ownerGate.acceptedAt)) {
+      throw new Error('Governed rider replacement violates recovery chronology');
+    }
+    if (Date.parse(resolution.actedAt) > Date.parse(acceptedThrough)) {
+      throw new Error('Governed rider replacement cannot postdate the local receipt');
     }
   } else {
     throw new Error('Acknowledgement alone does not resolve an active-trip invalidation');
@@ -741,7 +759,7 @@ function validateOwnerGate(
   expectedDomain: ReconnectionOwnerDomain,
   label: string,
   ownership: ReconnectionRequestOwnership,
-  acceptedThrough?: string,
+  acceptedThrough: string,
 ): asserts candidate is OwnerAcceptance {
   if (!candidate || candidate.domain !== expectedDomain) {
     throw new Error(`${label} owner gate must come from the exact ${expectedDomain} owner`);
@@ -762,7 +780,7 @@ function validateOwnerGate(
   if (Date.parse(candidate.evidenceAt) > Date.parse(candidate.acceptedAt)) {
     throw new Error(`${label} evidence cannot postdate its local acceptance`);
   }
-  if (acceptedThrough !== undefined && Date.parse(candidate.acceptedAt) > Date.parse(acceptedThrough)) {
+  if (Date.parse(candidate.acceptedAt) > Date.parse(acceptedThrough)) {
     throw new Error(`${label} acceptance cannot postdate the local receipt bound`);
   }
   if (!Array.isArray(candidate.scopeMembership) || candidate.scopeMembership.length === 0

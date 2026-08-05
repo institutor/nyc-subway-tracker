@@ -681,7 +681,7 @@ describe('owner-gated reconnection ordering', () => {
     expect(() => resolveReconnectionWarning(state, {
       warningId: 'trip-invalidation-stage-1',
       resolution: { kind: 'acknowledged', acknowledgedAt: AT },
-    } as any)).toThrow(/acknowledgement.*does not resolve/i);
+    } as any, '2026-08-05T12:00:01.000Z')).toThrow(/acknowledgement.*does not resolve/i);
     expect(state.visible.activeWarnings).toHaveLength(1);
 
     state = resolveReconnectionWarning(state, {
@@ -693,7 +693,7 @@ describe('owner-gated reconnection ordering', () => {
           evidenceId: 'accessible-path-restored',
         },
       },
-    });
+    }, '2026-08-05T12:00:01.000Z');
     expect(state.visible.activeWarnings).toEqual([]);
     expect(state.context).toEqual(CONTEXT);
     expect(state.audit.at(-1)).toEqual({
@@ -701,6 +701,81 @@ describe('owner-gated reconnection ordering', () => {
       stage: 1,
       warningId: 'trip-invalidation-stage-1',
     });
+  });
+
+  test('requires an exact caller-captured local receipt ceiling to resolve a warning', () => {
+    const state = stateWithStageOneWarning();
+
+    expect(() => (resolveReconnectionWarning as any)(state, {
+      warningId: 'trip-invalidation-stage-1',
+      resolution: {
+        kind: 'owner-resolved',
+        gate: { ...gate('accessible-path'), evidenceId: 'accessible-path-restored' },
+      },
+    })).toThrow(/local receipt time.*recovery epoch/i);
+    expect(state.visible.activeWarnings).toHaveLength(1);
+  });
+
+  test('does not clear a warning with owner evidence accepted after the local receipt ceiling', () => {
+    const state = stateWithStageOneWarning();
+
+    expect(() => resolveReconnectionWarning(state, {
+      warningId: 'trip-invalidation-stage-1',
+      resolution: {
+        kind: 'owner-resolved',
+        gate: {
+          ...gate('accessible-path'),
+          evidenceId: 'accessible-path-future',
+          evidenceAt: '2026-08-05T12:00:03.000Z',
+          acceptedAt: '2026-08-05T12:00:03.000Z',
+        },
+      },
+    }, '2026-08-05T12:00:02.000Z')).toThrow(/local receipt bound/i);
+    expect(state.visible.activeWarnings).toHaveLength(1);
+  });
+
+  test('binds rider replacement to both recovery chronology and the local receipt ceiling', () => {
+    const state = stateWithStageOneWarning();
+    const resolution = (actedAt: string) => ({
+      warningId: 'trip-invalidation-stage-1',
+      resolution: { kind: 'rider-replaced-decision' as const, actionId: 'choose-another-trip', actedAt },
+    });
+
+    expect(() => resolveReconnectionWarning(
+      state,
+      resolution('2026-08-05T11:59:58.000Z'),
+      '2026-08-05T12:00:02.000Z',
+    )).toThrow(/rider replacement.*recovery chronology/i);
+    expect(() => resolveReconnectionWarning(
+      state,
+      resolution('2026-08-05T11:59:59.500Z'),
+      '2026-08-05T12:00:02.000Z',
+    )).toThrow(/rider replacement.*recovery chronology/i);
+    expect(() => resolveReconnectionWarning(
+      state,
+      resolution('2026-08-05T12:00:03.000Z'),
+      '2026-08-05T12:00:02.000Z',
+    )).toThrow(/rider replacement.*local receipt/i);
+    expect(state.visible.activeWarnings).toHaveLength(1);
+  });
+
+  test('clears a warning with a newer owner result bounded by the local receipt', () => {
+    const state = stateWithStageOneWarning();
+
+    const resolved = resolveReconnectionWarning(state, {
+      warningId: 'trip-invalidation-stage-1',
+      resolution: {
+        kind: 'owner-resolved',
+        gate: {
+          ...gate('accessible-path'),
+          evidenceId: 'accessible-path-restored',
+          evidenceAt: '2026-08-05T12:00:01.000Z',
+          acceptedAt: '2026-08-05T12:00:02.000Z',
+        },
+      },
+    }, '2026-08-05T12:00:02.000Z');
+
+    expect(resolved.visible.activeWarnings).toEqual([]);
   });
 
   test('never lets stage 5 overtake an unresolved stage 4 request', () => {
@@ -714,3 +789,16 @@ describe('owner-gated reconnection ordering', () => {
     expect(() => presentReconnectionStage(state, 5)).toThrow(/stage 4.*before stage 5/i);
   });
 });
+
+function stateWithStageOneWarning(): ReconnectionState {
+  let state = createReconnectionState(CONTEXT, {
+    historicalPositioningGuidance: true,
+    historicalTransferGuidance: true,
+  });
+  state = requestReconnectionStage(state, 1);
+  state = acceptReconnectionStage(state, invalidatingResult(1));
+  state = commitReconnectionStage(state, 1);
+  state = presentReconnectionStage(state, 1);
+  for (const stage of [2, 3, 4, 5] as const) state = finishStage(state, stage);
+  return state;
+}
