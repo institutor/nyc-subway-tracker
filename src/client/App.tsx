@@ -978,7 +978,8 @@ function createAppReconnectionContext(input: {
   const routeFilters = input.state.filters.routeIds.length > 0
     ? input.state.filters.routeIds
     : cursor ? [cursor.leg.route.id] : [];
-  const theme = input.mapContext.serviceMeaning === 'typical-weekday' ? 'day' as const : 'night' as const;
+  const theme = input.mapContext.serviceMeaning === 'late-night' ? 'night' as const : 'day' as const;
+  const storedTrainChoice = cursor ? activeTrainChoice(input.activeTrip, cursor.leg.id) : null;
   const viewportKey = `viewport-${fingerprint(JSON.stringify({
     viewport: input.mapContext.viewport,
     selectedStationId: input.mapContext.selectedStationId ?? null,
@@ -997,6 +998,7 @@ function createAppReconnectionContext(input: {
     ...(input.activeTrip?.accessiblePath
       ? [{ kind: 'path' as const, id: input.activeTrip.accessiblePath.ownerRecordId }]
       : []),
+    ...(storedTrainChoice ? [{ kind: 'train' as const, id: storedTrainChoice }] : []),
   ];
   const eligibleScopes = scopes.filter((scope, index) => scopes.findIndex((candidate) => (
     candidate.kind === scope.kind && candidate.id === scope.id
@@ -1021,7 +1023,7 @@ function createAppReconnectionContext(input: {
     manualCursor: cursor && input.activeTrip
       ? { legIndex: cursor.legIndex, stopId: input.activeTrip.cursor.pointId }
       : null,
-    hasStoredTrainChoice: false,
+    hasStoredTrainChoice: storedTrainChoice !== null,
     guidanceRequirements: {
       positioning: input.activeTrip?.platformGuidance ? 'optional' : 'none',
       transfer: input.activeTrip?.transfers.length ? 'required' : 'none',
@@ -1040,6 +1042,13 @@ function createAppReconnectionContext(input: {
       eligibleScopes,
     },
   };
+}
+
+function activeTrainChoice(activeTrip: ActiveTripRecord | null, legId: string): string | null {
+  const schedule = activeTrip?.validity.schedule;
+  if (schedule?.kind !== 'current' && schedule?.kind !== 'stale') return null;
+  const departure = schedule.departures.find((candidate) => candidate.legId === legId);
+  return departure ? `departure:${departure.legId}:${departure.pointId}:${departure.clockTime}` : null;
 }
 
 function exactRecoveryInstant(now: (() => Date) | undefined): string {

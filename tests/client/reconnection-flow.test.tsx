@@ -7,6 +7,10 @@ import type { BoardEnvelopeDto, MapOverlayEnvelopeDto } from '../../src/client/a
 import type { ReconnectionTransition } from '../../src/client/recovery/run-reconnection';
 import { writeLastUsedStation } from '../../src/client/state/app-state';
 import {
+  createBrowserActiveTripStore,
+  type ActiveTripRecord,
+} from '../../src/client/storage/active-trip-store';
+import {
   ControlledGeolocation,
   MemoryStorage,
   boardEnvelope,
@@ -115,7 +119,94 @@ describe('App reconnection flow', () => {
     expect(screen.getByText('No current subway information is stored on this device.')).toBeInTheDocument();
     expect(screen.queryByText('Live')).not.toBeInTheDocument();
   });
+
+  test('owns Actual-now with the Day map and preserves the exact response-owned train choice', async () => {
+    const storage = new MemoryStorage();
+    expect(createBrowserActiveTripStore(storage).capture(timedActiveTrip())).toMatchObject({ kind: 'saved' });
+    const navigatorState = { onLine: false };
+    const events = new ControlledConnectivityEvents();
+    const transitions: ReconnectionTransition[] = [];
+
+    render(<App
+      api={createClientApi()}
+      geolocation={new ControlledGeolocation()}
+      storage={storage}
+      connectivityOptions={{ navigator: navigatorState, eventTarget: events }}
+      recoveryNow={() => new Date('2026-08-05T12:00:00.000Z')}
+      onReconnectionTransition={(transition) => transitions.push(transition)}
+    />);
+
+    navigatorState.onLine = true;
+    act(() => events.dispatch('online'));
+    await waitFor(() => expect(transitions.length).toBeGreaterThan(0));
+
+    const context = transitions[0]!.state.context;
+    expect(context.mapTuple).toMatchObject({ referenceMode: 'actual', theme: 'day' });
+    expect(context.hasStoredTrainChoice).toBe(true);
+    expect(context.recovery.eligibleScopes).toContainEqual({
+      kind: 'train',
+      id: 'departure:leg-1:point-origin:08:15',
+    });
+  });
 });
+
+function timedActiveTrip(): ActiveTripRecord {
+  return {
+    id: 'trip-current',
+    capturedAt: '2026-08-05T12:00:00.000Z',
+    captureContext: {
+      kind: 'response-owned',
+      itineraryId: 'itinerary-current',
+      requestMode: 'online-current',
+      timing: 'timed',
+      disclosure: 'Demonstration data — not live',
+    },
+    origin: { name: '125 St', complexId: 'A12', constituentId: 'A12' },
+    destination: { name: '59 St', complexId: 'A24', constituentId: 'A24' },
+    accessibleRouteOnly: false,
+    legs: [{
+      id: 'leg-1',
+      route: { id: 'A', label: 'A', spokenIdentity: 'A train', shape: 'circle' },
+      boundDirection: 'southbound',
+      actualDestination: 'Far Rockaway',
+      points: [
+        {
+          id: 'point-origin', kind: 'stop', stationName: '125 St', complexId: 'A12', constituentId: 'A12',
+          instruction: 'Board the A train.',
+        },
+        {
+          id: 'point-destination', kind: 'stop', stationName: '59 St', complexId: 'A24', constituentId: 'A24',
+          instruction: 'Leave the train.',
+        },
+      ],
+    }],
+    transfers: [],
+    serviceClaims: [],
+    equipmentClaims: [],
+    cursor: { pointId: 'point-origin' },
+    validity: {
+      result: 'current-itinerary',
+      serviceDate: '2026-08-05',
+      pattern: 'actual-now',
+      schedule: {
+        kind: 'current',
+        editionId: 'edition-current',
+        anchorKind: 'published',
+        anchorAt: '2026-08-05T11:00:00.000Z',
+        lastRetrievedAt: '2026-08-05T11:58:00.000Z',
+        effectiveFrom: '2026-08-05',
+        effectiveUntil: '2026-08-05',
+        currencyAgeSeconds: 3_600,
+        departures: [{
+          legId: 'leg-1', pointId: 'point-origin', clockTime: '08:15', evidence: 'scheduled',
+          timeZone: 'America/New_York',
+        }],
+      },
+      warnings: [],
+      vetoes: [],
+    },
+  };
+}
 
 function recoveryBoard(identity: string, instant: string): BoardEnvelopeDto {
   const base = boardEnvelope();
@@ -157,7 +248,7 @@ function recoveryOverlay(): MapOverlayEnvelopeDto {
     decidedAt: '2026-08-05T12:00:04.000Z',
     serverTime: '2026-08-05T12:00:04.000Z',
     cacheState: 'network',
-    data: { theme: 'night', serviceEpoch: 'recovery-map-7', segments: [] },
+    data: { theme: 'day', serviceEpoch: 'recovery-map-7', segments: [] },
   };
 }
 
