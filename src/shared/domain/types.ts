@@ -1,7 +1,14 @@
 import type { ServiceDate } from './clock';
 
 export type Instant = Date;
-export type SourceKind = 'regular-gtfs' | 'supplemented-gtfs' | 'gtfs-rt' | 'alerts' | 'entrances' | 'equipment';
+export type SourceKind =
+  | 'regular-gtfs'
+  | 'supplemented-gtfs'
+  | 'gtfs-rt'
+  | 'alerts'
+  | 'entrances'
+  | 'equipment'
+  | 'practical-walk';
 export type FeedHealthState = 'current' | 'degraded' | 'unavailable' | 'quarantined';
 export type Direction = 'northbound' | 'southbound' | 'eastbound' | 'westbound' | 'inbound' | 'outbound' | 'unknown';
 export type BoardMode = 'live' | 'scheduled-fallback' | 'demonstration' | 'unavailable';
@@ -231,11 +238,27 @@ export interface ActiveTrip {
 
 export interface SavedRecord {
   id: string;
-  stationId: string;
-  preferredEntranceId?: string;
-  preferredDirection?: Direction;
-  routeIds: readonly string[];
+  complexId: string;
+  constituentId: string;
+  preferredEntrance?: {
+    entranceId: string;
+    direction: Direction;
+  };
+  preferredRide?: {
+    direction: Direction;
+    actualDestination: string;
+  };
+  routeFilters: readonly string[];
   accessibleRouteOnly: boolean;
+  commonDestination?: {
+    complexId: string;
+    constituentId: string;
+  };
+  timeWindow?: {
+    weekdays: readonly number[];
+    startsAt: string;
+    endsAt: string;
+  };
   state: 'active' | 'paused';
 }
 

@@ -64,6 +64,7 @@ export interface SourceRegistryConfig {
   equipmentUrl?: string;
   outageUrl?: string;
   practicalWalkUrl?: string;
+  practicalWalkAuditApproved?: boolean;
 }
 
 const REALTIME_BASE = 'https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/';
@@ -191,7 +192,7 @@ export function createSourceRegistry(config: SourceRegistryConfig): TransitSourc
       role: 'practical-walk',
       required: false,
       supports: ['nearby-practical-walk'],
-      enabled: Boolean(config.practicalWalkUrl),
+      enabled: Boolean(config.practicalWalkUrl && config.practicalWalkAuditApproved),
       auditRequired: true,
       url: config.practicalWalkUrl ?? 'https://disabled.invalid/practical-walk',
       allowedOrigins: [configuredOrigin(config.practicalWalkUrl, 'https://disabled.invalid')],
@@ -199,7 +200,7 @@ export function createSourceRegistry(config: SourceRegistryConfig): TransitSourc
       acceptedContentTypes: ['application/json'],
       retrieval: {
         timeoutMs: 4_000,
-        maxRedirects: 1,
+        maxRedirects: 0,
         maxBytes: 1024 * 1024,
         maxUrlLength: 2_048,
       },

@@ -10,6 +10,7 @@ export interface EntranceCatalogMetadata {
 
 export interface ExactEntranceRecord {
   readonly id: string;
+  readonly sourceRowIdentity: string;
   readonly complexId: string;
   readonly complexName: string;
   readonly constituentStationId: string;
@@ -18,6 +19,7 @@ export interface ExactEntranceRecord {
   readonly directionalStopIds: readonly string[];
   readonly routeIds: readonly string[];
   readonly entranceType: string;
+  readonly publicDescription: string;
   readonly entryPermission: EntryPermission;
   readonly exitAllowed: boolean | null;
   readonly latitude: number;
@@ -69,6 +71,7 @@ export function loadEntranceCatalog(
     const latitude = finiteCoordinate(raw.entrance_latitude, 'entrance_latitude', -90, 90);
     const longitude = finiteCoordinate(raw.entrance_longitude, 'entrance_longitude', -180, 180);
     const entranceType = optionalText(raw.entrance_type);
+    const publicDescription = publicEntranceDescription(raw, entranceType);
     const entryPermission = parseEntryPermission(raw.entry_allowed, raw.exit_allowed);
     const exitAllowed = parseYesNo(raw.exit_allowed);
     const referencedBaseStops = referencedGtfsStopIds.map((stopId) => stopById.get(stopId));
@@ -108,12 +111,12 @@ export function loadEntranceCatalog(
       latitude.toFixed(7),
       longitude.toFixed(7),
       entranceType,
-      rowIdentity,
     ]
       .map((part) => encodeURIComponent(part))
       .join(':');
     return {
       id,
+      sourceRowIdentity: rowIdentity,
       complexId,
       complexName,
       constituentStationId,
@@ -122,6 +125,7 @@ export function loadEntranceCatalog(
       directionalStopIds: Object.freeze(directionalStopIds),
       routeIds: Object.freeze(splitIds(optionalText(raw.daytime_routes))),
       entranceType,
+      publicDescription,
       entryPermission,
       exitAllowed,
       latitude,
@@ -204,6 +208,18 @@ function requiredText(record: Readonly<Record<string, unknown>>, field: string):
 
 function optionalText(value: unknown): string {
   return typeof value === 'string' ? value : '';
+}
+
+function publicEntranceDescription(record: Readonly<Record<string, unknown>>, entranceType: string): string {
+  const direct = optionalText(record.entrance_description) || optionalText(record.entrance_location);
+  const street = optionalText(record.street_name);
+  const crossStreet = optionalText(record.cross_street);
+  const value = direct || [street, crossStreet].filter(Boolean).join(' at ') || entranceType || 'Entrance';
+  const normalized = value.normalize('NFC').trim();
+  if (!normalized || [...normalized].length > 256 || /[\u0000-\u001f\u007f]/u.test(normalized)) {
+    throw new Error('Invalid entrance public description');
+  }
+  return normalized;
 }
 
 function splitIds(value: string): string[] {

@@ -704,6 +704,16 @@ describe('official transit source registry', () => {
       enabled: false,
       auditRequired: true,
       supports: ['nearby-practical-walk'],
+      retrieval: { timeoutMs: 4_000, maxRedirects: 0, maxBytes: 1_048_576 },
+    });
+    expect(createSourceRegistry({ practicalWalkUrl: 'https://walk.example.test/v1/matrix' })
+      .find((item) => item.id === 'practical-walk')).toMatchObject({ enabled: false });
+    expect(createSourceRegistry({
+      practicalWalkUrl: 'https://walk.example.test/v1/matrix',
+      practicalWalkAuditApproved: true,
+    }).find((item) => item.id === 'practical-walk')).toMatchObject({
+      enabled: true,
+      allowedOrigins: ['https://walk.example.test'],
     });
   });
 

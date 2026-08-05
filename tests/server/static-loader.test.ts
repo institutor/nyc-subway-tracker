@@ -326,6 +326,46 @@ describe('static GTFS normalization', () => {
 });
 
 describe('exact entrance joins', () => {
+  test('preserves public street copy while canonical entrance identity excludes mutable copy and retrieval wrapper', async () => {
+    const staticFeed = await loadStaticGtfsArchive(await readFile(fixture('regular.zip')), {
+      source: 'regular-gtfs',
+      retrievedAt: new Date('2026-08-04T04:00:00.000Z'),
+      coverage: [coverage('regular-all', ['A', 'B'])],
+    });
+    const first = loadEntranceCatalog(
+      [entranceRecord({ entrance_description: 'NE corner of Main St & 2 Av', updated_at: 'one' })],
+      staticFeed.data,
+      { sourceId: 'first-wrapper', retrievedAt: new Date('2026-08-04T04:05:00.000Z') },
+    ).entrances[0];
+    const second = loadEntranceCatalog(
+      [entranceRecord({ entrance_description: 'Main Street at Second Avenue', updated_at: 'two' })],
+      staticFeed.data,
+      { sourceId: 'second-wrapper', retrievedAt: new Date('2026-08-05T04:05:00.000Z') },
+    ).entrances[0];
+
+    expect(first.publicDescription).toBe('NE corner of Main St & 2 Av');
+    expect(second.publicDescription).toBe('Main Street at Second Avenue');
+    expect(first.id).toBe(second.id);
+    expect(first.sourceRowIdentity).not.toBe(second.sourceRowIdentity);
+  });
+
+  test('rejects duplicate canonical structural entrance identities instead of choosing a source row', async () => {
+    const staticFeed = await loadStaticGtfsArchive(await readFile(fixture('regular.zip')), {
+      source: 'regular-gtfs',
+      retrievedAt: new Date('2026-08-04T04:00:00.000Z'),
+      coverage: [coverage('regular-all', ['A', 'B'])],
+    });
+
+    expect(() => loadEntranceCatalog(
+      [
+        entranceRecord({ entrance_description: 'First copy', updated_at: 'one' }),
+        entranceRecord({ entrance_description: 'Second copy', updated_at: 'two' }),
+      ],
+      staticFeed.data,
+      { sourceId: 'fixture', retrievedAt: new Date('2026-08-04T04:05:00.000Z') },
+    )).toThrow(/duplicate entrance identity/i);
+  });
+
   test('retains complex, constituent, exact directional stops, and entry permission', async () => {
     const staticFeed = await loadStaticGtfsArchive(await readFile(fixture('regular.zip')), {
       source: 'regular-gtfs',
