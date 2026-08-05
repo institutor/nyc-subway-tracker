@@ -175,7 +175,7 @@ describe('client reconnection runner', () => {
 
     const result = await runReconnection({
       context: multiScopeContext,
-      initial: { historicalTransferGuidance: true },
+      initial: { historicalPositioningGuidance: false, historicalTransferGuidance: true },
       loadStage: async () => undefined,
       now: () => new Date(ACCEPTED_AT),
     });

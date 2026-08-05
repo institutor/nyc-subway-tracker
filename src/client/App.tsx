@@ -993,8 +993,11 @@ function createAppReconnectionContext(input: {
   const stationOwnerScopes: readonly ReconnectionScopeMembership[] = input.stationId
     ? [{ kind: 'station', id: input.stationId }]
     : [contextScope];
-  const legOwnerScopes: readonly ReconnectionScopeMembership[] = cursor
-    ? [{ kind: 'leg', id: cursor.leg.id }]
+  const remainingLegs = cursor && input.activeTrip
+    ? input.activeTrip.legs.slice(cursor.legIndex)
+    : [];
+  const legOwnerScopes: readonly ReconnectionScopeMembership[] = remainingLegs.length > 0
+    ? remainingLegs.map(({ id }) => ({ kind: 'leg' as const, id }))
     : stationOwnerScopes;
   const pathOwnerScopes: readonly ReconnectionScopeMembership[] = input.activeTrip?.accessiblePath
     ? [{ kind: 'path', id: input.activeTrip.accessiblePath.ownerRecordId }]
@@ -1002,11 +1005,13 @@ function createAppReconnectionContext(input: {
   const trainOwnerScopes: readonly ReconnectionScopeMembership[] = storedTrainChoice
     ? [{ kind: 'train', id: storedTrainChoice }]
     : stationOwnerScopes;
-  const currentTransfer = input.activeTrip?.transfers.find(({ incomingLegId, outgoingLegId }) => (
-    incomingLegId === cursor?.leg.id || outgoingLegId === cursor?.leg.id
-  ));
-  const transferOwnerScopes: readonly ReconnectionScopeMembership[] = currentTransfer
-    ? [{ kind: 'transfer', id: currentTransfer.id }]
+  const upcomingTransfers = cursor && input.activeTrip
+    ? input.activeTrip.transfers.filter(({ incomingLegId }) => (
+      input.activeTrip!.legs.findIndex(({ id }) => id === incomingLegId) >= cursor.legIndex
+    ))
+    : [];
+  const transferOwnerScopes: readonly ReconnectionScopeMembership[] = upcomingTransfers.length > 0
+    ? upcomingTransfers.map(({ id }) => ({ kind: 'transfer' as const, id }))
     : legOwnerScopes;
   const positioningOwnerScopes: readonly ReconnectionScopeMembership[] = input.activeTrip?.platformGuidance
     ? [{ kind: 'platform', id: input.activeTrip.platformGuidance.ownerRecordId }]
@@ -1057,7 +1062,7 @@ function createAppReconnectionContext(input: {
     hasStoredTrainChoice: storedTrainChoice !== null,
     guidanceRequirements: {
       positioning: input.activeTrip?.platformGuidance ? 'optional' : 'none',
-      transfer: input.activeTrip?.transfers.length ? 'required' : 'none',
+      transfer: upcomingTransfers.length > 0 ? 'required' : 'none',
     },
     activeSurface: input.state.surface === 'nearby' && input.stationOpen ? 'station' : input.state.surface,
     scrollOffset: typeof window === 'undefined' ? 0 : Math.max(0, window.scrollY || 0),

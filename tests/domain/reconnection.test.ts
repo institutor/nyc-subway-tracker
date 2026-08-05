@@ -503,7 +503,7 @@ describe('owner-gated reconnection ordering', () => {
     const donatedEligibleScope = {
       ...result,
       invalidation: {
-        ...result.invalidation,
+        ...result.invalidation!,
         scopes: [{ kind: 'route' as const, id: 'A', label: 'Unowned eligible A route' }],
       },
     };

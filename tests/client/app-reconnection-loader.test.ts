@@ -89,12 +89,46 @@ describe('App reconnection owner loader', () => {
       new AbortController().signal,
     )).resolves.toBeUndefined();
   });
+
+  test('attributes a later-leg-only service pattern change to that later remaining leg', async () => {
+    const trip = twoLegActiveTrip();
+    const loader = createAppReconnectionStageLoader({
+      api: createClientApi({ planJourney: vi.fn(async () => laterLegChangedJourney()) }),
+      stationId: 'A12',
+      filters: { routeIds: ['A'], direction: 'southbound' },
+      hasUnrelatedSavedRecords: false,
+      artifacts: {},
+      activeTrip: trip,
+      now: () => new Date(ACCEPTED_AT),
+    });
+
+    const result = await loader(
+      { stage: 2, context: recoveryContext(['leg-1', 'leg-2']), state: null as any },
+      new AbortController().signal,
+    );
+
+    expect(result).toMatchObject({
+      stage: 2,
+      tripServicePattern: 'unusable',
+      serviceChanges: {
+        gate: {
+          scopeMembership: [
+            { kind: 'leg', id: 'leg-1' },
+            { kind: 'leg', id: 'leg-2' },
+          ],
+        },
+      },
+      invalidation: {
+        scopes: [{ kind: 'leg', id: 'leg-2' }],
+      },
+    });
+  });
 });
 
-function recoveryContext(): PreservedReconnectionContext {
+function recoveryContext(serviceLegIds: readonly string[] = ['leg-1']): PreservedReconnectionContext {
   const contextScope = [{ kind: 'context' as const, id: 'context-1' }];
   const stationScope = [{ kind: 'station' as const, id: 'A12' }];
-  const legScope = [{ kind: 'leg' as const, id: 'leg-1' }];
+  const legScope = serviceLegIds.map((id) => ({ kind: 'leg' as const, id }));
   const trainScope = [{ kind: 'train' as const, id: 'departure:leg-1:point-origin:08:15' }];
   const mapScope = [{ kind: 'map' as const, id: 'viewport-1' }];
   return {
@@ -169,6 +203,103 @@ function timedActiveTrip(): ActiveTripRecord {
           legId: 'leg-1', pointId: 'point-origin', clockTime: '08:15', evidence: 'scheduled', timeZone: 'America/New_York',
         }],
       },
+    },
+  };
+}
+
+function twoLegActiveTrip(): ActiveTripRecord {
+  const base = timedActiveTrip();
+  const firstLeg: ActiveTripRecord['legs'][number] = {
+    ...base.legs[0],
+    points: [
+      base.legs[0]!.points[0]!,
+      {
+        id: 'point-transfer-in', kind: 'decision', stationName: '42 St', complexId: 'D14', constituentId: 'D14',
+        instruction: 'Leave the A train for the transfer.',
+      },
+    ],
+  };
+  const secondLeg: ActiveTripRecord['legs'][number] = {
+    id: 'leg-2',
+    route: { id: 'C', label: 'C', spokenIdentity: 'C train', shape: 'circle' },
+    boundDirection: 'southbound',
+    actualDestination: 'Euclid Av',
+    points: [
+      {
+        id: 'point-transfer-out', kind: 'decision', stationName: '42 St', complexId: 'D14', constituentId: 'D14',
+        instruction: 'Board the C train.',
+      },
+      {
+        id: 'point-final', kind: 'stop', stationName: 'Canal St', complexId: 'R20', constituentId: 'R20',
+        instruction: 'Leave the train.',
+      },
+    ],
+  };
+  return {
+    ...base,
+    destination: { name: 'Canal St', complexId: 'R20', constituentId: 'R20' },
+    legs: [firstLeg, secondLeg],
+    transfers: [{
+      id: 'transfer-1', atPointId: 'point-transfer-in', incomingLegId: 'leg-1', outgoingLegId: 'leg-2',
+      incomingDirection: 'southbound', incomingDestination: 'Far Rockaway',
+      outgoingDirection: 'southbound', outgoingDestination: 'Euclid Av', steps: ['Transfer from A to C.'],
+    }],
+    validity: {
+      ...base.validity,
+      schedule: base.validity.schedule.kind === 'current' ? {
+        ...base.validity.schedule,
+        departures: [
+          ...base.validity.schedule.departures,
+          { legId: 'leg-2', pointId: 'point-transfer-out', clockTime: '08:35', evidence: 'scheduled', timeZone: 'America/New_York' },
+        ],
+      } : base.validity.schedule,
+    },
+  };
+}
+
+function laterLegChangedJourney(): JourneyEnvelopeDto {
+  const base = currentJourney(false);
+  const scope = {
+    mode: 'online-current' as const,
+    originStationId: 'A12',
+    destinationStationId: 'R20',
+    accessibleRouteOnly: false,
+  };
+  return {
+    ...base,
+    responseIdentity: 'journey-later-leg-change',
+    data: {
+      kind: 'planned',
+      scope,
+      itineraries: [{
+        id: 'itinerary-later-leg-change',
+        legs: [
+          {
+            patternId: 'pattern-a', routeId: 'A', routeLabel: 'A', direction: 'southbound',
+            actualDestination: 'Far Rockaway', fromOccurrenceId: 'occ-a12', toOccurrenceId: 'occ-d14-a',
+            orderedOccurrenceIds: ['occ-a12', 'occ-d14-a'], fromStationId: 'A12', toStationId: 'D14',
+            orderedStationIds: ['A12', 'D14'],
+          },
+          {
+            patternId: 'pattern-e', routeId: 'E', routeLabel: 'E', direction: 'southbound',
+            actualDestination: 'World Trade Center', fromOccurrenceId: 'occ-d14-e', toOccurrenceId: 'occ-r20',
+            orderedOccurrenceIds: ['occ-d14-e', 'occ-r20'], fromStationId: 'D14', toStationId: 'R20',
+            orderedStationIds: ['D14', 'R20'],
+          },
+        ],
+        transferIds: ['transfer-response-1'],
+        transferInstructions: [{
+          transferId: 'transfer-response-1', stationId: 'D14',
+          fromRouteId: 'A', fromDirection: 'southbound', fromActualDestination: 'Far Rockaway',
+          toRouteId: 'E', toDirection: 'southbound', toActualDestination: 'World Trade Center',
+        }],
+        transfers: 1,
+        validity: 'valid',
+        accessibility: 'eligible',
+        risk: 'affected',
+        timing: 'timed',
+        arrivalSeconds: 600,
+      }],
     },
   };
 }

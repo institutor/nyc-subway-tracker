@@ -97,6 +97,7 @@ async function loadActiveTripServiceChanges(
   );
   const candidates = response.data?.kind === 'planned' ? response.data.itineraries : [];
   const exactCandidate = candidates.find((candidate) => sameActiveTripPattern(candidate, trip));
+  const evaluatedCandidate = exactCandidate ?? bestComparableCandidate(candidates, trip, serviceChanges.scopeMembership);
   const verified = Boolean(exactCandidate && currentCandidateAdmitsStoredPattern(exactCandidate, trip));
   const unusable = response.data?.kind === 'no-path'
     || Boolean(exactCandidate && !verified)
@@ -105,7 +106,12 @@ async function loadActiveTripServiceChanges(
     stage: 2,
     serviceChanges: { gate: serviceChanges, disposition: 'resolved', vetoesApplied: true },
     tripServicePattern: verified ? 'verified' : unusable ? 'unusable' : 'unverified',
-    invalidation: verified ? null : serviceInvalidation(context, serviceChanges, unusable),
+    invalidation: verified ? null : serviceInvalidation(
+      context,
+      serviceChanges,
+      unusable,
+      affectedServiceScopes(serviceChanges.scopeMembership, trip, evaluatedCandidate),
+    ),
   };
 }
 
@@ -139,13 +145,88 @@ function hasCurrentServiceOwner(response: JourneyEnvelopeDto): boolean {
 
 function sameActiveTripPattern(candidate: JourneyItineraryDto, trip: ActiveTripRecord): boolean {
   if (candidate.legs.length !== trip.legs.length) return false;
-  return candidate.legs.every((leg, index) => {
+  return candidate.legs.every((leg, index) => sameActiveTripLeg(leg, trip.legs[index]));
+}
+
+function sameActiveTripLeg(
+  candidate: JourneyItineraryDto['legs'][number],
+  stored: ActiveTripRecord['legs'][number] | undefined,
+): boolean {
+  return stored !== undefined
+    && candidate.routeId === stored.route.id
+    && candidate.direction === stored.boundDirection
+    && candidate.actualDestination === stored.actualDestination
+    && sameStrings(candidate.orderedStationIds, stored.points.map(({ constituentId }) => constituentId));
+}
+
+function bestComparableCandidate(
+  candidates: readonly JourneyItineraryDto[],
+  trip: ActiveTripRecord,
+  ownerScopes: readonly ReconnectionScopeMembership[],
+): JourneyItineraryDto | undefined {
+  const ownedLegIds = new Set(ownerScopes.filter(({ kind }) => kind === 'leg').map(({ id }) => id));
+  return candidates
+    .filter(({ legs }) => legs.length === trip.legs.length)
+    .map((candidate, responseIndex) => ({
+      candidate,
+      responseIndex,
+      matches: candidate.legs.reduce((count, leg, index) => (
+        ownedLegIds.has(trip.legs[index]?.id ?? '') && sameActiveTripLeg(leg, trip.legs[index]) ? count + 1 : count
+      ), 0),
+    }))
+    .sort((left, right) => right.matches - left.matches || left.responseIndex - right.responseIndex)[0]?.candidate;
+}
+
+function affectedServiceScopes(
+  ownerScopes: readonly ReconnectionScopeMembership[],
+  trip: ActiveTripRecord,
+  candidate: JourneyItineraryDto | undefined,
+): readonly (ReconnectionScopeMembership & { readonly kind: ReconnectionScopeKind })[] {
+  const ownedLegScopes = ownerScopes.filter((scope): scope is ReconnectionScopeMembership & { readonly kind: 'leg' } => (
+    scope.kind === 'leg'
+  ));
+  if (ownedLegScopes.length === 0) return ownerScopes.filter(isTripScope);
+  if (!candidate || candidate.legs.length !== trip.legs.length) return ownedLegScopes;
+
+  const ownedLegIds = new Set(ownedLegScopes.map(({ id }) => id));
+  const affected = new Set<string>();
+  candidate.legs.forEach((leg, index) => {
     const stored = trip.legs[index];
-    return stored !== undefined
-      && leg.routeId === stored.route.id
-      && leg.direction === stored.boundDirection
-      && leg.actualDestination === stored.actualDestination
-      && sameStrings(leg.orderedStationIds, stored.points.map(({ constituentId }) => constituentId));
+    if (stored && ownedLegIds.has(stored.id) && !sameActiveTripLeg(leg, stored)) affected.add(stored.id);
+  });
+  const capture = candidate.capture;
+  if (capture) {
+    const blockingClaims = [
+      ...capture.validity.vetoes,
+      ...capture.serviceClaims.filter(({ state }) => (
+        state === 'unresolved' || state === 'suspended' || state === 'bypassed'
+        || state === 'closed' || state === 'cancelled'
+      )),
+    ];
+    for (const claim of blockingClaims) {
+      for (const legId of claimLegIds(claim.scope, candidate, trip)) {
+        if (ownedLegIds.has(legId)) affected.add(legId);
+      }
+    }
+  }
+  if (affected.size === 0) return ownedLegScopes;
+  return ownedLegScopes.filter(({ id }) => affected.has(id));
+}
+
+function claimLegIds(
+  scope: NonNullable<JourneyItineraryDto['capture']>['serviceClaims'][number]['scope'],
+  candidate: JourneyItineraryDto,
+  trip: ActiveTripRecord,
+): readonly string[] {
+  if (scope.kind === 'itinerary') return trip.legs.map(({ id }) => id);
+  return candidate.legs.flatMap((leg, index) => {
+    const stored = trip.legs[index];
+    if (!stored) return [];
+    if (scope.kind === 'route') return leg.routeId === scope.routeId ? [stored.id] : [];
+    if (scope.kind === 'direction') {
+      return leg.routeId === scope.routeId && leg.direction === scope.direction ? [stored.id] : [];
+    }
+    return leg.patternId === scope.patternId ? [stored.id] : [];
   });
 }
 
@@ -173,9 +254,9 @@ function serviceInvalidation(
   context: PreservedReconnectionContext,
   ownerGate: OwnerAcceptance,
   unusable: boolean,
+  affectedScopes: readonly (ReconnectionScopeMembership & { readonly kind: ReconnectionScopeKind })[],
 ) {
-  const scope = ownerGate.scopeMembership.find(isTripScope);
-  if (!scope) throw new Error('Active-trip service recovery requires an exact trip scope');
+  if (affectedScopes.length === 0) throw new Error('Active-trip service recovery requires an exact trip scope');
   return {
     id: `${context.recovery.requestIdentity}:warning:2:${ownerGate.evidenceId}`,
     stage: 2 as const,
@@ -183,7 +264,7 @@ function serviceInvalidation(
     changedFact: unusable
       ? 'Current service evidence no longer admits the stored trip pattern.'
       : 'Current service evidence cannot verify the stored trip pattern.',
-    scopes: [{ ...scope, label: `${scope.kind} ${scope.id}` }],
+    scopes: affectedScopes.map((scope) => ({ ...scope, label: `${scope.kind} ${scope.id}` })),
     consequence: 'Do not continue on the stored service pattern until a current itinerary is verified.',
     lastVerifiedDecisionPoint: context.manualCursor
       ? { id: context.manualCursor.stopId, label: `Stored trip point ${context.manualCursor.stopId}` }

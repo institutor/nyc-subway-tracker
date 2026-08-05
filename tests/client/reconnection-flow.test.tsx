@@ -152,6 +152,39 @@ describe('App reconnection flow', () => {
       id: 'departure:leg-1:point-origin:08:15',
     });
   });
+
+  test('scopes a middle-leg reconnect to remaining legs and upcoming transfers only', async () => {
+    const storage = new MemoryStorage();
+    expect(createBrowserActiveTripStore(storage).capture(fourLegActiveTripAtMiddle())).toMatchObject({ kind: 'saved' });
+    const navigatorState = { onLine: false };
+    const events = new ControlledConnectivityEvents();
+    const transitions: ReconnectionTransition[] = [];
+
+    render(<App
+      api={createClientApi()}
+      geolocation={new ControlledGeolocation()}
+      storage={storage}
+      connectivityOptions={{ navigator: navigatorState, eventTarget: events }}
+      recoveryNow={() => new Date('2026-08-05T12:00:00.000Z')}
+      onReconnectionTransition={(transition) => transitions.push(transition)}
+    />);
+
+    navigatorState.onLine = true;
+    act(() => events.dispatch('online'));
+    await waitFor(() => expect(transitions.length).toBeGreaterThan(0));
+
+    const context = transitions[0]!.state.context;
+    expect(context.manualCursor).toEqual({ legIndex: 1, stopId: 'point-transfer-1-out' });
+    expect(context.recovery.ownerScopes['service-change']).toEqual([
+      { kind: 'leg', id: 'leg-2' },
+      { kind: 'leg', id: 'leg-3' },
+      { kind: 'leg', id: 'leg-4' },
+    ]);
+    expect(context.recovery.ownerScopes['transfer-guidance']).toEqual([
+      { kind: 'transfer', id: 'transfer-2' },
+      { kind: 'transfer', id: 'transfer-3' },
+    ]);
+  });
 });
 
 function timedActiveTrip(): ActiveTripRecord {
@@ -208,6 +241,85 @@ function timedActiveTrip(): ActiveTripRecord {
       },
       warnings: [],
       vetoes: [],
+    },
+  };
+}
+
+function fourLegActiveTripAtMiddle(): ActiveTripRecord {
+  const base = timedActiveTrip();
+  const route = (
+    id: string,
+    label: string,
+    direction: ActiveTripRecord['legs'][number]['boundDirection'],
+    actualDestination: string,
+    points: ActiveTripRecord['legs'][number]['points'],
+  ): ActiveTripRecord['legs'][number] => ({
+    id,
+    route: { id: label, label, spokenIdentity: `${label} train`, shape: 'circle' },
+    boundDirection: direction,
+    actualDestination,
+    points,
+  });
+  const decision = (
+    id: string,
+    stationName: string,
+    constituentId: string,
+    instruction: string,
+  ): ActiveTripRecord['legs'][number]['points'][number] => ({
+    id, kind: 'decision', stationName, complexId: constituentId, constituentId, instruction,
+  });
+  const leg1 = route('leg-1', 'A', 'southbound', 'Far Rockaway', [
+    base.legs[0]!.points[0]!,
+    decision('point-transfer-1-in', '42 St', 'D14', 'Leave the A train for the transfer.'),
+  ]);
+  const leg2 = route('leg-2', 'C', 'southbound', 'Euclid Av', [
+    decision('point-transfer-1-out', '42 St', 'D14', 'Board the C train.'),
+    decision('point-transfer-2-in', 'Canal St', 'R20', 'Leave the C train for the transfer.'),
+  ]);
+  const leg3 = route('leg-3', 'N', 'northbound', 'Astoria–Ditmars Blvd', [
+    decision('point-transfer-2-out', 'Canal St', 'R20', 'Board the N train.'),
+    decision('point-transfer-3-in', 'Queensboro Plaza', 'Q01', 'Leave the N train for the transfer.'),
+  ]);
+  const leg4 = route('leg-4', '7', 'eastbound', 'Flushing–Main St', [
+    decision('point-transfer-3-out', 'Queensboro Plaza', 'Q01', 'Board the 7 train.'),
+    {
+      id: 'point-final', kind: 'stop', stationName: '74 St–Broadway', complexId: '701', constituentId: '701',
+      instruction: 'Leave the train.',
+    },
+  ]);
+  return {
+    ...base,
+    destination: { name: '74 St–Broadway', complexId: '701', constituentId: '701' },
+    legs: [leg1, leg2, leg3, leg4],
+    transfers: [
+      {
+        id: 'transfer-1', atPointId: 'point-transfer-1-in', incomingLegId: 'leg-1', outgoingLegId: 'leg-2',
+        incomingDirection: 'southbound', incomingDestination: 'Far Rockaway',
+        outgoingDirection: 'southbound', outgoingDestination: 'Euclid Av', steps: ['Transfer from A to C.'],
+      },
+      {
+        id: 'transfer-2', atPointId: 'point-transfer-2-in', incomingLegId: 'leg-2', outgoingLegId: 'leg-3',
+        incomingDirection: 'southbound', incomingDestination: 'Euclid Av',
+        outgoingDirection: 'northbound', outgoingDestination: 'Astoria–Ditmars Blvd', steps: ['Transfer from C to N.'],
+      },
+      {
+        id: 'transfer-3', atPointId: 'point-transfer-3-in', incomingLegId: 'leg-3', outgoingLegId: 'leg-4',
+        incomingDirection: 'northbound', incomingDestination: 'Astoria–Ditmars Blvd',
+        outgoingDirection: 'eastbound', outgoingDestination: 'Flushing–Main St', steps: ['Transfer from N to 7.'],
+      },
+    ],
+    cursor: { pointId: 'point-transfer-1-out' },
+    validity: {
+      ...base.validity,
+      schedule: base.validity.schedule.kind === 'current' ? {
+        ...base.validity.schedule,
+        departures: [
+          { legId: 'leg-1', pointId: 'point-origin', clockTime: '08:15', evidence: 'scheduled', timeZone: 'America/New_York' },
+          { legId: 'leg-2', pointId: 'point-transfer-1-out', clockTime: '08:30', evidence: 'scheduled', timeZone: 'America/New_York' },
+          { legId: 'leg-3', pointId: 'point-transfer-2-out', clockTime: '08:45', evidence: 'scheduled', timeZone: 'America/New_York' },
+          { legId: 'leg-4', pointId: 'point-transfer-3-out', clockTime: '09:00', evidence: 'scheduled', timeZone: 'America/New_York' },
+        ],
+      } : base.validity.schedule,
     },
   };
 }
