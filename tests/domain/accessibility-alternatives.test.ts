@@ -2,11 +2,13 @@ import { describe, expect, test } from 'vitest';
 import {
   acceptAccessibilityAlternativeRegistry,
   acceptNearbyStationEvidence,
+  alternativeSelectionAllowsUse,
   chooseAccessibilityAlternative,
   grantBusAlternativeConsent,
   type AccessibilityAlternativeOfferInput,
   type AccessibilityAlternativeTier,
 } from '../../src/shared/domain/accessibility-alternatives';
+import { acceptEquipmentHistory, acceptEquipmentInventory, assessEquipmentStatus } from '../../src/shared/domain/equipment-status';
 import { resolvedPath } from '../fixtures/accessibility-decisions';
 
 const decisionTime = new Date('2026-08-01T00:00:00.000Z');
@@ -53,13 +55,14 @@ function registry(
     verifiedAt: decisionTime.toISOString(),
     validThrough: '2026-08-01T00:10:00.000Z',
   }, selectedPath, path)),
+  validThrough = '2026-08-01T00:10:00.000Z',
 ) {
   return acceptAccessibilityAlternativeRegistry({
     registryId: `registry:${candidates.map(({ offer }) => offer.offerId).join(',') || 'empty'}`,
     evidenceOwner: 'app-owned-accessibility-alternatives',
     selectedPathEvaluationId: selectedPath.evaluationId,
     createdAt: decisionTime.toISOString(),
-    validThrough: '2026-08-01T00:10:00.000Z',
+    validThrough,
     offers: candidates.map(({ offer }) => offer),
   }, selectedPath, candidates.map(({ path }) => path), nearbyEvidence);
 }
@@ -156,6 +159,57 @@ describe('accessible alternatives', () => {
     }, selectedPath, nearby.path);
     expect(() => registry([nearby], selectedPath, [{ ...genuine } as never])).toThrow(/nearby.*evidence|accepted/i);
     expect(chooseAccessibilityAlternative(registry([nearby], selectedPath, [genuine]), { decisionTime }).first?.id).toBe('nearby-owned');
+  });
+
+  test('revokes a resolved selection when its candidate equipment ledger advances before the selection interval ends', () => {
+    const inventory = acceptEquipmentInventory({
+      inventoryId: 'inventory:live-candidate', evidenceOwner: 'official-equipment-inventory', sourceScopeId: 'nyc-equipment',
+      sourceVersion: 'inventory-v1', acceptedAt: '2026-07-31T23:00:00.000Z', equipmentIds: ['EL-CANDIDATE', 'EL-OTHER'],
+    });
+    const firstSnapshot = {
+      snapshotId: 'candidate-snapshot-1', sequenceOrdinal: 1, predecessorSnapshotId: null,
+      evidenceOwner: 'official-equipment-status' as const, sourceScopeId: 'nyc-equipment', sourceVersion: 'equipment-v1', inventoryVersion: 'inventory-v1',
+      sourceTimestamp: '2026-08-01T00:00:00.000Z', acceptedAt: '2026-08-01T00:00:00.000Z', declaredRecordCount: 1,
+      records: [{ recordId: 'out-other', equipmentId: 'EL-OTHER', state: 'out-of-service' }],
+    };
+    const history = acceptEquipmentHistory({
+      historyId: 'history:live-candidate', evidenceOwner: 'official-equipment-status', sourceScopeId: 'nyc-equipment',
+      sourceVersion: 'equipment-v1', inventoryVersion: 'inventory-v1', snapshots: [firstSnapshot],
+    }, inventory);
+    const candidateEquipment = assessEquipmentStatus({ targetEquipmentId: 'EL-CANDIDATE', decisionTime, inventory, history });
+    const path = resolvedPath('live-candidate', 'eligible', {
+      equipmentIds: ['EL-CANDIDATE'], equipmentDecisions: { 'EL-CANDIDATE': candidateEquipment },
+    });
+    const liveCandidate = {
+      path,
+      offer: {
+        offerId: 'live-candidate', evidenceOwner: 'app-owned-accessibility-alternatives' as const, label: 'Use live candidate',
+        canonicalIdentity: path.pathId, pathEvaluationId: path.evaluationId, pathPackageVersion: path.packageVersion,
+        tier: 'same-complex' as const, originIntent: path.originIntent, destinationIntent: path.destinationIntent,
+        singlePointElevatorDependencies: 1, transfers: 0, accessibleWalkingMeters: 100, disruptionRisk: 0,
+        travelSeconds: 60, includesBus: false,
+      },
+    };
+    const selection = chooseAccessibilityAlternative(
+      registry([liveCandidate], resolvedPath('selected'), [], '2026-08-01T00:04:00.000Z'),
+      { decisionTime },
+    );
+    expect(alternativeSelectionAllowsUse(selection, decisionTime)).toBe(true);
+
+    acceptEquipmentHistory({
+      historyId: 'history:live-candidate', evidenceOwner: 'official-equipment-status', sourceScopeId: 'nyc-equipment',
+      sourceVersion: 'equipment-v1', inventoryVersion: 'inventory-v1', snapshots: [firstSnapshot, {
+        snapshotId: 'candidate-snapshot-2', sequenceOrdinal: 2, predecessorSnapshotId: 'candidate-snapshot-1',
+        evidenceOwner: 'official-equipment-status', sourceScopeId: 'nyc-equipment', sourceVersion: 'equipment-v1', inventoryVersion: 'inventory-v1',
+        sourceTimestamp: '2026-08-01T00:01:00.000Z', acceptedAt: '2026-08-01T00:01:01.000Z', declaredRecordCount: 2,
+        records: [
+          { recordId: 'out-other', equipmentId: 'EL-OTHER', state: 'out-of-service' },
+          { recordId: 'out-candidate', equipmentId: 'EL-CANDIDATE', state: 'out-of-service' },
+        ],
+      }],
+    }, inventory);
+
+    expect(alternativeSelectionAllowsUse(selection, new Date('2026-08-01T00:02:00.000Z'))).toBe(false);
   });
 
   test.each([

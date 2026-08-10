@@ -138,6 +138,11 @@ export interface AccessibilityWarning {
 
 const resolvedDecisionPoints = new WeakSet<object>();
 const resolvedWarnings = new WeakSet<object>();
+interface ResolvedWarningState {
+  readonly alternativeSelection: ResolvedAccessibilityAlternativeSelection;
+}
+const resolvedWarningState = new WeakMap<object, ResolvedWarningState>();
+const NO_CURRENT_REPLACEMENT = 'No current verified replacement is available; wait for a fresh accessible route.';
 
 export function deriveLastAccessibleDecisionPoint(input: {
   readonly evidence: AcceptedAccessibilityJourneyProgress;
@@ -239,7 +244,7 @@ export function createAccessibilityWarning(input: {
     accessibleRouteOnly: true,
     acknowledged: false,
     stale: false,
-  });
+  }, { alternativeSelection: input.alternativeSelection });
 }
 
 export type AccessibilityWarningEvent =
@@ -260,29 +265,43 @@ export function transitionAccessibilityWarning(
   if (!isResolvedAccessibilityWarning(warning)) throw new Error('A resolved accessibility warning is required');
   const transitionedAt = canonicalDate(decisionTime, 'warning transition time');
   if (Date.parse(transitionedAt) < Date.parse(warning.lastTransitionAt)) throw new Error('Warning transition time must be monotonic');
-  if (!warning.active) return warning;
-  const freshnessChanges = Date.parse(transitionedAt) > Date.parse(warning.validThrough)
-    ? { content: [...warning.content.slice(0, -1), 'No current verified replacement is available; wait for a fresh accessible route.'] }
-    : {};
+  const evaluatedWarning = evaluateAccessibilityWarning(warning, decisionTime)!;
+  if (!evaluatedWarning.active) return evaluatedWarning;
   if (event.type === 'replacement-selected'
-    && alternativeSelectionAllowsUse(event.alternativeSelection, decisionTime)
-    && event.alternativeSelection.decisionId === warning.alternativeSelectionDecisionId) {
+    && warningMatchesAlternativeSelection(evaluatedWarning, event.alternativeSelection, decisionTime)) {
     const offer = event.alternativeSelection.visible.find((candidate) => candidate.offerId === event.offerId);
-    if (offer && replacementReevaluationPasses(warning, offer, event.pathDecision, decisionTime)) {
-      return transitionWarning(warning, transitionedAt, { ...freshnessChanges, active: false, state: 'resolved', selectedPathId: event.pathDecision.pathId });
+    if (offer && replacementReevaluationPasses(evaluatedWarning, offer, event.pathDecision, decisionTime)) {
+      return transitionWarning(evaluatedWarning, transitionedAt, { active: false, state: 'resolved', selectedPathId: event.pathDecision.pathId });
     }
   }
-  if (event.type === 'owner-resolved' && ownerReevaluationPasses(warning, event.pathDecision, decisionTime)) {
-    return transitionWarning(warning, transitionedAt, { ...freshnessChanges, active: false, state: 'resolved' });
+  if (event.type === 'owner-resolved' && ownerReevaluationPasses(evaluatedWarning, event.pathDecision, decisionTime)) {
+    return transitionWarning(evaluatedWarning, transitionedAt, { active: false, state: 'resolved' });
   }
-  if (event.type === 'acknowledge') return transitionWarning(warning, transitionedAt, { ...freshnessChanges, acknowledged: true });
-  if (event.type === 'go-offline') return transitionWarning(warning, transitionedAt, { ...freshnessChanges, state: 'offline-preserved', stale: true });
-  if (event.type === 'reconnect' || event.type === 'single-machine-restored') return transitionWarning(warning, transitionedAt, { ...freshnessChanges, state: 'revalidating' });
-  return transitionWarning(warning, transitionedAt, freshnessChanges);
+  if (event.type === 'acknowledge') return transitionWarning(evaluatedWarning, transitionedAt, { acknowledged: true });
+  if (event.type === 'go-offline') return transitionWarning(evaluatedWarning, transitionedAt, { state: 'offline-preserved', stale: true });
+  if (event.type === 'reconnect' || event.type === 'single-machine-restored') return transitionWarning(evaluatedWarning, transitionedAt, { state: 'revalidating' });
+  return transitionWarning(evaluatedWarning, transitionedAt, {});
 }
 
 export function isResolvedAccessibilityWarning(value: unknown): value is AccessibilityWarning {
-  return Boolean(value && typeof value === 'object' && resolvedWarnings.has(value));
+  return Boolean(value && typeof value === 'object' && resolvedWarnings.has(value) && resolvedWarningState.has(value));
+}
+
+export function evaluateAccessibilityWarning(
+  value: unknown,
+  decisionTime: Date,
+): AccessibilityWarning | null {
+  const time = decisionTime instanceof Date ? decisionTime.getTime() : Number.NaN;
+  if (!isResolvedAccessibilityWarning(value) || !Number.isFinite(time) || time < Date.parse(value.createdAt)) return null;
+  if (!value.active || value.replacementOfferIds.length === 0 || value.content.at(-1) === NO_CURRENT_REPLACEMENT) return value;
+  const state = resolvedWarningState.get(value)!;
+  const replacementIsCurrent = time <= Date.parse(value.validThrough)
+    && alternativeSelectionAllowsUse(state.alternativeSelection, decisionTime)
+    && selectionReceiptMatchesWarning(value, state.alternativeSelection);
+  return replacementIsCurrent ? value : resolveWarning({
+    ...value,
+    content: [...value.content.slice(0, -1), NO_CURRENT_REPLACEMENT],
+  }, state);
 }
 
 export function warningMatchesAlternativeSelection(
@@ -290,10 +309,19 @@ export function warningMatchesAlternativeSelection(
   selection: unknown,
   decisionTime: Date,
 ): selection is ResolvedAccessibilityAlternativeSelection {
+  const state = warning && typeof warning === 'object' ? resolvedWarningState.get(warning) : undefined;
   if (!isResolvedAccessibilityWarning(warning) || !warning.active
+    || state?.alternativeSelection !== selection
     || !alternativeSelectionAllowsUse(selection, decisionTime)
     || selection.decisionId !== warning.alternativeSelectionDecisionId
     || selection.selectedPathEvaluationId !== warning.selectedPathEvaluationId) return false;
+  return selectionReceiptMatchesWarning(warning, selection);
+}
+
+function selectionReceiptMatchesWarning(
+  warning: AccessibilityWarning,
+  selection: ResolvedAccessibilityAlternativeSelection,
+): boolean {
   return selection.visible.length === warning.replacementOfferIds.length
     && selection.visible.every((offer, index) => offer.offerId === warning.replacementOfferIds[index]
       && offer.pathId === warning.replacementPathIds[index]
@@ -424,9 +452,13 @@ function strictRecord(value: unknown, fields: readonly string[], label: string):
     || ownKeys.some((field) => typeof field !== 'string' || !fields.includes(field))) throw new Error(`${label} must contain its exact schema`);
   return root;
 }
-function resolveWarning(value: Omit<AccessibilityWarning, typeof warningBrand>): AccessibilityWarning {
+function resolveWarning(
+  value: Omit<AccessibilityWarning, typeof warningBrand>,
+  state: ResolvedWarningState,
+): AccessibilityWarning {
   const warning = deepFreeze({ [warningBrand]: true as const, ...value });
   resolvedWarnings.add(warning);
+  resolvedWarningState.set(warning, Object.freeze({ ...state }));
   return warning;
 }
 function transitionWarning(
@@ -434,6 +466,6 @@ function transitionWarning(
   lastTransitionAt: string,
   changes: Partial<Omit<AccessibilityWarning, typeof warningBrand | 'warningId' | 'createdAt'>>,
 ): AccessibilityWarning {
-  return resolveWarning({ ...warning, ...changes, lastTransitionAt });
+  return resolveWarning({ ...warning, ...changes, lastTransitionAt }, resolvedWarningState.get(warning)!);
 }
 function deepFreeze<T>(value: T): T { if (value && typeof value === 'object' && !Object.isFrozen(value)) { for (const child of Object.values(value)) deepFreeze(child); Object.freeze(value); } return value; }

@@ -1,7 +1,7 @@
 import { accessiblePathDecisionAllowsPresentation, type ResolvedAccessiblePathDecision } from '../../shared/domain/accessible-path';
 import { equipmentDecisionAllowsUse, type EquipmentStatusDecision } from '../../shared/domain/equipment-status';
 import { isResolvedAccessibilityAlternativeSelection, type ResolvedAccessibilityAlternativeSelection } from '../../shared/domain/accessibility-alternatives';
-import { warningMatchesAlternativeSelection, warningMatchesDisplayedPath, type AccessibilityWarning } from '../../shared/domain/underway-warning';
+import { evaluateAccessibilityWarning, warningMatchesAlternativeSelection, warningMatchesDisplayedPath, type AccessibilityWarning } from '../../shared/domain/underway-warning';
 import type { ExposureSurface } from '../../shared/domain/exposure-decision';
 
 export interface AccessibilityPanelProps {
@@ -41,7 +41,8 @@ function AccessibilityPanelForSurface({ warning, path, equipment, alternative, o
       && decision.sourceScopeId === resolvedPath.equipmentSourceScopeId
       && decision.sourceVersion === resolvedPath.equipmentSourceVersion;
   }) : [];
-  const resolvedWarning = warningMatchesDisplayedPath(warning, path, decisionTime) ? warning : null;
+  const evaluatedWarning = evaluateAccessibilityWarning(warning, decisionTime);
+  const resolvedWarning = warningMatchesDisplayedPath(evaluatedWarning, path, decisionTime) ? evaluatedWarning : null;
   const resolvedAlternative = resolvedWarning && isResolvedAccessibilityAlternativeSelection(alternative)
     && warningMatchesAlternativeSelection(resolvedWarning, alternative, decisionTime) ? alternative.first : null;
   return <section className="accessibility-panel" aria-label="Step-free path">

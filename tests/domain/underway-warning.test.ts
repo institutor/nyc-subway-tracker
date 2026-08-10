@@ -2,7 +2,7 @@ import { describe, expect, test } from 'vitest';
 import { acceptAccessibilityAlternativeRegistry, chooseAccessibilityAlternative } from '../../src/shared/domain/accessibility-alternatives';
 import { acceptEquipmentHistory, acceptEquipmentInventory, assessEquipmentStatus } from '../../src/shared/domain/equipment-status';
 import { classifyPathImpact } from '../../src/shared/domain/path-impact';
-import { acceptAccessibilityJourneyProgress, createAccessibilityWarning, deriveLastAccessibleDecisionPoint, transitionAccessibilityWarning } from '../../src/shared/domain/underway-warning';
+import { acceptAccessibilityJourneyProgress, createAccessibilityWarning, deriveLastAccessibleDecisionPoint, evaluateAccessibilityWarning, transitionAccessibilityWarning } from '../../src/shared/domain/underway-warning';
 import { resolvedPath } from '../fixtures/accessibility-decisions';
 
 const warningTime = new Date('2026-08-01T00:02:00.000Z');
@@ -198,6 +198,63 @@ describe('underway accessibility warning', () => {
     expect(transitioned.active).toBe(true);
     expect(transitioned.content).not.toContain('Use the verified 127 St entrance path.');
     expect(transitioned.content.at(-1)).toBe('No current verified replacement is available; wait for a fresh accessible route.');
+  });
+
+  test('evaluates a persistent warning without the label of a replacement revoked by newer equipment evidence', () => {
+    const impactContext = impact();
+    const inventory = acceptEquipmentInventory({
+      inventoryId: 'inv:warning-candidate', evidenceOwner: 'official-equipment-inventory', sourceScopeId: 'nyc-equipment',
+      sourceVersion: 'inv-v1', acceptedAt: '2026-07-31T23:00:00.000Z', equipmentIds: ['EL-CANDIDATE', 'EL-OTHER'],
+    });
+    const firstSnapshot = {
+      snapshotId: 'warning-candidate-snapshot-1', sequenceOrdinal: 1, predecessorSnapshotId: null,
+      evidenceOwner: 'official-equipment-status' as const, sourceScopeId: 'nyc-equipment', sourceVersion: 'equipment-v1', inventoryVersion: 'inv-v1',
+      sourceTimestamp: '2026-08-01T00:01:00.000Z', acceptedAt: '2026-08-01T00:01:01.000Z', declaredRecordCount: 1,
+      records: [{ recordId: 'warning-out-other', equipmentId: 'EL-OTHER', state: 'out-of-service' }],
+    };
+    const history = acceptEquipmentHistory({
+      historyId: 'history:warning-candidate', evidenceOwner: 'official-equipment-status', sourceScopeId: 'nyc-equipment',
+      sourceVersion: 'equipment-v1', inventoryVersion: 'inv-v1', snapshots: [firstSnapshot],
+    }, inventory);
+    const equipment = assessEquipmentStatus({ targetEquipmentId: 'EL-CANDIDATE', decisionTime: warningTime, inventory, history });
+    const candidatePath = resolvedPath('warning-live-alt', 'eligible', {
+      originIntent: impactContext.selectedPath.originIntent, destinationIntent: impactContext.selectedPath.destinationIntent,
+      equipmentIds: ['EL-CANDIDATE'], equipmentDecisions: { 'EL-CANDIDATE': equipment }, decisionTime: warningTime.toISOString(),
+    });
+    const registry = acceptAccessibilityAlternativeRegistry({
+      registryId: 'warning-live-alternatives', evidenceOwner: 'app-owned-accessibility-alternatives',
+      selectedPathEvaluationId: impactContext.selectedPath.evaluationId, createdAt: warningTime.toISOString(), validThrough: '2026-08-01T00:04:00.000Z',
+      offers: [{
+        offerId: 'warning-live-alt', evidenceOwner: 'app-owned-accessibility-alternatives', label: 'Use the live candidate path.',
+        canonicalIdentity: candidatePath.pathId, pathEvaluationId: candidatePath.evaluationId, pathPackageVersion: candidatePath.packageVersion,
+        tier: 'same-complex', originIntent: candidatePath.originIntent, destinationIntent: candidatePath.destinationIntent,
+        singlePointElevatorDependencies: 1, transfers: 0, accessibleWalkingMeters: 100, disruptionRisk: 0, travelSeconds: 60, includesBus: false,
+      }],
+    }, impactContext.selectedPath, [candidatePath]);
+    const selection = chooseAccessibilityAlternative(registry, { decisionTime: warningTime });
+    const active = createAccessibilityWarning({
+      phase: 'underway', decisionPoint: unknownDecisionPoint(impactContext.selectedPath), impactDecision: impactContext.decision,
+      alternativeSelection: selection, decisionTime: warningTime,
+    });
+    expect(active.content).toContain('Use the live candidate path.');
+
+    acceptEquipmentHistory({
+      historyId: 'history:warning-candidate', evidenceOwner: 'official-equipment-status', sourceScopeId: 'nyc-equipment',
+      sourceVersion: 'equipment-v1', inventoryVersion: 'inv-v1', snapshots: [firstSnapshot, {
+        snapshotId: 'warning-candidate-snapshot-2', sequenceOrdinal: 2, predecessorSnapshotId: 'warning-candidate-snapshot-1',
+        evidenceOwner: 'official-equipment-status', sourceScopeId: 'nyc-equipment', sourceVersion: 'equipment-v1', inventoryVersion: 'inv-v1',
+        sourceTimestamp: '2026-08-01T00:02:20.000Z', acceptedAt: '2026-08-01T00:02:21.000Z', declaredRecordCount: 2,
+        records: [
+          { recordId: 'warning-out-other', equipmentId: 'EL-OTHER', state: 'out-of-service' },
+          { recordId: 'warning-out-candidate', equipmentId: 'EL-CANDIDATE', state: 'out-of-service' },
+        ],
+      }],
+    }, inventory);
+
+    const evaluated = evaluateAccessibilityWarning(active, transitionTime)!;
+    expect(evaluated).toMatchObject({ active: true, warningId: active.warningId, lastTransitionAt: active.lastTransitionAt });
+    expect(evaluated.content).not.toContain('Use the live candidate path.');
+    expect(evaluated.content.at(-1)).toBe('No current verified replacement is available; wait for a fresh accessible route.');
   });
 
   test('rejects scalar clearing assertions and caller-authored warnings', () => {

@@ -8,9 +8,9 @@ import { transitionAccessibilityWarning } from '../../src/shared/domain/underway
 import { resolvedPath } from '../fixtures/accessibility-decisions';
 import { resolvedValidationGuidance } from '../fixtures/platform-guidance';
 
-const warning = resolvedWarning();
 const selectedPath = resolvedPath('selected', 'eligible', { equipmentIds: ['EL-1'], destinationIntent: '168 St' });
 const alternative = resolvedAlternativeSelection(selectedPath);
+const warning = resolvedWarning(selectedPath, alternative);
 const decisionTime = new Date('2026-08-01T00:02:00.000Z');
 
 describe('accessible-path rider panel', () => {
@@ -78,6 +78,15 @@ describe('accessible-path rider panel', () => {
     expect(selected).toBe('');
   });
 
+  test('does not replay a separately resolved lookalike selection against the warning-owned receipt', () => {
+    const replay = resolvedAlternativeSelection(selectedPath);
+    expect(replay).not.toBe(alternative);
+    expect(replay.decisionId).toBe(alternative.decisionId);
+    render(<ValidationAccessibilityPanel warning={warning} path={selectedPath} equipment={[]} alternative={replay} onSelectAlternative={() => undefined} decisionTime={decisionTime} />);
+    expect(screen.getByRole('alert')).toBeTruthy();
+    expect(screen.queryByRole('button')).toBeNull();
+  });
+
   test('does not render a genuine warning for an unrelated displayed path', () => {
     const unrelatedPath = resolvedPath('other-selected', 'eligible', { equipmentIds: ['EL-1'], destinationIntent: '168 St' });
     render(<ValidationAccessibilityPanel warning={resolvedWarning(unrelatedPath)} path={selectedPath} equipment={[]} alternative={null} onSelectAlternative={() => undefined} decisionTime={decisionTime} />);
@@ -107,6 +116,8 @@ describe('accessible-path rider panel', () => {
     />);
     expect(screen.getByRole('alert')).toBeTruthy();
     expect(screen.getByText('Current path not verified')).toBeTruthy();
+    expect(screen.queryByText('Use the verified same-complex path.')).toBeNull();
+    expect(screen.getByText('No current verified replacement is available; wait for a fresh accessible route.')).toBeTruthy();
     expect(screen.queryByRole('button')).toBeNull();
   });
 

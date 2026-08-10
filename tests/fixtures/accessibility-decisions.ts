@@ -219,6 +219,7 @@ export function resolvedEquipmentStatus(targetEquipmentId = 'EL-1', snapshotId =
 
 export function resolvedWarning(
   selectedPath = resolvedPath('selected', 'eligible', { equipmentIds: ['EL-1'], destinationIntent: '168 St' }),
+  alternativeSelection = resolvedAlternativeSelection(selectedPath),
 ) {
   const inventory = acceptEquipmentInventory({ inventoryId: 'inv', evidenceOwner: 'official-equipment-inventory', sourceScopeId: 'nyc-equipment', sourceVersion: 'inv-v1', acceptedAt: '2026-07-31T23:00:00.000Z', equipmentIds: ['EL-1'] });
   const history = acceptEquipmentHistory({ historyId: 'history', evidenceOwner: 'official-equipment-status', sourceScopeId: 'nyc-equipment', sourceVersion: 'equipment-v1', inventoryVersion: 'inv-v1', snapshots: [{ snapshotId: 'snap', sequenceOrdinal: 1, predecessorSnapshotId: null, evidenceOwner: 'official-equipment-status', sourceScopeId: 'nyc-equipment', sourceVersion: 'equipment-v1', inventoryVersion: 'inv-v1', sourceTimestamp: '2026-08-01T00:01:00.000Z', acceptedAt: '2026-08-01T00:01:01.000Z', declaredRecordCount: 1, records: [{ recordId: 'out', equipmentId: 'EL-1', state: 'out-of-service' }] }] }, inventory);
@@ -231,5 +232,5 @@ export function resolvedWarning(
     affectedOrder: 3, decisionPoints: [], evaluatedAt: decisionTime.toISOString(),
   }, selectedPath);
   const decisionPoint = deriveLastAccessibleDecisionPoint({ evidence: progress, selectedPath, decisionTime });
-  return createAccessibilityWarning({ phase: 'underway', decisionPoint, impactDecision, alternativeSelection: resolvedAlternativeSelection(selectedPath), decisionTime });
+  return createAccessibilityWarning({ phase: 'underway', decisionPoint, impactDecision, alternativeSelection, decisionTime });
 }

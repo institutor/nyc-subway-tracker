@@ -167,9 +167,16 @@ interface AcceptedRegistryState {
   readonly offers: readonly AcceptedOffer[];
 }
 
+interface ResolvedSelectionState {
+  readonly registry: AcceptedAccessibilityAlternativeRegistry;
+  readonly selectedPath: ResolvedAccessiblePathDecision;
+  readonly candidatePaths: readonly ResolvedAccessiblePathDecision[];
+}
+
 const acceptedRegistries = new WeakSet<object>();
 const acceptedRegistryState = new WeakMap<object, AcceptedRegistryState>();
 const resolvedSelections = new WeakSet<object>();
+const resolvedSelectionState = new WeakMap<object, ResolvedSelectionState>();
 const acceptedBusConsents = new WeakSet<object>();
 const TIERS: readonly AccessibilityAlternativeTier[] = ['same-complex', 'nearby-station', 'subway-detour', 'bus-inclusive'];
 
@@ -284,7 +291,7 @@ export function chooseAccessibilityAlternative(
     && (!offer.includesBus || busConsented));
   const tier = TIERS.find((item) => eligible.some((candidate) => candidate.tier === item));
   const acceptedConsent = busConsented ? options.busConsent : undefined;
-  if (!tier) return resolveSelection(registry, state.selectedPath, acceptedConsent, null, [], options.decisionTime);
+  if (!tier) return resolveSelection(registry, state.selectedPath, acceptedConsent, null, [], [], options.decisionTime);
   const within = eligible.filter((candidate) => candidate.tier === tier).sort((a, b) =>
     a.singlePointElevatorDependencies - b.singlePointElevatorDependencies
     || a.transfers - b.transfers
@@ -293,7 +300,7 @@ export function chooseAccessibilityAlternative(
     || a.travelSeconds - b.travelSeconds
     || compareCanonicalIdentity(a.canonicalIdentity, b.canonicalIdentity));
   const first = publicOffer(within[0]);
-  return resolveSelection(registry, state.selectedPath, acceptedConsent, first, [first], options.decisionTime);
+  return resolveSelection(registry, state.selectedPath, acceptedConsent, first, [first], [within[0].pathDecision], options.decisionTime);
 }
 
 export function grantBusAlternativeConsent(
@@ -326,8 +333,15 @@ export function isResolvedAccessibilityAlternativeSelection(value: unknown): val
 
 export function alternativeSelectionAllowsUse(value: unknown, decisionTime: Date): value is ResolvedAccessibilityAlternativeSelection {
   const time = decisionTime instanceof Date ? decisionTime.getTime() : Number.NaN;
+  const state = value && typeof value === 'object' ? resolvedSelectionState.get(value) : undefined;
   return isResolvedAccessibilityAlternativeSelection(value) && Number.isFinite(time)
-    && time >= Date.parse(value.createdAt) && time <= Date.parse(value.validThrough);
+    && time >= Date.parse(value.createdAt) && time <= Date.parse(value.validThrough)
+    && Boolean(state) && state!.registry.registryId === value.registryId
+    && state!.selectedPath.evaluationId === value.selectedPathEvaluationId
+    && state!.candidatePaths.length === value.visible.length
+    && state!.candidatePaths.every((path, index) => path.status === 'eligible'
+      && accessiblePathDecisionAllowsUse(path, decisionTime)
+      && offerMatchesPath(value.visible[index], path));
 }
 
 function publicOffer(offer: AcceptedOffer): ResolvedAccessibilityAlternativeOffer {
@@ -366,6 +380,7 @@ function resolveSelection(
   busConsent: AcceptedBusAlternativeConsent | undefined,
   first: ResolvedAccessibilityAlternativeOffer | null,
   visible: readonly ResolvedAccessibilityAlternativeOffer[],
+  candidatePaths: readonly ResolvedAccessiblePathDecision[],
   decisionTime: Date,
   reason?: string,
 ): ResolvedAccessibilityAlternativeSelection {
@@ -391,7 +406,22 @@ function resolveSelection(
     ...(reason ? { reason } : {}),
   });
   resolvedSelections.add(decision);
+  resolvedSelectionState.set(decision, deepFreeze({ registry, selectedPath, candidatePaths: [...candidatePaths] }));
   return decision;
+}
+
+function offerMatchesPath(
+  offer: ResolvedAccessibilityAlternativeOffer,
+  path: ResolvedAccessiblePathDecision,
+): boolean {
+  return offer.pathId === path.pathId && offer.pathEvaluationId === path.evaluationId
+    && offer.pathPackageVersion === path.packageVersion
+    && offer.stationComplexId === path.stationComplexId && offer.constituentStationId === path.constituentStationId
+    && offer.originIntent === path.originIntent && offer.destinationIntent === path.destinationIntent
+    && offer.routeId === path.routeId && offer.direction === path.direction && offer.platformId === path.platformId
+    && offer.equipmentSourceScopeId === path.equipmentSourceScopeId
+    && offer.equipmentSourceVersion === path.equipmentSourceVersion
+    && offer.surface === path.surface && offer.exposureDecisionId === path.exposureDecisionId;
 }
 
 function busConsentAllowsUse(
