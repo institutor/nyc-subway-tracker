@@ -9,6 +9,7 @@ import { createSubscriptionStore } from '../../src/server/notifications/subscrip
 import { createVapidStore } from '../../src/server/notifications/vapid-store';
 import { createCommuteDeliveryAuthorization } from '../../src/server/notifications/notification-runtime';
 import { withApi } from '../helpers/api-harness';
+import type { CommuteWindowRegistration } from '../../src/shared/domain/commute-window';
 
 const directories: string[] = [];
 afterEach(async () => { await Promise.all(directories.splice(0).map((directory) => rm(directory, { recursive: true, force: true }))); });
@@ -123,6 +124,30 @@ describe('local notification boundaries', () => {
     });
   });
 
+  test('allows exact deletion while delivery remains locked and distinguishes removed from absent', async () => {
+    const subscriptions = createSubscriptionStore();
+    subscriptions.upsert({
+      endpoint: 'https://push.example/delete-me', keys: { p256dh: 'p256dh-value', auth: 'auth-value' },
+      commuteWindows: [registration('saved-commute-a')],
+    });
+    const dependencies = createProductionDependencies(
+      { dataDirectory: '.data-test-do-not-read', mode: 'validation', sources: {} },
+      { notifications: { stage: 'disabled', subscriptions } },
+    );
+    await withApi(createApp(dependencies), async ({ request }) => {
+      const remove = () => request('/api/v1/notifications/subscriptions', {
+        method: 'DELETE', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ endpoint: 'https://push.example/delete-me' }),
+      });
+      const first = await remove();
+      expect(first.status).toBe(200);
+      expect(await first.json()).toEqual({ subscribed: false, removed: true });
+      const second = await remove();
+      expect(second.status).toBe(200);
+      expect(await second.json()).toEqual({ subscribed: false, removed: false });
+    });
+  });
+
   test('rejects an unscoped subscription instead of treating it as a wildcard', async () => {
     const subscriptions = createSubscriptionStore();
     const dependencies = createProductionDependencies(
@@ -156,7 +181,7 @@ function deliveryAuthorization() {
   });
 }
 
-function registration(id: string) {
+function registration(id: string): CommuteWindowRegistration {
   return {
     id, lifecycle: 'active', notificationEnabled: true,
     weekdays: [1, 2, 3, 4, 5], startsAt: '08:00', endsAt: '09:00', preparationLeadMinutes: 15,

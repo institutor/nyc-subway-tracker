@@ -1,10 +1,13 @@
-import { useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
+import type { NotificationDeletionResult } from '../hooks/use-notifications';
 
-export type DeletionState = 'Deleted' | 'Not present' | 'Failed';
+export type DeletionState = 'Deleted' | 'Not present' | 'Failed' | 'Pending';
 
 export interface DeletionResult {
   readonly category: string;
   readonly state: DeletionState;
+  readonly remote?: NotificationDeletionResult['remote'];
+  readonly local?: NotificationDeletionResult['local'];
 }
 
 export function SettingsView({
@@ -12,12 +15,25 @@ export function SettingsView({
   onDeleteNotificationSubscription,
 }: {
   readonly onDeletePersonalData: () => Promise<readonly DeletionResult[]>;
-  readonly onDeleteNotificationSubscription: () => Promise<DeletionState>;
+  readonly onDeleteNotificationSubscription: () => Promise<NotificationDeletionResult>;
 }) {
   const [confirming, setConfirming] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [results, setResults] = useState<readonly DeletionResult[]>();
-  const [notificationResult, setNotificationResult] = useState<DeletionState>();
+  const [notificationResult, setNotificationResult] = useState<NotificationDeletionResult>();
+  const [notificationDeleting, setNotificationDeleting] = useState(false);
+  const deleteTriggerRef = useRef<HTMLButtonElement>(null);
+  const confirmRef = useRef<HTMLButtonElement>(null);
+  const confirmationOpenedRef = useRef(false);
+
+  useLayoutEffect(() => {
+    if (confirming) {
+      confirmationOpenedRef.current = true;
+      confirmRef.current?.focus();
+    } else if (confirmationOpenedRef.current) {
+      deleteTriggerRef.current?.focus();
+    }
+  }, [confirming]);
 
   const deletePersonalData = async () => {
     setDeleting(true);
@@ -28,14 +44,21 @@ export function SettingsView({
   };
 
   const deleteNotifications = async () => {
+    setNotificationDeleting(true);
     try {
       setNotificationResult(await onDeleteNotificationSubscription());
     } catch {
-      setNotificationResult('Failed');
+      setNotificationResult({ state: 'Failed', remote: 'Failed', local: 'Pending' });
+    } finally {
+      setNotificationDeleting(false);
     }
   };
 
-  const failed = results?.some(({ state }) => state === 'Failed') ?? false;
+  const cancelConfirmation = () => {
+    setConfirming(false);
+  };
+
+  const failed = results?.some(({ state }) => state === 'Failed' || state === 'Pending') ?? false;
   return (
     <section className="surface surface--settings" aria-labelledby="settings-heading">
       <p className="section-kicker">Device controls</p>
@@ -47,19 +70,19 @@ export function SettingsView({
         <p>Delete saved stations and commute choices, the last station and covered settings, the active trip and its progress, and the notification subscription.</p>
         <p>Location and notification permission choices in device settings were not changed. Accessible Route Only is not silently changed.</p>
         {confirming ? (
-          <div className="settings-confirm" role="group" aria-labelledby="delete-personal-heading">
+          <div className="settings-confirm" role="dialog" aria-modal="true" aria-labelledby="delete-personal-heading" onKeyDown={(event) => { if (event.key === 'Escape' && !deleting) cancelConfirmation(); }}>
             <h4 id="delete-personal-heading">Delete personal data?</h4>
             <p>Official subway sources, structural offline information, and map assets are retained.</p>
             <div className="settings-actions">
-              <button type="button" className="danger-action" disabled={deleting} onClick={() => void deletePersonalData()}>Confirm deletion</button>
-              <button type="button" disabled={deleting} onClick={() => setConfirming(false)}>Cancel</button>
+              <button ref={confirmRef} type="button" className="danger-action" disabled={deleting} onClick={() => void deletePersonalData()}>Confirm deletion</button>
+              <button type="button" disabled={deleting} onClick={cancelConfirmation}>Cancel</button>
             </div>
           </div>
-        ) : <button type="button" className="danger-action" onClick={() => setConfirming(true)}>Delete personal data</button>}
+        ) : <button ref={deleteTriggerRef} type="button" className="danger-action" disabled={notificationDeleting} onClick={() => setConfirming(true)}>Delete personal data</button>}
         {results ? (
           <div className="settings-results" role="status" aria-live="polite">
             <p>{failed ? 'Personal data deletion needs attention.' : 'Personal data deletion finished.'}</p>
-            <ul>{results.map((result) => <li key={result.category}>{result.category}: {result.state}</li>)}</ul>
+            <ul>{results.map((result) => <li key={result.category}>{result.category}: {result.state}{result.remote && result.local ? ` (remote: ${result.remote}; device: ${result.local})` : ''}</li>)}</ul>
           </div>
         ) : null}
       </article>
@@ -67,8 +90,8 @@ export function SettingsView({
       <article className="settings-panel">
         <h3>Notifications</h3>
         <p>Delete the app's notification subscription separately. This does not change the notification permission in device settings.</p>
-        <button type="button" onClick={() => void deleteNotifications()}>Delete notification subscription</button>
-        {notificationResult ? <p role="status">Notification subscription: {notificationResult}</p> : null}
+        <button type="button" disabled={deleting || notificationDeleting} onClick={() => void deleteNotifications()}>Delete notification subscription</button>
+        {notificationResult ? <div role="status"><p>Notification subscription: {notificationResult.state}</p><p>Remote deletion: {notificationResult.remote}; device subscription: {notificationResult.local}.</p></div> : null}
       </article>
     </section>
   );

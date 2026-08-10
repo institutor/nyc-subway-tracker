@@ -550,9 +550,25 @@ const STATUS_STAGES = [
   'commute-evaluation', 'commute-silent', 'commute-limited-pilot', 'commute-delivery',
 ] as const;
 
+const CANONICAL_STATUS_GATES = Object.freeze({
+  'arrival-boards': { exposed: false, reasonCode: 'GATE_0_NOT_PASSED', decision: 'NO-GO — GATE 0 NOT PASSED' },
+  'nearby-offline': { exposed: false, reasonCode: 'NEARBY_GATE_0_NOT_PASSED', decision: 'NO-GO — GATE 0 NOT PASSED' },
+  accessibility: { exposed: false, reasonCode: 'ACCESSIBILITY_EVIDENCE_NOT_DEMONSTRATED', decision: 'NO-GO — REQUIRED ACCESSIBILITY EVIDENCE AND COVERAGE ARE NOT DEMONSTRATED' },
+  guidance: { exposed: false, reasonCode: 'GUIDANCE_EVIDENCE_NOT_DEMONSTRATED', decision: 'NO-GO — RELEASE 2 POSITIONING AND TRANSFER EVIDENCE IS NOT DEMONSTRATED' },
+  'maps-rights': { exposed: false, reasonCode: 'MAP_RIGHTS_NOT_DOCUMENTED', decision: 'Blocked from public release — rights not documented.' },
+  'commute-evaluation': { exposed: false, reasonCode: 'COMMUTE_PREREQUISITES_INCOMPLETE', decision: 'NO-GO — prerequisites and fixed-version evidence incomplete' },
+  'commute-silent': { exposed: false, reasonCode: 'COMMUTE_PREREQUISITES_INCOMPLETE', decision: 'NO-GO — prerequisites and fixed-version evidence incomplete' },
+  'commute-limited-pilot': { exposed: false, reasonCode: 'COMMUTE_PREREQUISITES_INCOMPLETE', decision: 'NO-GO — prerequisites and fixed-version evidence incomplete' },
+  'commute-delivery': { exposed: false, reasonCode: 'COMMUTE_PREREQUISITES_INCOMPLETE', decision: 'NO-GO — prerequisites and fixed-version evidence incomplete' },
+} satisfies Record<(typeof STATUS_STAGES)[number], GateDecisionDto>);
+
 function parseStatus(value: unknown): StatusEnvelopeDto {
   const root = dynamicRoot(value, ['data']);
   const base = dynamicBase(root);
+  const gateEntries = Object.entries(base.gates);
+  if (gateEntries.length !== STATUS_STAGES.length || gateEntries.some(([stage, gate], index) =>
+    stage !== STATUS_STAGES[index]
+    || JSON.stringify(gate) !== JSON.stringify(CANONICAL_STATUS_GATES[STATUS_STAGES[index]]))) invalid();
   if (root.data === null) {
     if (base.runtime.availability !== 'locked') invalid();
     return freeze({ ...base, data: null });

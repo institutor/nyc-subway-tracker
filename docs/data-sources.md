@@ -4,7 +4,7 @@
 
 The live-shadow command builds its source list from the application registry and retrieves the seven official MTA subway GTFS-Realtime route groups plus the official subway alerts feed. Retrieval follows the same HTTPS origin, redirect, size, content-type, atomic-cache, decoding, and coordinator boundaries used by the server code.
 
-Shadow records contain bounded operational source identifiers, accepted times, safe outcome/reason codes, immutable exposure locks, and limited operational train-progress candidates. They contain no rider coordinates, saved records, labels, active-trip or cursor details, permission state, push endpoint/token/key, VAPID private key, secret, or personal join key.
+Shadow records contain bounded operational source identifiers, accepted times, safe outcome/reason codes, immutable exposure locks, and limited per-station operational claims with their governed admitted or suppressed disposition. Each admitted claim can be compared only with the same train and exact target stop-call in a later record. They contain no rider coordinates, saved records, labels, active-trip or cursor details, permission state, push endpoint/token/key, VAPID private key, secret, or personal join key.
 
 ## Source roles
 

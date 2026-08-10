@@ -2,6 +2,8 @@
 
 Install dependencies first with `pnpm install --frozen-lockfile`.
 
+The API command loads `.env` from its current checkout. A production-like client preview does not start the API: after building, run `pnpm run server` and `pnpm run preview` in two separate terminals.
+
 ## Required checks
 
 ```sh

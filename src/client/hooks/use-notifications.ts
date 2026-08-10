@@ -8,7 +8,14 @@ export interface NotificationEnvironment {
   requestPermission(): Promise<NotificationPermission>;
   inspect?(windows: readonly CommuteRuntimeWindow[]): Promise<'none' | 'current' | 'stale'>;
   subscribe(windows: readonly CommuteRuntimeWindow[]): Promise<void>;
-  unsubscribe(): Promise<void>;
+  unsubscribe(): Promise<NotificationDeletionResult>;
+}
+
+export type NotificationDeletionState = 'Deleted' | 'Not present' | 'Failed' | 'Pending';
+export interface NotificationDeletionResult {
+  readonly state: NotificationDeletionState;
+  readonly remote: NotificationDeletionState;
+  readonly local: NotificationDeletionState;
 }
 
 export type NotificationCapability = 'locked' | 'unsupported' | 'checking' | 'ready' | 'stale' | 'denied' | 'enabled' | 'error';
@@ -68,9 +75,11 @@ export function useNotifications(input: {
   const disable = useCallback(async () => {
     if (!environment.supported || subscription !== 'current') return;
     try {
-      await environment.unsubscribe();
-      setSubscription('none');
-      setFailed(false);
+      const result = await environment.unsubscribe();
+      if (result.state === 'Deleted' || result.state === 'Not present') {
+        setSubscription('none');
+        setFailed(false);
+      } else setFailed(true);
     } catch {
       setFailed(true);
     }
@@ -129,16 +138,21 @@ export function browserNotificationEnvironment(): NotificationEnvironment {
       }
     },
     unsubscribe: async () => {
-      if (!serviceWorker) return;
+      if (!serviceWorker) return { state: 'Not present', remote: 'Not present', local: 'Not present' };
       const registration = await serviceWorker.ready;
       const subscription = await registration.pushManager.getSubscription();
-      if (!subscription) return;
+      if (!subscription) return { state: 'Not present', remote: 'Not present', local: 'Not present' };
       const response = await fetch('/api/v1/notifications/subscriptions', {
         method: 'DELETE', headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ endpoint: subscription.endpoint }),
       });
       if (!response.ok) throw new Error('Notification subscription deletion unavailable');
-      await subscription.unsubscribe();
+      const body = await response.json() as { subscribed?: unknown; removed?: unknown };
+      if (body.subscribed !== false || typeof body.removed !== 'boolean') throw new Error('Invalid notification deletion result');
+      const localRemoved = await subscription.unsubscribe();
+      const remote = body.removed ? 'Deleted' : 'Not present';
+      const local = localRemoved ? 'Deleted' : 'Failed';
+      return { state: body.removed && localRemoved ? 'Deleted' : 'Failed', remote, local };
     },
   };
 }

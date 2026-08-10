@@ -2,18 +2,26 @@ import { describe, expect, test } from 'vitest';
 
 import { createTransitApiClient } from '../../src/client/api/client';
 
-const gate = { exposed: false, reasonCode: 'GATE_0_NOT_PASSED', decision: 'NO-GO' } as const;
-const gates = Object.fromEntries([
-  'arrival-boards', 'nearby-offline', 'accessibility', 'guidance', 'maps-rights',
-  'commute-evaluation', 'commute-silent', 'commute-limited-pilot', 'commute-delivery',
-].map((stage) => [stage, gate]));
+const gates = {
+  'arrival-boards': { exposed: false, reasonCode: 'GATE_0_NOT_PASSED', decision: 'NO-GO \u2014 GATE 0 NOT PASSED' },
+  'nearby-offline': { exposed: false, reasonCode: 'NEARBY_GATE_0_NOT_PASSED', decision: 'NO-GO \u2014 GATE 0 NOT PASSED' },
+  accessibility: { exposed: false, reasonCode: 'ACCESSIBILITY_EVIDENCE_NOT_DEMONSTRATED', decision: 'NO-GO \u2014 REQUIRED ACCESSIBILITY EVIDENCE AND COVERAGE ARE NOT DEMONSTRATED' },
+  guidance: { exposed: false, reasonCode: 'GUIDANCE_EVIDENCE_NOT_DEMONSTRATED', decision: 'NO-GO \u2014 RELEASE 2 POSITIONING AND TRANSFER EVIDENCE IS NOT DEMONSTRATED' },
+  'maps-rights': { exposed: false, reasonCode: 'MAP_RIGHTS_NOT_DOCUMENTED', decision: 'Blocked from public release \u2014 rights not documented.' },
+  'commute-evaluation': { exposed: false, reasonCode: 'COMMUTE_PREREQUISITES_INCOMPLETE', decision: 'NO-GO \u2014 prerequisites and fixed-version evidence incomplete' },
+  'commute-silent': { exposed: false, reasonCode: 'COMMUTE_PREREQUISITES_INCOMPLETE', decision: 'NO-GO \u2014 prerequisites and fixed-version evidence incomplete' },
+  'commute-limited-pilot': { exposed: false, reasonCode: 'COMMUTE_PREREQUISITES_INCOMPLETE', decision: 'NO-GO \u2014 prerequisites and fixed-version evidence incomplete' },
+  'commute-delivery': { exposed: false, reasonCode: 'COMMUTE_PREREQUISITES_INCOMPLETE', decision: 'NO-GO \u2014 prerequisites and fixed-version evidence incomplete' },
+} as const;
+const gate = gates['arrival-boards'];
 
 function statusEnvelope(): any {
+  const responseGates = structuredClone(gates);
   return {
     apiVersion: 'v1', schemaVersion: '2026-08-04', responseIdentity: 'status-safe',
     decidedAt: '2026-08-04T12:00:00.000Z', serverTime: '2026-08-04T12:00:00.000Z',
     runtime: { mode: 'validation', surface: 'demonstration', availability: 'available' },
-    gates, gateDecision: gate, demonstrationLabel: 'Demonstration data \u2014 not live',
+    gates: responseGates, gateDecision: structuredClone(gate), demonstrationLabel: 'Demonstration data \u2014 not live',
     sourceHealth: [{
       source: 'gtfs-rt', sourceId: 'mta-realtime-ace', state: 'degraded',
       assessedAt: '2026-08-04T11:59:50.000Z', lastAcceptedAt: '2026-08-04T11:58:29.000Z',
@@ -32,7 +40,7 @@ function statusEnvelope(): any {
           reasonCode: 'SOURCE_DEGRADED', ageSeconds: 91,
           lastAcceptedAt: '2026-08-04T11:58:29.000Z',
         }],
-        exposureGates: Object.entries(gates).map(([stage, value]) => ({ stage, ...value })),
+        exposureGates: Object.entries(responseGates).map(([stage, value]) => ({ stage, ...value })),
       },
     },
   };
@@ -65,5 +73,28 @@ describe('status client boundary', () => {
     const client = createTransitApiClient(async () => response(value));
 
     await expect((client as any).status()).rejects.toThrow('Transit information is unavailable.');
+  });
+
+  test.each([
+    ['missing gate', (value: any) => { delete value.gates.guidance; }],
+    ['extra gate', (value: any) => { value.gates.future = gate; }],
+    ['empty gates', (value: any) => { value.gates = {}; }],
+    ['wrong canonical reason', (value: any) => { value.gates['maps-rights'].reasonCode = 'GATE_0_NOT_PASSED'; }],
+    ['wrong canonical decision', (value: any) => { value.gates.accessibility.decision = 'NO-GO'; }],
+  ])('rejects %s before accepting validation data', async (_label, alter) => {
+    const value = statusEnvelope();
+    alter(value);
+    await expect(createTransitApiClient(async () => response(value)).status())
+      .rejects.toThrow('Transit information is unavailable.');
+  });
+
+  test('rejects a malformed gate set even when locked runtime data is null', async () => {
+    const value = statusEnvelope();
+    value.runtime = { mode: 'shadow', surface: 'public', availability: 'locked' };
+    value.data = null;
+    delete value.gates['commute-delivery'];
+
+    await expect(createTransitApiClient(async () => response(value)).status())
+      .rejects.toThrow('Transit information is unavailable.');
   });
 });

@@ -67,7 +67,7 @@ import {
 import { createBrowserStructuralStore } from './storage/structural-store';
 import { MapView, type MapContext } from './views/MapView';
 import { CommuteView } from './views/CommuteView';
-import { browserNotificationEnvironment, type NotificationEnvironment } from './hooks/use-notifications';
+import { browserNotificationEnvironment, type NotificationDeletionResult, type NotificationEnvironment } from './hooks/use-notifications';
 import { NearbyView } from './views/NearbyView';
 import { SavedView } from './views/SavedView';
 import { StationView } from './views/StationView';
@@ -121,6 +121,8 @@ export function App({
   const apiClient = useMemo(() => api ?? createTransitApiClient(), [api]);
   const storage = useMemo(() => providedStorage ?? browserStorage(), [providedStorage]);
   const [personalStoreGeneration, setPersonalStoreGeneration] = useState(0);
+  const personalStoreGenerationRef = useRef(0);
+  const personalResettingRef = useRef(false);
   const savedStore = useMemo(() => createBrowserSavedStore(storage as BrowserStorage), [personalStoreGeneration, storage]);
   const activeTripStore = useMemo(() => createBrowserActiveTripStore(storage as BrowserStorage), [personalStoreGeneration, storage]);
   const structuralStore = useMemo(() => createBrowserStructuralStore(storage as BrowserStorage), [storage]);
@@ -494,6 +496,7 @@ export function App({
   }, []);
 
   const saveCurrentStation = useCallback(() => {
+    if (personalResettingRef.current) return;
     const station = stateRef.current.selectedStation;
     if (!station) return;
     const existing = savedRecords.find(({ complexId, constituentId }) => complexId === station.complexId && constituentId === station.constituentId);
@@ -537,12 +540,16 @@ export function App({
     });
   }, [apiClient, connectivity.reportRequestResult]);
 
-  const saveRecord = useCallback((record: SavedRecord) => acceptSavedMutation(savedStore.upsert(record)), [acceptSavedMutation, savedStore]);
+  const saveRecord = useCallback((record: SavedRecord) => {
+    if (!personalResettingRef.current) acceptSavedMutation(savedStore.upsert(record));
+  }, [acceptSavedMutation, savedStore]);
   const setSavedState = useCallback((id: string, nextState: SavedRecord['state']) => {
+    if (personalResettingRef.current) return;
     const record = savedRecords.find((candidate) => candidate.id === id);
     if (record) acceptSavedMutation(savedStore.upsert({ ...record, state: nextState }));
   }, [acceptSavedMutation, savedRecords, savedStore]);
   const resetSaved = useCallback((id: string) => {
+    if (personalResettingRef.current) return;
     const record = savedRecords.find((candidate) => candidate.id === id);
     if (!record) return;
     acceptSavedMutation(savedStore.upsert({
@@ -555,6 +562,7 @@ export function App({
     }));
   }, [acceptSavedMutation, savedRecords, savedStore]);
   const deleteSaved = useCallback((id: string) => {
+    if (personalResettingRef.current) return;
     acceptSavedMutation(savedStore.delete(id));
     setSavedBoards((current) => {
       const next = new Map(current);
@@ -564,6 +572,7 @@ export function App({
   }, [acceptSavedMutation, savedStore]);
 
   const activateTrip = useCallback((itinerary: JourneyItineraryDto, response: JourneyEnvelopeDto) => {
+    if (personalResettingRef.current) return;
     const candidate = captureActiveTrip(itinerary, response, catalog?.data.complexes ?? []);
     if (!candidate) {
       setCaptureMessage('This trip cannot be stored until every required path and evidence field is available.');
@@ -580,10 +589,12 @@ export function App({
   }, [activeTripStore, catalog]);
 
   const moveTripCursor = useCallback((pointId: string) => {
+    if (personalResettingRef.current) return;
     const result = activeTripStore.setCursor(pointId);
     if (result.kind === 'saved') setActiveTrip(result.trip);
   }, [activeTripStore]);
   const clearActiveTrip = useCallback(() => {
+    if (personalResettingRef.current) return;
     const result = activeTripStore.clear();
     if (result.kind === 'saved') {
       setActiveTrip(null);
@@ -596,13 +607,15 @@ export function App({
     () => commuteNotifications?.environment ?? browserNotificationEnvironment(),
     [commuteNotifications?.environment],
   );
-  const deleteNotificationSubscription = useCallback(async (): Promise<DeletionState> => {
-    if (!notificationEnvironment?.supported) return 'Not present';
+  const deleteNotificationSubscription = useCallback(async (): Promise<NotificationDeletionResult> => {
+    if (!notificationEnvironment?.supported) return { state: 'Not present', remote: 'Not present', local: 'Not present' };
     try {
-      await notificationEnvironment.unsubscribe();
-      return 'Deleted';
+      return await Promise.race([
+        notificationEnvironment.unsubscribe(),
+        new Promise<NotificationDeletionResult>((resolve) => window.setTimeout(() => resolve({ state: 'Pending', remote: 'Pending', local: 'Pending' }), 5_000)),
+      ]);
     } catch {
-      return 'Failed';
+      return { state: 'Failed', remote: 'Failed', local: 'Pending' };
     }
   }, [notificationEnvironment]);
 
@@ -618,27 +631,52 @@ export function App({
         return { category, state: 'Failed' };
       }
     };
+    const combineDeletion = (first: DeletionResult, second: DeletionResult): DeletionResult => ({
+      category: first.category,
+      state: first.state === 'Failed' || second.state === 'Failed' ? 'Failed'
+        : first.state === 'Deleted' || second.state === 'Deleted' ? 'Deleted' : 'Not present',
+    });
+    personalResettingRef.current = true;
+    personalStoreGenerationRef.current += 1;
+    setPersonalStoreGeneration(personalStoreGenerationRef.current);
+    nearbyGeneration.current += 1;
+    selectedGeneration.current += 1;
+    recoveryGeneration.current += 1;
+    nearbyAbort.current?.abort();
+    selectedAbort.current?.abort();
+    recoveryAbort.current?.abort();
+    for (const controller of savedAbort.current.values()) controller.abort();
+    savedAbort.current.clear();
+    setSavedRecords([]);
+    setSavedBoards(new Map());
+    setNearbyBoards(new Map());
+    setSelectedBoard({ phase: 'idle' });
+    setActiveTrip(null);
+    setActiveTripOpen(false);
+    setCaptureMessage(undefined);
+    setMapContext(DEFAULT_MAP_CONTEXT);
+    setRecoveredMapOverlay(undefined);
+    setReconnectionState(undefined);
+    setStationOpen(false);
+    setPickerOpen(false);
+    dispatch({ type: 'personal-data-reset' });
+
     const saved = removeCategory('Saved stations and commute choices', [SAVED_STORE_KEY]);
     const last = removeCategory('Last station and covered settings', [LAST_USED_STATION_KEY]);
     const trip = removeCategory('Active trip and progress', [ACTIVE_TRIP_STORE_KEY, LEGACY_ACTIVE_TRIP_STORE_KEY]);
+    const notificationDeletion = await deleteNotificationSubscription();
     const notification: DeletionResult = {
       category: 'Notification subscription',
-      state: await deleteNotificationSubscription(),
+      state: notificationDeletion.state,
+      remote: notificationDeletion.remote,
+      local: notificationDeletion.local,
     };
-    if (saved.state !== 'Failed') setSavedRecords([]);
-    if (trip.state !== 'Failed') {
-      setActiveTrip(null);
-      setActiveTripOpen(false);
-    }
-    if (saved.state !== 'Failed' || trip.state !== 'Failed') setPersonalStoreGeneration((generation) => generation + 1);
-    if (last.state !== 'Failed') {
-      nearbyAbort.current?.abort();
-      selectedAbort.current?.abort();
-      setStationOpen(false);
-      setPickerOpen(false);
-      dispatch({ type: 'personal-data-reset' });
-    }
-    return [saved, last, trip, notification];
+    // A second exact pass removes any stale write that completed while remote deletion was pending.
+    const savedFinal = saved.state === 'Failed' ? saved : removeCategory('Saved stations and commute choices', [SAVED_STORE_KEY]);
+    const lastFinal = last.state === 'Failed' ? last : removeCategory('Last station and covered settings', [LAST_USED_STATION_KEY]);
+    const tripFinal = trip.state === 'Failed' ? trip : removeCategory('Active trip and progress', [ACTIVE_TRIP_STORE_KEY, LEGACY_ACTIVE_TRIP_STORE_KEY]);
+    personalResettingRef.current = false;
+    return [combineDeletion(saved, savedFinal), combineDeletion(last, lastFinal), combineDeletion(trip, tripFinal), notification];
   }, [deleteNotificationSubscription, storage]);
 
   const currentRuntime = selectedBoard.board?.runtime ?? state.nearby.response?.runtime ?? bootstrap?.runtime;

@@ -50,10 +50,6 @@ export function createSubscriptionHandler(runtime: NotificationRuntime) {
 export function deleteSubscriptionHandler(runtime: NotificationRuntime) {
   return (request: Request, response: Response): void => {
     assertExactQuery(request, []);
-    if (!canSubscribe(runtime)) {
-      sendNoStoreJson(response, 423, { availability: 'locked' });
-      return;
-    }
     const body = strictRecord(request.body, ['endpoint']);
     let removed = false;
     try { removed = runtime.subscriptions.delete(string(body.endpoint)); } catch { throw new ApiRequestError(400); }

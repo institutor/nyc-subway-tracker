@@ -21,6 +21,7 @@ const gateLabels: Readonly<Record<string, string>> = Object.freeze({
 
 export function DataStatusView({ api, connected }: { readonly api: TransitApiClient; readonly connected: boolean }) {
   const [state, setState] = useState<DataStatusState>(connected ? { phase: 'loading' } : { phase: 'offline' });
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
   useEffect(() => {
     if (!connected) {
@@ -37,6 +38,16 @@ export function DataStatusView({ api, connected }: { readonly api: TransitApiCli
     return () => controller.abort();
   }, [api, connected]);
 
+  useEffect(() => {
+    if (state.phase !== 'ready' || !state.response.data) return undefined;
+    setElapsedSeconds(0);
+    const startedAt = Date.now();
+    const timer = window.setInterval(() => {
+      setElapsedSeconds((current) => Math.max(current, Math.max(0, Math.floor((Date.now() - startedAt) / 1_000))));
+    }, 1_000);
+    return () => window.clearInterval(timer);
+  }, [state.phase === 'ready' ? state.response.responseIdentity : undefined]);
+
   const diagnostics = state.phase === 'ready' ? state.response.data?.diagnostics : undefined;
   return (
     <section className="surface surface--data-status" aria-labelledby="data-status-heading">
@@ -50,6 +61,7 @@ export function DataStatusView({ api, connected }: { readonly api: TransitApiCli
       {state.phase === 'ready' && !diagnostics ? <p role="status">Data status is locked in this runtime.</p> : null}
       {diagnostics ? (
         <>
+          <p className="quiet-copy">{`As of ${formatTime(state.phase === 'ready' ? state.response.decidedAt : undefined)}`}</p>
           <section aria-labelledby="source-signal-heading">
             <h3 id="source-signal-heading">Source cadence</h3>
             <div className="source-signal-strip">
@@ -59,8 +71,10 @@ export function DataStatusView({ api, connected }: { readonly api: TransitApiCli
                   <div>
                     <h4>{signal.sourceId}</h4>
                     <p>{sourceStateLabel(signal.state)}</p>
+                    <p>{sourceReasonLabel(signal.reasonCode)}</p>
+                    {signal.lastAcceptedAt ? <p>{`Last accepted ${formatTime(signal.lastAcceptedAt)}`}</p> : null}
                   </div>
-                  <p className="source-signal__age">{signal.ageSeconds === undefined ? 'Age unavailable' : ageLabel(signal.ageSeconds)}</p>
+                  <p className="source-signal__age">{signal.ageSeconds === undefined ? 'Age unavailable' : ageLabel(signal.ageSeconds + elapsedSeconds)}</p>
                 </article>
               ))}
             </div>
@@ -69,7 +83,7 @@ export function DataStatusView({ api, connected }: { readonly api: TransitApiCli
             <h3 id="release-area-heading">Release areas</h3>
             <ul className="gate-status-list">
               {diagnostics.exposureGates.map((gate) => (
-                <li key={gate.stage}><span>{gateLabels[gate.stage] ?? 'Unavailable area'}</span><strong>Locked</strong></li>
+                <li key={gate.stage}><span>{gateLabels[gate.stage] ?? 'Unavailable area'}<small>{gateReasonLabel(gate.reasonCode)}</small></span><strong>Locked</strong></li>
               ))}
             </ul>
             <p className="quiet-copy">Validation and shadow checks do not open these areas to riders.</p>
@@ -78,6 +92,27 @@ export function DataStatusView({ api, connected }: { readonly api: TransitApiCli
       ) : null}
     </section>
   );
+}
+
+function sourceReasonLabel(reasonCode: string): string {
+  if (reasonCode === 'SOURCE_DEGRADED') return 'The latest accepted update is delayed.';
+  if (reasonCode === 'SOURCE_CURRENT') return 'The latest accepted update is current.';
+  if (reasonCode === 'SOURCE_QUARANTINED') return 'The latest update is being held for review.';
+  return 'No accepted update is currently available.';
+}
+
+function gateReasonLabel(reasonCode: string): string {
+  if (reasonCode === 'GATE_0_NOT_PASSED') return 'Arrival evidence has not passed validation.';
+  if (reasonCode === 'NEARBY_GATE_0_NOT_PASSED') return 'Nearby and offline evidence has not passed validation.';
+  if (reasonCode === 'ACCESSIBILITY_EVIDENCE_NOT_DEMONSTRATED') return 'Accessibility evidence and coverage are not demonstrated.';
+  if (reasonCode === 'GUIDANCE_EVIDENCE_NOT_DEMONSTRATED') return 'Platform guidance evidence is not demonstrated.';
+  if (reasonCode === 'MAP_RIGHTS_NOT_DOCUMENTED') return 'Map rights are not documented.';
+  return 'Commute prerequisites and fixed-version evidence are incomplete.';
+}
+
+function formatTime(value: string | undefined): string {
+  if (!value) return 'unavailable';
+  return new Date(value).toISOString().slice(11, 19);
 }
 
 function sourceStateLabel(state: 'current' | 'degraded' | 'unavailable' | 'quarantined'): string {

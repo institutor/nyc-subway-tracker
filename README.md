@@ -14,7 +14,7 @@ copy .env.example .env
 
 On macOS or Linux, use `cp .env.example .env` instead of `copy`.
 
-For local development, run the API and client in separate terminals:
+For local development, run the API and client in separate terminals. The API process loads the checkout-root `.env`; Vite's client terminal is a separate process:
 
 ```sh
 pnpm run server
@@ -28,7 +28,15 @@ Open the Vite address shown in the second terminal. The default `.env.example` s
 ```sh
 pnpm run typecheck
 pnpm run build
+```
+
+Then keep the production API and production-like client preview in separate terminals:
+
+```sh
+# terminal 1 — loads .env and serves the API
 pnpm run server
+
+# terminal 2 — serves the built client
 pnpm run preview
 ```
 
