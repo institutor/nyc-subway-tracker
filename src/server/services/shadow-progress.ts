@@ -34,6 +34,7 @@ export interface ShadowAdmissionEvidence {
   readonly earlierRecordId: string; readonly priorClaimKey: string; readonly priorObservedAt: string;
   readonly priorRemainingStopCallIdentities: readonly string[];
   readonly movementTimestamp: string; readonly movementStatus: 'INCOMING_AT' | 'STOPPED_AT' | 'IN_TRANSIT_TO';
+  readonly movementStopId: string; readonly movementStopSequence: number; readonly movementStopCallIdentity: string;
   readonly movementEvidenceIdentity: string; readonly targetEventAt: string; readonly targetStopCallIdentity: string;
   readonly targetEvidenceIdentity: string; readonly scheduledTrack: string; readonly actualTrack: string;
   readonly trackEvidenceIdentity: string; readonly serviceClaimId: string;
@@ -119,9 +120,11 @@ export function canonicalShadowAlertContextIdentity(input: {
 
 export function canonicalMovementEvidenceIdentity(input: {
   readonly sourceId: string; readonly trainIdentity: string; readonly movementTimestamp: string;
-  readonly movementStatus: string; readonly stopCallIdentity: string;
+  readonly movementStatus: string; readonly movementStopId: string; readonly movementStopSequence: number;
+  readonly movementStopCallIdentity: string;
 }): string {
-  return `movement:${digestTuple([input.sourceId, input.trainIdentity, input.movementTimestamp, input.movementStatus, input.stopCallIdentity])}`;
+  return `movement:${digestTuple([input.sourceId, input.trainIdentity, input.movementTimestamp, input.movementStatus,
+    input.movementStopId, String(input.movementStopSequence), input.movementStopCallIdentity])}`;
 }
 
 export function canonicalTargetEvidenceIdentity(input: {
@@ -149,9 +152,8 @@ export function canonicalServiceDecisionDigest(evidence: Pick<ShadowAdmissionEvi
     evidence.serviceClaimBindingDigest, evidence.serviceAssessmentAt, evidence.serviceAlertContextIdentity, evidence.issuedAlertContextDigest])}`;
 }
 
-export function canonicalIssuedAlertContextDigest(input: Pick<ShadowAdmissionEvidence,
-  'serviceAlertContextIdentity' | 'serviceAssessmentAt'>): string {
-  return `issued-alert:${digestTuple([input.serviceAlertContextIdentity, input.serviceAssessmentAt])}`;
+export function canonicalIssuedAlertContextDigest(rawIssuedIdentity: string): string {
+  return `issued-alert-context:${createHash('sha256').update(rawIssuedIdentity).digest('hex')}`;
 }
 
 export function createShadowComparisonContext(input: {
@@ -259,7 +261,11 @@ function validateAdmittedClaims(current: ShadowProgressRecord, earlier: ShadowPr
     const evidence = claim.admissionEvidence!;
     const prior = earlier.claims.find((item) => item.claimKey === evidence.priorClaimKey);
     const currentIndex = prior?.remainingStopCallIdentities.indexOf(claim.nextStopCallIdentity) ?? -1;
+    const comparison = current.progressComparisons.find((row) => row.earlierClaimKey === evidence.priorClaimKey
+      && row.laterClaimKey === claim.claimKey);
     if (!current.comparisonContext || evidence.earlierRecordId !== earlier.recordId || !prior
+      || current.comparisonContext.intervalMilliseconds <= 0
+      || current.comparisonContext.intervalMilliseconds > MAX_SHADOW_COMPARISON_INTERVAL_MS
       || prior.observedAt !== evidence.priorObservedAt
       || !sameStrings(prior.remainingStopCallIdentities, evidence.priorRemainingStopCallIdentities)
       || prior.sourceId !== claim.sourceId || prior.operationalTrainId !== claim.operationalTrainId
@@ -267,11 +273,15 @@ function validateAdmittedClaims(current: ShadowProgressRecord, earlier: ShadowPr
       || prior.targetStopCallIdentity !== claim.targetStopCallIdentity || prior.routeId !== claim.routeId
       || prior.direction !== claim.direction || prior.terminalDestinationStopId !== claim.terminalDestinationStopId
       || currentIndex <= 0 || !sameStrings(prior.remainingStopCallIdentities.slice(currentIndex), claim.remainingStopCallIdentities)
+      || Date.parse(claim.observedAt) <= Date.parse(prior.observedAt)
       || Date.parse(evidence.movementTimestamp) <= Date.parse(prior.observedAt)
-      || Date.parse(evidence.movementTimestamp) > Date.parse(claim.decisionTime)
+      || Date.parse(evidence.movementTimestamp) > Date.parse(claim.observedAt)
       || Date.parse(claim.decisionTime) - Date.parse(evidence.movementTimestamp) > 90_000
       || Date.parse(evidence.targetEventAt) <= Date.parse(claim.decisionTime)
-      || evidence.serviceAssessmentAt !== claim.decisionTime) throw new Error('Invalid admitted shadow comparison binding');
+      || evidence.serviceAssessmentAt !== claim.decisionTime || !comparison
+      || comparison.result !== 'progressed' || comparison.reasonCode !== 'NEXT_STOP_ADVANCED') {
+      throw new Error('Invalid admitted shadow comparison binding');
+    }
   }
 }
 
@@ -315,7 +325,7 @@ function validateClaim(value: unknown, decisionTime: string, recordedAt: string,
     'nextStopId', 'nextStopCallIdentity', 'targetStopId', 'targetStopCallIdentity'] as const;
   if (!strings.every((key) => boundedString(row[key])) || !iso(row.observedAt) || row.decisionTime !== decisionTime
     || !ordered(row.observedAt, decisionTime, recordedAt) || !['northbound', 'southbound'].includes(String(row.direction))
-    || !validServiceOwnership(row.serviceDate, row.serviceInstanceId, row.serviceIdentity)
+    || !validServiceOwnership(row.serviceDate, row.serviceInstanceId, row.serviceIdentity, row.operationalTrainId)
     || !['admitted', 'suppressed'].includes(String(disposition)) || !Array.isArray(row.remainingStopCallIdentities)
     || row.remainingStopCallIdentities.length === 0 || row.remainingStopCallIdentities.length > 64
     || !row.remainingStopCallIdentities.every(validStopCallIdentity) || new Set(row.remainingStopCallIdentities).size !== row.remainingStopCallIdentities.length
@@ -470,28 +480,34 @@ function isSuppressionReason(value: unknown): value is ShadowSuppressionReason {
 function validFeedPair(kind: unknown, reason: unknown): boolean { return (kind === 'current' && reason === 'accepted-current') || (kind === 'degraded' && reason === 'snapshot-age-degraded') || (kind === 'unavailable' && reason === 'snapshot-age-unavailable'); }
 function validServiceDecision(kind: string, disposition: string): boolean { return (kind === 'eligible-context' && disposition === 'eligible') || (kind === 'resolved-suppression' && disposition === 'resolved-ineligible') || (kind === 'arrival-claim-unavailable' && disposition === 'high-impact-unresolved') || (kind === 'quarantine-or-limitation' && disposition === 'quarantined'); }
 function validComparisonPair(result: unknown, reason: unknown): boolean { const reasons = ['NEXT_STOP_ADVANCED', 'NEXT_STOP_UNCHANGED', 'TRAIN_NOT_PRESENT_IN_LATER_SNAPSHOT', 'LATER_OBSERVATION_NOT_LATER', 'TARGET_NOT_IN_LATER_PATH', 'PATH_CHANGED_OR_REROUTED', 'COMPARISON_INTERVAL_EXCEEDED', 'SERVICE_OWNERSHIP_UNAVAILABLE', 'SERVICE_INSTANCE_CHANGED', 'CURRENT_CLAIMS_TRUNCATED']; return reasons.includes(String(reason)) && (result === 'progressed') === (reason === 'NEXT_STOP_ADVANCED') && (result === 'not-observed') === (reason === 'NEXT_STOP_UNCHANGED'); }
-function validServiceOwnership(serviceDate: unknown, serviceInstanceId: unknown, value: unknown): boolean {
+function validServiceOwnership(serviceDate: unknown, serviceInstanceId: unknown, value: unknown, operationalTrainId: unknown): boolean {
   if (serviceDate === null || serviceInstanceId === null || value === null) return serviceDate === null && serviceInstanceId === null && value === null;
   if (!validServiceDate(serviceDate) || !validServiceInstance(serviceInstanceId)) return false;
   try {
     const row = exactRecord(value, ['tripId', 'startDate', 'startTime', 'trainIdentity']);
     if (![row.tripId, row.startDate, row.startTime, row.trainIdentity].every(boundedString) || row.startDate !== serviceDate
-      || !/^\d{2}:\d{2}:\d{2}$/u.test(String(row.startTime))) return false;
+      || row.trainIdentity !== operationalTrainId || !/^\d{2,3}:[0-5]\d:[0-5]\d$/u.test(String(row.startTime))) return false;
     return canonicalShadowServiceInstance(row as unknown as ShadowServiceIdentity) === serviceInstanceId;
   } catch { return false; }
 }
 function validateAdmissionEvidence(value: unknown, claim: ShadowProgressClaim, decisionTime: string): void {
   const row = exactRecord(value, ['earlierRecordId', 'priorClaimKey', 'priorObservedAt', 'priorRemainingStopCallIdentities',
-    'movementTimestamp', 'movementStatus', 'movementEvidenceIdentity', 'targetEventAt', 'targetStopCallIdentity',
+    'movementTimestamp', 'movementStatus', 'movementStopId', 'movementStopSequence', 'movementStopCallIdentity',
+    'movementEvidenceIdentity', 'targetEventAt', 'targetStopCallIdentity',
     'targetEvidenceIdentity', 'scheduledTrack', 'actualTrack', 'trackEvidenceIdentity', 'serviceClaimId', 'serviceClaimBindingDigest', 'serviceAssessmentAt',
     'serviceAlertContextIdentity', 'issuedAlertContextDigest', 'serviceDecisionDigest', 'admittedStopCallIdentity']);
   if (!boundedString(row.earlierRecordId) || !/^claim:[a-f0-9]{64}$/u.test(String(row.priorClaimKey)) || !iso(row.priorObservedAt)
     || !Array.isArray(row.priorRemainingStopCallIdentities) || row.priorRemainingStopCallIdentities.length === 0
     || row.priorRemainingStopCallIdentities.length > 64 || !row.priorRemainingStopCallIdentities.every(validStopCallIdentity)
     || !iso(row.movementTimestamp) || !['INCOMING_AT', 'STOPPED_AT', 'IN_TRANSIT_TO'].includes(String(row.movementStatus))
+    || !boundedString(row.movementStopId) || !Number.isSafeInteger(row.movementStopSequence) || Number(row.movementStopSequence) <= 0
+    || !validStopCallIdentity(row.movementStopCallIdentity)
+    || row.movementStopCallIdentity !== `${row.movementStopId}\0sequence:${row.movementStopSequence}`
+    || row.movementStopCallIdentity !== claim.nextStopCallIdentity
     || row.movementEvidenceIdentity !== canonicalMovementEvidenceIdentity({ sourceId: claim.sourceId,
       trainIdentity: claim.operationalTrainId, movementTimestamp: String(row.movementTimestamp), movementStatus: String(row.movementStatus),
-      stopCallIdentity: claim.nextStopCallIdentity })
+      movementStopId: String(row.movementStopId), movementStopSequence: Number(row.movementStopSequence),
+      movementStopCallIdentity: String(row.movementStopCallIdentity) })
     || !iso(row.targetEventAt) || Date.parse(String(row.targetEventAt)) <= Date.parse(decisionTime)
     || row.targetStopCallIdentity !== claim.targetStopCallIdentity || row.admittedStopCallIdentity !== claim.targetStopCallIdentity
     || row.targetEvidenceIdentity !== canonicalTargetEvidenceIdentity({ sourceId: claim.sourceId,
@@ -503,7 +519,7 @@ function validateAdmissionEvidence(value: unknown, claim: ShadowProgressClaim, d
       scheduledTrack: String(row.scheduledTrack), actualTrack: String(row.actualTrack) }) || row.serviceClaimId !== claim.claimId
     || row.serviceClaimBindingDigest !== canonicalServiceClaimBindingDigest(claim) || row.serviceAssessmentAt !== decisionTime
     || row.serviceAlertContextIdentity !== (claim.decisions.serviceChange.alertContext as Extract<AlertContext, { state: 'accepted' }>).alertContextIdentity
-    || row.issuedAlertContextDigest !== canonicalIssuedAlertContextDigest(row as unknown as ShadowAdmissionEvidence)
+    || !/^issued-alert-context:[a-f0-9]{64}$/u.test(String(row.issuedAlertContextDigest))
     || row.serviceDecisionDigest !== canonicalServiceDecisionDigest(row as unknown as ShadowAdmissionEvidence)) throw new Error();
 }
 function validServiceDate(value: unknown): value is string { if (typeof value !== 'string' || !/^\d{8}$/u.test(value)) return false; const year = Number(value.slice(0, 4)); const month = Number(value.slice(4, 6)); const day = Number(value.slice(6, 8)); const date = new Date(Date.UTC(year, month - 1, day)); return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day; }

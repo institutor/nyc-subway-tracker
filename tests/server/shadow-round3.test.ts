@@ -16,12 +16,29 @@ describe('bound shadow comparison evidence', () => {
     expect(() => module.validateShadowComparisonBinding(later, earlierBytes)).not.toThrow();
     for (const [label, alter] of [
       ['missing evidence', (value: any) => { delete value.claims[0].admissionEvidence; }],
+      ['earlier record', (value: any) => { value.claims[0].admissionEvidence.earlierRecordId = 'shadow-other'; }],
+      ['prior observation', (value: any) => { value.claims[0].admissionEvidence.priorObservedAt = plus(EARLIER, -1); }],
+      ['prior path', (value: any) => { value.claims[0].admissionEvidence.priorRemainingStopCallIdentities = [stopCall('A16N', 3)]; }],
       ['movement', (value: any) => { value.claims[0].admissionEvidence.movementTimestamp = plus(LATER, -1); }],
+      ['movement status', (value: any) => { value.claims[0].admissionEvidence.movementStatus = 'STOPPED_AT'; }],
+      ['movement stop id', (value: any) => { value.claims[0].admissionEvidence.movementStopId = 'A12N'; }],
+      ['movement stop sequence', (value: any) => { value.claims[0].admissionEvidence.movementStopSequence = 1; }],
+      ['movement stop call', (value: any) => { value.claims[0].admissionEvidence.movementStopCallIdentity = stopCall('A12N', 1); }],
+      ['movement digest', (value: any) => { value.claims[0].admissionEvidence.movementEvidenceIdentity = `movement:${'a'.repeat(64)}`; }],
       ['target event', (value: any) => { value.claims[0].admissionEvidence.targetEventAt = LATER; }],
       ['different future target event', (value: any) => { value.claims[0].admissionEvidence.targetEventAt = plus(LATER, 60_001); }],
+      ['target stop call', (value: any) => { value.claims[0].admissionEvidence.targetStopCallIdentity = stopCall('A14N', 2); }],
+      ['target digest', (value: any) => { value.claims[0].admissionEvidence.targetEvidenceIdentity = `target:${'a'.repeat(64)}`; }],
       ['track', (value: any) => { value.claims[0].admissionEvidence.actualTrack = '2'; }],
       ['different eligible track', (value: any) => { value.claims[0].admissionEvidence.actualTrack = '2'; value.claims[0].admissionEvidence.scheduledTrack = '2'; }],
+      ['track digest', (value: any) => { value.claims[0].admissionEvidence.trackEvidenceIdentity = `track:${'a'.repeat(64)}`; }],
+      ['service claim', (value: any) => { value.claims[0].admissionEvidence.serviceClaimId = `claim-id:${'a'.repeat(64)}`; }],
+      ['service claim binding', (value: any) => { value.claims[0].admissionEvidence.serviceClaimBindingDigest = `service-claim:${'a'.repeat(64)}`; }],
+      ['service assessment', (value: any) => { value.claims[0].admissionEvidence.serviceAssessmentAt = plus(LATER, -1); }],
+      ['source service context', (value: any) => { value.claims[0].admissionEvidence.serviceAlertContextIdentity = `alert-context:${'a'.repeat(64)}`; }],
+      ['issued service context', (value: any) => { value.claims[0].admissionEvidence.issuedAlertContextDigest = `issued-alert-context:${'a'.repeat(64)}`; }],
       ['service digest', (value: any) => { value.claims[0].admissionEvidence.serviceDecisionDigest = `service-decision:${'e'.repeat(64)}`; }],
+      ['admitted stop call', (value: any) => { value.claims[0].admissionEvidence.admittedStopCallIdentity = stopCall('A14N', 2); }],
       ['prior key', (value: any) => { value.claims[0].admissionEvidence.priorClaimKey = `claim:${'f'.repeat(64)}`; }],
       ['standalone context', (value: any) => { value.comparisonContext = null; value.progressComparisons = []; value.truncation.comparisons = { consideredCount: 0, includedCount: 0, omittedCount: 0, reasonCode: 'NOT_TRUNCATED' }; }],
     ] as const) {
@@ -29,6 +46,31 @@ describe('bound shadow comparison evidence', () => {
       alter(tampered);
       expect(() => module.validateShadowComparisonBinding(tampered, earlierBytes), label).toThrow(/invalid|bound|comparison/i);
     }
+  });
+
+  test.each([
+    ['source', (prior: any) => { prior.sourceId = 'subway-rt-bdfm'; prior.provenance.sourceId = 'subway-rt-bdfm'; prior.provenance.feedGroupId = 'subway-rt-bdfm'; }],
+    ['train', (prior: any) => { prior.operationalTrainId = 'train-other'; prior.serviceIdentity.trainIdentity = 'train-other'; prior.serviceInstanceId = serviceInstanceFrom(prior.serviceIdentity); }],
+    ['route', (prior: any) => { prior.routeId = 'C'; }],
+    ['direction', (prior: any) => { prior.direction = 'southbound'; }],
+    ['destination', (prior: any) => { prior.terminalDestinationStopId = 'A14N'; }],
+  ])('rejects a structurally exact prior with different admitted %s ownership', async (_label, alter) => {
+    const module = await import('../../src/server/services/shadow-progress') as any;
+    const { earlierBytes, later } = rebindPrior(module, alter);
+    expect(() => module.validateShadowComparisonBinding(later, earlierBytes)).toThrow(/invalid|bound|comparison/i);
+  });
+
+  test('rejects a self-consistent movement digest that owns a different stop call than the admitted next call', async () => {
+    const module = await import('../../src/server/services/shadow-progress') as any;
+    const { earlierBytes, later } = admittedPair(module);
+    const tampered = structuredClone(later);
+    const evidence = tampered.claims[0].admissionEvidence;
+    evidence.movementStopId = 'A12N';
+    evidence.movementStopSequence = 1;
+    evidence.movementStopCallIdentity = stopCall('A12N', 1);
+    evidence.movementEvidenceIdentity = movementIdentity(tampered.claims[0], evidence.movementTimestamp,
+      evidence.movementStatus, evidence.movementStopId, evidence.movementStopSequence);
+    expect(() => module.validateShadowComparisonBinding(tampered, earlierBytes)).toThrow(/invalid|bound|comparison/i);
   });
 
   test('binds exact prior bytes and every row to earlier/current records and claim keys', async () => {
@@ -124,6 +166,17 @@ describe('bound shadow comparison evidence', () => {
       record({ recordId: 'shadow-null-later', at: LATER, claims: [laterUnowned] }),
     )).toEqual([expect.objectContaining({ result: 'inconclusive', reasonCode: 'SERVICE_OWNERSHIP_UNAVAILABLE' })]);
   });
+
+  test.each([
+    ['zero decision interval', { earlierDecision: LATER, earlierObserved: EARLIER, laterDecision: LATER, laterObserved: plus(EARLIER, 60_000) }],
+    ['an interval one millisecond beyond the maximum', { earlierDecision: EARLIER, earlierObserved: plus(EARLIER, -1), laterDecision: plus(EARLIER, 900_001), laterObserved: plus(EARLIER, 900_001) }],
+    ['an equal current observation', { earlierDecision: EARLIER, earlierObserved: plus(EARLIER, -60_000), laterDecision: LATER, laterObserved: plus(EARLIER, -60_000) }],
+    ['an older current observation', { earlierDecision: EARLIER, earlierObserved: plus(EARLIER, -60_000), laterDecision: LATER, laterObserved: plus(EARLIER, -60_001) }],
+  ])('rejects admitted evidence with %s even when the serialized context and comparison rows are exact', async (_label, times) => {
+    const module = await import('../../src/server/services/shadow-progress') as any;
+    const { earlierBytes, later } = admittedPairAt(module, times);
+    expect(() => module.validateShadowComparisonBinding(later, earlierBytes)).toThrow(/invalid|bound|comparison/i);
+  });
 });
 
 describe('exact shadow chronology and bounded composition', () => {
@@ -215,6 +268,26 @@ describe('exact shadow chronology and bounded composition', () => {
     const value = record({ recordId: 'shadow-service-identity', at: EARLIER, claims: [claim()] });
     expect(() => parseShadowProgressRecord(value)).not.toThrow();
     alter(value);
+    expect(() => parseShadowProgressRecord(value)).toThrow(/invalid prior shadow record/i);
+  });
+
+  test('accepts exact canonical service ownership with a three-digit GTFS hour', async () => {
+    const { parseShadowProgressRecord } = await import('../../src/server/services/shadow-progress') as any;
+    const identity = { ...serviceIdentity(), startTime: '125:59:59' };
+    const value = record({ recordId: 'shadow-three-digit-hour', at: EARLIER, claims: [claim({ serviceIdentity: identity })] });
+    expect(() => parseShadowProgressRecord(value)).not.toThrow();
+  });
+
+  test.each([
+    ['a service train identity different from the operational train', (identity: any) => { identity.trainIdentity = 'train-other'; }],
+    ['an invalid service start minute', (identity: any) => { identity.startTime = '12:60:00'; }],
+    ['an invalid service start second', (identity: any) => { identity.startTime = '12:00:60'; }],
+  ])('rejects %s even with a matching service digest and canonical claim key', async (_label, alter) => {
+    const { parseShadowProgressRecord } = await import('../../src/server/services/shadow-progress') as any;
+    const value = record({ recordId: 'shadow-service-owner', at: EARLIER, claims: [claim()] });
+    alter(value.claims[0].serviceIdentity);
+    value.claims[0].serviceInstanceId = serviceInstanceFrom(value.claims[0].serviceIdentity);
+    canonicalizeClaim(value.claims[0]);
     expect(() => parseShadowProgressRecord(value)).toThrow(/invalid prior shadow record/i);
   });
 
@@ -360,7 +433,7 @@ function serviceInstance(seed = '20260810') { return serviceInstanceFrom(service
 function serviceInstanceFrom(value: any) { return `service:${sha256(encodeCanonicalStringTuple([value.tripId, value.startDate, value.startTime, value.trainIdentity]))}`; }
 function sourceAlertIdentity(at: string) { return `alert-context:${sha256(encodeCanonicalStringTuple(['subway-alerts', at, at, ALERT_SHA]))}`; }
 
-function admittedPair(module: any) {
+function admittedPair(module: any, includeRound5Evidence = true) {
   const earlierClaim = claim();
   const earlier = record({ recordId: 'shadow-admission-earlier', at: EARLIER, claims: [earlierClaim] });
   const earlierBytes = JSON.stringify(earlier);
@@ -372,21 +445,27 @@ function admittedPair(module: any) {
     earlierRecordId: earlier.recordId, priorClaimKey: earlierClaim.claimKey, priorObservedAt: earlierClaim.observedAt,
     priorRemainingStopCallIdentities: earlierClaim.remainingStopCallIdentities,
     movementTimestamp: LATER, movementStatus: 'IN_TRANSIT_TO',
-    movementEvidenceIdentity: module.canonicalMovementEvidenceIdentity({ sourceId: laterClaim.sourceId,
-      trainIdentity: laterClaim.operationalTrainId, movementTimestamp: LATER, movementStatus: 'IN_TRANSIT_TO', stopCallIdentity: laterClaim.nextStopCallIdentity }),
+    movementEvidenceIdentity: includeRound5Evidence ? movementIdentity(laterClaim, LATER, 'IN_TRANSIT_TO', 'A14N', 2)
+      : module.canonicalMovementEvidenceIdentity({ sourceId: laterClaim.sourceId, trainIdentity: laterClaim.operationalTrainId,
+        movementTimestamp: LATER, movementStatus: 'IN_TRANSIT_TO', stopCallIdentity: laterClaim.nextStopCallIdentity }),
     targetEventAt: plus(LATER, 60_000), targetStopCallIdentity: laterClaim.targetStopCallIdentity,
     targetEvidenceIdentity: '', scheduledTrack: '1', actualTrack: '1', trackEvidenceIdentity: '', serviceClaimId: laterClaim.claimId,
     serviceClaimBindingDigest: module.canonicalServiceClaimBindingDigest(laterClaim), serviceAssessmentAt: LATER,
     serviceAlertContextIdentity: laterClaim.decisions.serviceChange.alertContext.alertContextIdentity,
     issuedAlertContextDigest: '', admittedStopCallIdentity: laterClaim.targetStopCallIdentity,
   };
+  if (includeRound5Evidence) {
+    evidence.movementStopId = 'A14N';
+    evidence.movementStopSequence = 2;
+    evidence.movementStopCallIdentity = stopCall('A14N', 2);
+    evidence.issuedAlertContextDigest = issuedContextCommitment('issued-service-context');
+  } else evidence.issuedAlertContextDigest = module.canonicalIssuedAlertContextDigest(evidence);
   evidence.targetEvidenceIdentity = module.canonicalTargetEvidenceIdentity({ sourceId: laterClaim.sourceId,
     trainIdentity: laterClaim.operationalTrainId, targetStopCallIdentity: laterClaim.targetStopCallIdentity,
     targetEventAt: evidence.targetEventAt });
   evidence.trackEvidenceIdentity = module.canonicalTrackEvidenceIdentity({ sourceId: laterClaim.sourceId,
     trainIdentity: laterClaim.operationalTrainId, targetStopCallIdentity: laterClaim.targetStopCallIdentity,
     scheduledTrack: evidence.scheduledTrack, actualTrack: evidence.actualTrack });
-  evidence.issuedAlertContextDigest = module.canonicalIssuedAlertContextDigest(evidence);
   evidence.serviceDecisionDigest = module.canonicalServiceDecisionDigest(evidence);
   laterClaim.admissionEvidence = evidence;
   const laterBase = record({ recordId: 'shadow-admission-later', at: LATER, claims: [laterClaim] });
@@ -395,6 +474,85 @@ function admittedPair(module: any) {
   const later = module.buildBoundedShadowRecord({ ...laterBase, comparisonContext, progressComparisons: comparisons });
   return { earlierBytes, later };
 }
+
+function admittedPairAt(module: any, times: { earlierDecision: string; earlierObserved: string; laterDecision: string; laterObserved: string }) {
+  const pair = admittedPair(module);
+  const earlier = JSON.parse(pair.earlierBytes);
+  retimeRecordClaim(earlier, times.earlierDecision, times.earlierObserved);
+  if (times.earlierDecision === times.laterDecision) earlier.recordedAt = times.earlierDecision;
+  const earlierBytes = JSON.stringify(earlier);
+  const laterClaim = structuredClone(pair.later.claims[0]);
+  retimeClaim(laterClaim, times.laterDecision, times.laterObserved);
+  const evidence = laterClaim.admissionEvidence;
+  evidence.earlierRecordId = earlier.recordId;
+  evidence.priorClaimKey = earlier.claims[0].claimKey;
+  evidence.priorObservedAt = earlier.claims[0].observedAt;
+  evidence.priorRemainingStopCallIdentities = earlier.claims[0].remainingStopCallIdentities;
+  evidence.movementTimestamp = times.laterDecision;
+  evidence.movementEvidenceIdentity = movementIdentity(laterClaim, times.laterDecision, evidence.movementStatus,
+    evidence.movementStopId, evidence.movementStopSequence);
+  evidence.targetEventAt = plus(times.laterDecision, 60_000);
+  evidence.targetEvidenceIdentity = targetIdentity(laterClaim, evidence.targetEventAt);
+  evidence.serviceAssessmentAt = times.laterDecision;
+  evidence.serviceAlertContextIdentity = laterClaim.decisions.serviceChange.alertContext.alertContextIdentity;
+  evidence.serviceDecisionDigest = module.canonicalServiceDecisionDigest(evidence);
+  const laterBase = record({ recordId: 'shadow-admission-later', at: times.laterDecision, claims: [laterClaim] });
+  retimeSource(laterBase, laterClaim.sourceId, times.laterObserved);
+  const comparisonContext = module.createShadowComparisonContext({ earlier, earlierBytes, later: laterBase });
+  return { earlierBytes, later: module.buildBoundedShadowRecord({ ...laterBase, comparisonContext,
+    progressComparisons: module.compareShadowProgress(earlier, { ...laterBase, comparisonContext }) }) };
+}
+
+function rebindPrior(module: any, alter: (prior: any) => void) {
+  const pair = admittedPair(module);
+  const earlier = JSON.parse(pair.earlierBytes);
+  alter(earlier.claims[0]);
+  canonicalizeClaim(earlier.claims[0]);
+  const earlierBytes = JSON.stringify(earlier);
+  const currentBase = structuredClone(pair.later);
+  currentBase.comparisonContext = null;
+  currentBase.progressComparisons = [];
+  const evidence = currentBase.claims[0].admissionEvidence;
+  evidence.priorClaimKey = earlier.claims[0].claimKey;
+  evidence.priorObservedAt = earlier.claims[0].observedAt;
+  evidence.priorRemainingStopCallIdentities = earlier.claims[0].remainingStopCallIdentities;
+  const comparisonContext = module.createShadowComparisonContext({ earlier, earlierBytes, later: currentBase });
+  return { earlierBytes, later: module.buildBoundedShadowRecord({ ...currentBase, comparisonContext,
+    progressComparisons: module.compareShadowProgress(earlier, { ...currentBase, comparisonContext }) }) };
+}
+
+function retimeRecordClaim(recordValue: any, decisionAt: string, observedAt: string) {
+  recordValue.decisionTime = decisionAt;
+  recordValue.recordedAt = plus(decisionAt, 1_000);
+  retimeClaim(recordValue.claims[0], decisionAt, observedAt);
+  retimeSource(recordValue, recordValue.claims[0].sourceId, observedAt);
+}
+
+function retimeClaim(claimValue: any, decisionAt: string, observedAt: string) {
+  claimValue.observedAt = observedAt;
+  claimValue.decisionTime = decisionAt;
+  claimValue.provenance.observedAt = observedAt;
+  claimValue.provenance.retrievedAt = observedAt;
+  claimValue.decisions.serviceChange.alertContext.observedAt = decisionAt;
+  claimValue.decisions.serviceChange.alertContext.retrievedAt = decisionAt;
+  claimValue.decisions.serviceChange.alertContext.alertContextIdentity = sourceAlertIdentity(decisionAt);
+}
+
+function retimeSource(recordValue: any, sourceId: string, observedAt: string) {
+  const source = recordValue.sources.find((row: any) => row.sourceId === sourceId);
+  source.observedAt = observedAt;
+  source.retrievedAt = observedAt;
+}
+
+function movementIdentity(claimValue: any, at: string, status: string, stopIdValue: string, sequence: number) {
+  const call = stopCall(stopIdValue, sequence);
+  return `movement:${sha256(encodeCanonicalStringTuple([claimValue.sourceId, claimValue.operationalTrainId, at, status,
+    stopIdValue, String(sequence), call]))}`;
+}
+function targetIdentity(claimValue: any, at: string) { return `target:${sha256(encodeCanonicalStringTuple([
+  claimValue.sourceId, claimValue.operationalTrainId, claimValue.targetStopCallIdentity, at,
+]))}`; }
+function issuedContextCommitment(raw: string) { return `issued-alert-context:${sha256(raw)}`; }
 
 function stopCall(stopId: string, sequence: number) { return `${stopId}\u0000sequence:${sequence}`; }
 function plus(value: string, milliseconds: number) { return new Date(Date.parse(value) + milliseconds).toISOString(); }

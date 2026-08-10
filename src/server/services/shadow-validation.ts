@@ -124,7 +124,12 @@ function governedAdmissionEvidence(
   if (!movement || movement.currentStatus === 'UNKNOWN' || !movement.movementTimestamp
     || movement.movementTimestamp.getTime() <= Date.parse(prior.observedAt)
     || input.decisionTime.getTime() - movement.movementTimestamp.getTime() > 90_000
-    || movement.movementTimestamp.getTime() > input.decisionTime.getTime()) return null;
+    || movement.movementTimestamp.getTime() > input.decisionTime.getTime()
+    || !movement.stopId || movement.currentStopSequence === null) return null;
+  let movementStopCallIdentity: string;
+  try { movementStopCallIdentity = canonicalStopCallIdentity({ stopId: movement.stopId, sourceStopSequence: movement.currentStopSequence }); }
+  catch { return null; }
+  if (movementStopCallIdentity !== claim.nextStopCallIdentity) return null;
   const arrivalAt = target.arrivalTime ?? target.departureTime;
   if (!arrivalAt || arrivalAt.getTime() <= input.decisionTime.getTime() || !target.scheduledTrack || target.actualTrack !== target.scheduledTrack) return null;
   const decision = admitArrivalCandidate({
@@ -144,11 +149,14 @@ function governedAdmissionEvidence(
   if (decision.kind !== 'admitted' || decision.stopCallIdentity !== targetIdentity) return null;
   const movementTimestamp = movement.movementTimestamp.toISOString();
   const movementStatus = movement.currentStatus;
+  const movementStopId = movement.stopId;
+  const movementStopSequence = movement.currentStopSequence;
   const base = {
     earlierRecordId: input.priorRecord.recordId, priorClaimKey: prior.claimKey, priorObservedAt: prior.observedAt,
     priorRemainingStopCallIdentities: prior.remainingStopCallIdentities, movementTimestamp, movementStatus,
+    movementStopId, movementStopSequence, movementStopCallIdentity,
     movementEvidenceIdentity: canonicalMovementEvidenceIdentity({ sourceId: claim.sourceId, trainIdentity: claim.operationalTrainId,
-      movementTimestamp, movementStatus, stopCallIdentity: claim.nextStopCallIdentity }),
+      movementTimestamp, movementStatus, movementStopId, movementStopSequence, movementStopCallIdentity }),
     targetEventAt: arrivalAt.toISOString(), targetStopCallIdentity: targetIdentity,
     targetEvidenceIdentity: canonicalTargetEvidenceIdentity({ sourceId: claim.sourceId, trainIdentity: claim.operationalTrainId,
       targetStopCallIdentity: targetIdentity, targetEventAt: arrivalAt.toISOString() }), scheduledTrack: target.scheduledTrack,
@@ -160,7 +168,7 @@ function governedAdmissionEvidence(
     issuedAlertContextDigest: '',
     admittedStopCallIdentity: decision.stopCallIdentity,
   };
-  base.issuedAlertContextDigest = canonicalIssuedAlertContextDigest(base);
+  base.issuedAlertContextDigest = canonicalIssuedAlertContextDigest(service.alertContextIdentity);
   return Object.freeze({ ...base, serviceDecisionDigest: canonicalServiceDecisionDigest(base) });
 }
 

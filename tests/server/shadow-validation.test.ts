@@ -178,6 +178,40 @@ describe('shadow station-claim decisions', () => {
     }));
     const [admissionCandidate, admissionScope] = admissionSpy.mock.calls[0];
     expect(admissionScope.serviceAlertContextIdentity).toBe(admissionCandidate.serviceChangeGate?.alertContextIdentity);
+    expect(claims[0].admissionEvidence.issuedAlertContextDigest).toBe(
+      `issued-alert-context:${createHash('sha256').update(admissionCandidate.serviceChangeGate!.alertContextIdentity).digest('hex')}`,
+    );
+    expect(JSON.stringify(claims[0])).not.toContain(admissionCandidate.serviceChangeGate!.alertContextIdentity);
+    admissionSpy.mockRestore();
+  });
+
+  test.each([
+    ['mismatched stop id', (vehicle: any) => { vehicle.stopId = 'A14N'; }],
+    ['mismatched stop sequence', (vehicle: any) => { vehicle.currentStopSequence = 3; }],
+    ['missing stop sequence', (vehicle: any) => { vehicle.currentStopSequence = null; }],
+    ['a repeated-stop occurrence other than the next call', (vehicle: any) => { vehicle.currentStopSequence = 3; }],
+  ])('suppresses admission when vehicle progress owns %s', async (_label, alter) => {
+    const admissionModule = await import('../../src/shared/domain/arrival-admission');
+    const admissionSpy = vi.spyOn(admissionModule, 'admitArrivalCandidate');
+    const { projectShadowClaims } = await import('../../src/server/services/shadow-validation') as any;
+    const currentAt = new Date('2026-08-10T12:02:00.000Z');
+    const currentTrip = trip('train-vehicle-owner', true, currentAt);
+    currentTrip.remainingStopCalls = _label.includes('repeated') ? [
+      { remainingOrder: 0, sourceStopSequence: 2, stopId: 'A16N', arrivalTime: new Date(currentAt.getTime() + 60_000), departureTime: new Date(currentAt.getTime() + 70_000), scheduleRelationship: null, scheduledTrack: '1', actualTrack: '1' },
+      { remainingOrder: 1, sourceStopSequence: 3, stopId: 'A16N', arrivalTime: new Date(currentAt.getTime() + 120_000), departureTime: new Date(currentAt.getTime() + 130_000), scheduleRelationship: null, scheduledTrack: '1', actualTrack: '1' },
+    ] : [
+      { remainingOrder: 0, sourceStopSequence: 2, stopId: 'A16N', arrivalTime: new Date(currentAt.getTime() + 60_000), departureTime: new Date(currentAt.getTime() + 70_000), scheduleRelationship: null, scheduledTrack: '1', actualTrack: '1' },
+    ];
+    currentTrip.vehicleProgress!.currentStopSequence = 2;
+    currentTrip.vehicleProgress!.stopId = 'A16N';
+    alter(currentTrip.vehicleProgress);
+    const claims = projectShadowClaims({
+      snapshot: snapshot([currentTrip], currentAt), sourceRecord: acceptedSource(currentAt),
+      alertSnapshot: alertSnapshot(currentAt, currentAt), alertSourceRecord: acceptedAlertSource(currentAt, currentAt),
+      priorRecord: priorRecordFor('train-vehicle-owner'), decisionTime: currentAt,
+    });
+    expect(claims.every((claim: any) => claim.disposition === 'suppressed')).toBe(true);
+    expect(admissionSpy).not.toHaveBeenCalled();
     admissionSpy.mockRestore();
   });
 });
