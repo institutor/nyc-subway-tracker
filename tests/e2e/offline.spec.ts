@@ -112,37 +112,99 @@ test('presents the exact five owner stages and stage 1–4 invalidations before 
   await expect(page.getByText('Surface map · focus map-point-a12 · reading point-a12', { exact: true })).toBeVisible();
 });
 
-test('runs the real App reconnection owner adapter without restoring a stored train from one snapshot', async ({ page, request }) => {
+test('runs every adverse and optional owner branch inside the real App without losing rider context', async ({ page, request }) => {
   await openValidationDeck(page);
-  await chooseScenario(page, 'Reconnect · app-integrated active trip');
-  const scenario = page.getByRole('region', { name: 'Scenario: Reconnect · app-integrated active trip' });
-  await scenario.getByRole('toolbar', { name: 'Nearby controls' }).getByRole('button', { name: 'Choose a station' }).click();
-  await scenario.getByRole('button', { name: '125 St', exact: true }).click();
-  await scenario.getByRole('navigation', { name: 'Primary' }).getByRole('button', { name: 'Map', exact: true }).click();
-  await scenario.getByRole('combobox', { name: 'Destination station' }).fill('Canal');
-  await scenario.getByRole('option', { name: /Canal St/ }).click();
-  await scenario.getByRole('button', { name: 'Plan current trip' }).click();
-  await scenario.getByRole('button', { name: 'Use this trip' }).first().click();
-  await scenario.getByRole('button', { name: "I'm at this stop: Canal St" }).click();
-  await request.post(`${FIXTURE_ORIGIN}/__test/requests/clear`);
+  for (const branch of [
+    {
+      scenario: 'Reconnect · app stage 1 path invalidation',
+      warning: /required accessible path could not be reverified/u,
+      receipt: 'Equipment Unknown',
+      accessible: true,
+    },
+    {
+      scenario: 'Reconnect · app stage 2 service and transfer invalidation',
+      warning: /Service changes could not be resolved for the stored trip/u,
+      receipt: 'Affected transfer transfer-1',
+      accessible: false,
+    },
+    {
+      scenario: 'Reconnect · app stage 3 one-snapshot withholding',
+      warning: /stored train choice has only one coherent fresh snapshot/u,
+      receipt: 'One coherent fresh snapshot · arrivals remain withheld',
+      accessible: false,
+    },
+    {
+      scenario: 'Reconnect · app stage 4 required guidance invalidation',
+      warning: /Required positioning or transfer guidance could not be reverified/u,
+      receipt: 'Required guidance removed',
+      accessible: false,
+    },
+  ] as const) {
+    await chooseScenario(page, branch.scenario);
+    const scenario = await prepareAppRecovery(page, branch.scenario);
+    await expectServerTransitionOrder(page, branch.scenario);
+    const warning = scenario.getByText(branch.warning).first();
+    await expect(warning).toBeVisible();
+    await expect(scenario.getByText(branch.receipt, { exact: true })).toBeVisible();
+    await expectPreservedAppContext(scenario, branch.accessible);
+    await expectWarningBeforeTripAndMap(warning, scenario);
+  }
 
-  await scenario.getByRole('button', { name: 'Simulate offline' }).click();
-  await expect(scenario.getByText('Offline—live arrivals, alerts, and elevator status are unavailable.', { exact: true })).toBeVisible();
-  await scenario.getByRole('button', { name: 'Reconnect owners' }).click();
-  await expectServerTransitionOrder(page, 'Reconnect · app-integrated active trip');
-  const warning = scenario.getByText(/The stored train choice could not be readmitted\./).first();
-  await expect(warning).toBeVisible();
-  const trip = scenario.getByRole('region', { name: 'Device-held active trip' });
-  await expect(trip.getByTestId('trip-point-point-1-2')).toContainText('Current');
-  await expect(scenario.getByRole('heading', { name: 'Map', exact: true, level: 2 })).toBeVisible();
-  expect(await warning.evaluate((node, tripNode) => (
-    Boolean(node.compareDocumentPosition(tripNode as Node) & Node.DOCUMENT_POSITION_FOLLOWING)
-  ), await trip.elementHandle())).toBe(true);
+  const optionalName = 'Reconnect · app optional guidance removed' as const;
+  await chooseScenario(page, optionalName);
+  const optional = await prepareAppRecovery(page, optionalName);
+  await expectServerTransitionOrder(page, optionalName);
+  await expect(optional.getByText('Optional guidance removed; trip remains valid.', { exact: true })).toBeVisible();
+  await expect(optional.getByText(/Required positioning or transfer guidance could not be reverified/u)).toHaveCount(0);
+  await expectPreservedAppContext(optional, false);
+
+  const positiveName = 'Reconnect · app stage 3 two-snapshot recovery' as const;
+  await chooseScenario(page, positiveName);
+  const positive = await prepareAppRecovery(page, positiveName);
+  await expectServerTransitionOrder(page, positiveName);
+  await expect(positive.getByText('Two coherent fresh snapshots · stored train readmitted', { exact: true })).toBeVisible();
+  await expect(positive.getByText(/stored train choice has only one coherent fresh snapshot/u)).toHaveCount(0);
+  await expectPreservedAppContext(positive, false);
 
   const requests = await request.get(`${FIXTURE_ORIGIN}/__test/requests`);
   const log = await requests.json() as { requests: readonly string[] };
-  expect(log.requests.filter((entry) => /GET \/api\/v1\/stations\/A12\/board/u.test(entry))).toHaveLength(1);
+  expect(log.requests.filter((entry) => /GET \/api\/v1\/stations\/A12\/board/u.test(entry)).length).toBeGreaterThanOrEqual(2);
 });
+
+async function prepareAppRecovery(page: Page, name: string) {
+  const scenario = page.getByRole('region', { name: `Scenario: ${name}` });
+  await expect(scenario.getByRole('heading', { name: 'Map', exact: true, level: 2 })).toBeVisible();
+  await scenario.getByRole('button', { name: 'Simulate offline' }).click();
+  await expect(scenario.getByText('Offline—live arrivals, alerts, and elevator status are unavailable.', { exact: true })).toBeVisible();
+  const trip = scenario.getByRole('region', { name: 'Device-held active trip' });
+  await expect(trip.getByTestId('trip-point-point-1-1')).toContainText('Current');
+  await scenario.getByRole('button', { name: 'Reconnect owners' }).focus();
+  await scenario.getByRole('button', { name: 'Reconnect owners' }).click();
+  return scenario;
+}
+
+async function expectPreservedAppContext(scenario: import('@playwright/test').Locator, accessible: boolean) {
+  const trip = scenario.getByRole('region', { name: 'Device-held active trip' });
+  await expect(trip.getByTestId('trip-point-point-1-1')).toContainText('Current');
+  await expect(scenario.getByRole('heading', { name: 'Map', exact: true, level: 2 })).toBeVisible();
+  const receipt = scenario.getByRole('region', { name: 'App-integrated owner receipt' });
+  await expect(receipt.getByText(`Accessible Route Only · ${accessible ? 'On' : 'Off'}`, { exact: true })).toBeVisible();
+  await expect(receipt.getByText('Cursor point-1-1 · filters A', { exact: true })).toBeVisible();
+  await expect(receipt.getByText(/^Map actual · day · viewport-/u)).toBeVisible();
+  await expect(receipt.getByText('Surface map · focus app-reconnect-owners · reading point-1-1', { exact: true })).toBeVisible();
+}
+
+async function expectWarningBeforeTripAndMap(warning: import('@playwright/test').Locator, scenario: import('@playwright/test').Locator) {
+  const trip = scenario.getByRole('region', { name: 'Device-held active trip' });
+  const map = scenario.getByRole('heading', { name: 'Map', exact: true, level: 2 });
+  expect(await warning.evaluate((node, target) => (
+    Boolean(node.compareDocumentPosition(target as Node) & Node.DOCUMENT_POSITION_FOLLOWING)
+  ), await trip.elementHandle())).toBe(true);
+  expect(await warning.evaluate((node, target) => (
+    Boolean(node.compareDocumentPosition(target as Node) & Node.DOCUMENT_POSITION_FOLLOWING)
+  ), await map.elementHandle())).toBe(true);
+  expect(await warning.ariaSnapshot()).toContain('Trip update');
+}
 
 async function expectStageOrder(page: Page): Promise<void> {
   await expect(page.getByRole('list', { name: 'Presented reconnection stages' }).getByRole('listitem')).toHaveText([

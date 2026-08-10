@@ -41,6 +41,7 @@ import {
 } from './recovery/app-reconnection-loader';
 import {
   runReconnection,
+  type ReconnectionStageRequest,
   type ReconnectionTransition,
 } from './recovery/run-reconnection';
 import {
@@ -76,8 +77,27 @@ import { DataStatusView } from './views/DataStatusView';
 import type {
   PreservedReconnectionContext,
   ReconnectionScopeMembership,
+  ReconnectionStageResult,
   ReconnectionState,
 } from '../shared/domain/reconnection';
+
+export type AppReconnectionOwnerLoadResult =
+  | { readonly kind: 'use-default' }
+  | { readonly kind: 'owner-result'; readonly result: ReconnectionStageResult | undefined };
+
+export interface AppReconnectionOwnerAdapter {
+  readonly equipmentScopes?: readonly (ReconnectionScopeMembership & { readonly kind: 'machine' })[];
+  readonly accessiblePathScopes?: readonly (ReconnectionScopeMembership & { readonly kind: 'path' })[];
+  readonly positioningScopes?: readonly (ReconnectionScopeMembership & { readonly kind: 'platform' })[];
+  readonly guidanceRequirements?: {
+    readonly positioning?: 'required' | 'optional' | 'none';
+    readonly transfer?: 'required' | 'optional' | 'none';
+  };
+  readonly loadStage: (
+    request: ReconnectionStageRequest,
+    signal: AbortSignal,
+  ) => Promise<AppReconnectionOwnerLoadResult>;
+}
 
 export interface AppProps {
   readonly api?: TransitApiClient;
@@ -87,6 +107,7 @@ export interface AppProps {
   readonly connectivityOptions?: UseConnectivityOptions;
   readonly recoveryNow?: () => Date;
   readonly onReconnectionTransition?: (transition: ReconnectionTransition) => void;
+  readonly reconnectionOwners?: AppReconnectionOwnerAdapter;
   readonly initialSurface?: AppState['surface'];
   readonly commuteNotifications?: {
     readonly stage: 'disabled' | 'deterministic-test' | 'silent-evaluation' | 'pilot' | 'delivery';
@@ -115,6 +136,7 @@ export function App({
   connectivityOptions,
   recoveryNow,
   onReconnectionTransition,
+  reconnectionOwners,
   initialSurface,
   commuteNotifications,
 }: AppProps = {}) {
@@ -399,9 +421,10 @@ export function App({
       recoveryInputKey,
       generation,
       startedAt,
+      reconnectionOwners,
     });
     const artifacts: AppReconnectionArtifacts = {};
-    const loadStage = createAppReconnectionStageLoader({
+    const defaultLoadStage = createAppReconnectionStageLoader({
       api: apiClient,
       stationId,
       filters: state.filters,
@@ -410,6 +433,13 @@ export function App({
       activeTrip,
       now: recoveryNow,
     });
+    const loadStage = async (request: ReconnectionStageRequest, signal: AbortSignal) => {
+      if (!reconnectionOwners) return defaultLoadStage(request, signal);
+      const ownerResult = await reconnectionOwners.loadStage(request, signal);
+      return ownerResult.kind === 'owner-result'
+        ? ownerResult.result
+        : defaultLoadStage(request, signal);
+    };
 
     void runReconnection({
       context,
@@ -454,6 +484,7 @@ export function App({
     mapContext,
     mapVersions,
     onReconnectionTransition,
+    reconnectionOwners,
     recoveryInputKey,
     recoveryNow,
     savedRecords,
@@ -1096,6 +1127,7 @@ function createAppReconnectionContext(input: {
   readonly recoveryInputKey: string;
   readonly generation: number;
   readonly startedAt: string;
+  readonly reconnectionOwners?: AppReconnectionOwnerAdapter;
 }): PreservedReconnectionContext {
   const cursor = input.activeTrip?.legs
     .map((leg, legIndex) => ({ leg, legIndex }))
@@ -1134,6 +1166,25 @@ function createAppReconnectionContext(input: {
   const transferOwnerScopes: readonly ReconnectionScopeMembership[] = upcomingTransfers.length > 0
     ? upcomingTransfers.map(({ id }) => ({ kind: 'transfer' as const, id }))
     : legOwnerScopes;
+  const retainedEquipmentScopes = input.activeTrip?.equipmentClaims.map(({ equipmentId }) => ({
+    kind: 'machine' as const, id: equipmentId,
+  })) ?? [];
+  const retainedPathScopes = input.activeTrip?.equipmentClaims.map(({ pathId }) => ({
+    kind: 'path' as const, id: pathId,
+  })) ?? [];
+  const retainedOwnersComplete = retainedEquipmentScopes.length > 0 && retainedPathScopes.length > 0;
+  const retainedFallbackScopes = input.activeTrip?.accessibleRouteOnly ? legOwnerScopes : [];
+  const defaultEquipmentScopes = retainedOwnersComplete ? retainedEquipmentScopes : retainedFallbackScopes;
+  const defaultPathScopes = retainedOwnersComplete ? retainedPathScopes : retainedFallbackScopes;
+  const injectedEquipmentScopes = boundedInjectedScopes(input.reconnectionOwners?.equipmentScopes, 'machine');
+  const injectedPathScopes = boundedInjectedScopes(input.reconnectionOwners?.accessiblePathScopes, 'path');
+  const accessibilityOwnersComplete = injectedEquipmentScopes.length > 0 && injectedPathScopes.length > 0;
+  const equipmentOwnerScopes = accessibilityOwnersComplete ? injectedEquipmentScopes : defaultEquipmentScopes;
+  const pathOwnerScopes = accessibilityOwnersComplete ? injectedPathScopes : defaultPathScopes;
+  const positioningOwnerScopes = boundedInjectedScopes(input.reconnectionOwners?.positioningScopes, 'platform');
+  const serviceOwnerScopes = input.activeTrip
+    ? [...legOwnerScopes, ...transferOwnerScopes.filter(({ kind }) => kind === 'transfer')]
+    : stationOwnerScopes;
   const savedOwnerScopes: readonly ReconnectionScopeMembership[] = input.savedRecords
     .filter(({ constituentId }) => constituentId !== input.stationId)
     .map(({ id }) => ({ kind: 'saved-record' as const, id }));
@@ -1147,6 +1198,9 @@ function createAppReconnectionContext(input: {
     ...(input.activeTrip?.legs.map(({ id }) => ({ kind: 'leg' as const, id })) ?? []),
     ...(input.activeTrip?.transfers.map(({ id }) => ({ kind: 'transfer' as const, id })) ?? []),
     ...(storedTrainChoice ? [{ kind: 'train' as const, id: storedTrainChoice }] : []),
+    ...equipmentOwnerScopes,
+    ...pathOwnerScopes,
+    ...positioningOwnerScopes,
   ];
   const eligibleScopes = scopes.filter((scope, index) => scopes.findIndex((candidate) => (
     candidate.kind === scope.kind && candidate.id === scope.id
@@ -1173,8 +1227,12 @@ function createAppReconnectionContext(input: {
       : null,
     hasStoredTrainChoice: storedTrainChoice !== null,
     guidanceRequirements: {
-      positioning: 'none',
-      transfer: upcomingTransfers.length > 0 ? 'required' : 'none',
+      positioning: positioningOwnerScopes.length > 0
+        ? input.reconnectionOwners?.guidanceRequirements?.positioning ?? 'none'
+        : 'none',
+      transfer: upcomingTransfers.length > 0
+        ? input.reconnectionOwners?.guidanceRequirements?.transfer ?? 'required'
+        : 'none',
     },
     activeSurface: input.state.surface === 'nearby' && input.stationOpen
       ? 'station'
@@ -1193,19 +1251,30 @@ function createAppReconnectionContext(input: {
       contextKey,
       eligibleScopes,
       ownerScopes: {
-        equipment: [],
-        'accessible-path': [],
-        'service-change': input.activeTrip ? legOwnerScopes : stationOwnerScopes,
+        equipment: equipmentOwnerScopes,
+        'accessible-path': pathOwnerScopes,
+        'service-change': serviceOwnerScopes,
         'feed-health': stationOwnerScopes,
         'train-admission': trainOwnerScopes,
         arrivals: stationOwnerScopes,
-        positioning: [],
+        positioning: positioningOwnerScopes,
         'transfer-guidance': transferOwnerScopes,
         maps: [mapScope],
         saved: savedOwnerScopes.length > 0 ? savedOwnerScopes : [contextScope],
       },
     },
   };
+}
+
+function boundedInjectedScopes<K extends 'machine' | 'path' | 'platform'>(
+  scopes: readonly (ReconnectionScopeMembership & { readonly kind: K })[] | undefined,
+  kind: K,
+): readonly (ReconnectionScopeMembership & { readonly kind: K })[] {
+  if (!scopes || scopes.length === 0 || scopes.length > 16) return [];
+  const bounded = scopes.filter((scope) => (
+    scope.kind === kind && /^[A-Za-z0-9][A-Za-z0-9:_-]{0,127}$/u.test(scope.id)
+  ));
+  return bounded.filter((scope, index) => bounded.findIndex((candidate) => candidate.id === scope.id) === index);
 }
 
 function activeTrainChoice(activeTrip: ActiveTripRecord | null, legId: string): string | null {

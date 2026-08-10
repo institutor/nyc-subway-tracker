@@ -2,11 +2,13 @@ import type {
   BoardEnvelopeDto,
   JourneyEnvelopeDto,
   JourneyItineraryDto,
+  LiveArrivalDto,
   MapOverlayEnvelopeDto,
   TransitApiClient,
 } from '../api/client';
 import type { ActiveTripRecord } from '../storage/active-trip-store';
 import type { Direction } from '../../shared/domain/types';
+import { serviceDateTimeToInstant } from '../../shared/domain/clock';
 import type {
   OwnerAcceptance,
   PreservedReconnectionContext,
@@ -15,6 +17,8 @@ import type {
   ReconnectionStageResult,
 } from '../../shared/domain/reconnection';
 import type { ReconnectionStageRequest } from './run-reconnection';
+
+const SELECTED_DEPARTURE_TOLERANCE_MS = 90_000;
 
 export interface AppReconnectionArtifacts {
   selectedBoard?: BoardEnvelopeDto;
@@ -316,10 +320,50 @@ async function loadArrivals(
   if (!options.stationId) return undefined;
   const first = await options.api.board(options.stationId, options.filters, signal);
   if (!isFreshBoard(first, context, options.stationId)) return undefined;
-  // A stored train identity cannot be re-admitted from one board snapshot.
-  // Observe the first owner snapshot, then leave the coordinator to fail closed.
-  if (context.hasStoredTrainChoice) return undefined;
   const firstAcceptedAt = exactNow(options.now);
+  if (context.hasStoredTrainChoice) {
+    const second = await options.api.board(options.stationId, options.filters, signal);
+    if (!isFreshBoard(second, context, options.stationId)
+      || first.responseIdentity === second.responseIdentity
+      || Date.parse(second.decidedAt) < Date.parse(first.decidedAt)
+      || !coherentlyTracksStoredTrain(first, second, options.activeTrip)) {
+      return oneSnapshotWithheld(context, first, firstAcceptedAt);
+    }
+    const secondAcceptedAt = exactNow(options.now);
+    const scope = stationScope(context, options.stationId);
+    const firstSnapshot = acceptedGate(
+      context, 'arrivals', first.responseIdentity, first.decidedAt, firstAcceptedAt, scope,
+    );
+    const secondSnapshot = acceptedGate(
+      context, 'arrivals', second.responseIdentity, second.decidedAt, secondAcceptedAt, scope,
+    );
+    options.artifacts.selectedBoard = second;
+    return {
+      stage: 3,
+      feedRecovery: {
+        gate: acceptedGate(context, 'feed-health', second.responseIdentity, second.decidedAt, secondAcceptedAt, scope),
+        disposition: 'readmitted',
+      },
+      trainReadmission: {
+        gate: acceptedGate(
+          context, 'train-admission', second.responseIdentity, second.decidedAt, secondAcceptedAt,
+          ownerScope(context, 'train-admission'),
+        ),
+        disposition: 'admitted',
+      },
+      arrivals: {
+        gate: acceptedGate(
+          context, 'arrivals', `${first.responseIdentity}:${second.responseIdentity}`,
+          second.decidedAt, secondAcceptedAt, scope,
+        ),
+        disposition: 'current',
+        freshSnapshotCount: 2,
+        freshSnapshots: [firstSnapshot, secondSnapshot],
+      },
+      storedTrainChoice: 'verified',
+      invalidation: null,
+    };
+  }
   const second = await options.api.board(options.stationId, options.filters, signal);
   if (!isFreshBoard(second, context, options.stationId)
     || first.responseIdentity === second.responseIdentity
@@ -359,6 +403,97 @@ async function loadArrivals(
     storedTrainChoice: 'none',
     invalidation: null,
   };
+}
+
+function oneSnapshotWithheld(
+  context: PreservedReconnectionContext,
+  first: BoardEnvelopeDto,
+  acceptedAt: string,
+): ReconnectionStageResult {
+  const stationScopes = ownerScope(context, 'arrivals');
+  const trainScopes = ownerScope(context, 'train-admission');
+  const feed = acceptedGate(
+    context, 'feed-health', first.responseIdentity, first.decidedAt, acceptedAt, ownerScope(context, 'feed-health'),
+  );
+  const train = failClosedGate(
+    context,
+    'train-admission',
+    acceptedAt,
+    trainScopes,
+    'A stored train requires two coherent fresh board snapshots.',
+  );
+  const snapshot = acceptedGate(
+    context, 'arrivals', first.responseIdentity, first.decidedAt, acceptedAt, stationScopes,
+  );
+  const arrivals = acceptedGate(
+    context, 'arrivals', `${first.responseIdentity}:one-coherent-snapshot`, first.decidedAt, acceptedAt, stationScopes,
+  );
+  return {
+    stage: 3,
+    feedRecovery: { gate: feed, disposition: 'readmitted' },
+    trainReadmission: { gate: train, disposition: 'blocked' },
+    arrivals: {
+      gate: arrivals,
+      disposition: 'withheld',
+      freshSnapshotCount: 1,
+      freshSnapshots: [snapshot],
+    },
+    storedTrainChoice: 'unverified',
+    invalidation: {
+      id: `${context.recovery.requestIdentity}:warning:3:${train.evidenceId}`,
+      stage: 3,
+      ownerGate: train,
+      changedFact: 'The stored train choice has only one coherent fresh snapshot.',
+      scopes: trainScopes.filter(isTripScope).map((scope) => ({ ...scope, label: `${scope.kind} ${scope.id}` })),
+      consequence: 'Use the historical arrival only as a past observation.',
+      lastVerifiedDecisionPoint: context.manualCursor
+        ? { id: context.manualCursor.stopId, label: `Stored trip point ${context.manualCursor.stopId}` }
+        : null,
+      verifiedAlternative: null,
+    },
+  };
+}
+
+function coherentlyTracksStoredTrain(
+  first: BoardEnvelopeDto,
+  second: BoardEnvelopeDto,
+  trip: ActiveTripRecord | null,
+): boolean {
+  if (!trip) return false;
+  const cursorLeg = trip.legs.find((leg) => leg.points.some(({ id }) => id === trip.cursor.pointId));
+  if (!cursorLeg) return false;
+  const schedule = trip.validity.schedule;
+  if (schedule.kind !== 'current' && schedule.kind !== 'stale') return false;
+  const departures = schedule.departures.filter(({ legId, pointId }) => (
+    legId === cursorLeg.id && pointId === trip.cursor.pointId
+  ));
+  if (departures.length !== 1) return false;
+  const selectedDeparture = departures[0]!;
+  let selectedAt: number;
+  try {
+    const clockTime = /^\d{2}:\d{2}$/u.test(selectedDeparture.clockTime)
+      ? `${selectedDeparture.clockTime}:00`
+      : selectedDeparture.clockTime;
+    selectedAt = serviceDateTimeToInstant(trip.validity.serviceDate, clockTime, 'reject').getTime();
+  } catch {
+    return false;
+  }
+  const selectedWindowMs = SELECTED_DEPARTURE_TOLERANCE_MS;
+  const candidates = (board: BoardEnvelopeDto) => board.data?.directions
+    .flatMap(({ primary }) => primary)
+    .filter((arrival): arrival is LiveArrivalDto => arrival.kind === 'live'
+      && arrival.route.id === cursorLeg.route.id
+      && arrival.direction === cursorLeg.boundDirection
+      && arrival.destination === cursorLeg.actualDestination
+      && Math.abs(Date.parse(arrival.at) - selectedAt) <= selectedWindowMs) ?? [];
+  const firstCandidates = candidates(first);
+  const secondCandidates = candidates(second);
+  if (firstCandidates.length !== 1 || secondCandidates.length !== 1) return false;
+  const previous = firstCandidates[0]!;
+  const current = secondCandidates[0]!;
+  return previous.id === current.id
+    && Date.parse(current.at) >= Date.parse(previous.at)
+    && Date.parse(current.at) - Date.parse(previous.at) <= selectedWindowMs;
 }
 
 async function loadBackground(

@@ -76,7 +76,8 @@ const currentJourney = planJourney(journeyGraphFixture, {
 if (currentJourney.kind !== 'planned' || !currentJourney.itineraries[0]) {
   throw new Error('Browser journey fixture must produce one current itinerary');
 }
-const currentJourneyItinerary = currentJourney.itineraries[0];
+const currentJourneyItineraries = currentJourney.itineraries;
+type CurrentJourneyItinerary = typeof currentJourneyItineraries[number];
 
 const mapReferences = {
   day: {
@@ -353,7 +354,10 @@ function createSnapshot(): DecisionSnapshot {
       }],
     } : { mapOverlays: [] }),
     journeyGraph: journeyGraphFixture,
-    journeyCaptures: [journeyCapture(capturedAt)],
+    journeyCaptures: currentJourneyItineraries.flatMap((itinerary) => [
+      journeyCapture(itinerary, capturedAt, false),
+      journeyCapture(itinerary, capturedAt, true),
+    ]),
   };
 }
 
@@ -391,7 +395,11 @@ function nearbySnapshot(): NonNullable<DecisionSnapshot['nearby']> {
   return { complexes, constituents, entrances, services };
 }
 
-function journeyCapture(capturedAt: Date): JourneyCapturePackage {
+function journeyCapture(
+  itinerary: CurrentJourneyItinerary,
+  capturedAt: Date,
+  accessibleRouteOnly: boolean,
+): JourneyCapturePackage {
   const instant = capturedAt.toISOString();
   const serviceDate = new Intl.DateTimeFormat('en-CA', {
     timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit',
@@ -399,9 +407,9 @@ function journeyCapture(capturedAt: Date): JourneyCapturePackage {
   const anchorAt = new Date(capturedAt.getTime() - 3_600_000).toISOString();
   const lastRetrievedAt = new Date(capturedAt.getTime() - 30_000).toISOString();
   return {
-    itineraryId: currentJourneyItinerary.id,
+    itineraryId: itinerary.id,
     requestMode: 'online-current',
-    scope: { mode: 'online-current', originStationId: 'A12', destinationStationId: 'R20', accessibleRouteOnly: false },
+    scope: { mode: 'online-current', originStationId: 'A12', destinationStationId: 'R20', accessibleRouteOnly },
     serviceDate,
     timing: 'timed',
     capturedAt: instant,
@@ -413,7 +421,7 @@ function journeyCapture(capturedAt: Date): JourneyCapturePackage {
         kind: 'current', editionId: 'fixture-supplemented-edition', anchorKind: 'published',
         anchorAt, lastRetrievedAt, effectiveFrom: serviceDate, effectiveUntil: serviceDate,
         currencyAgeSeconds: 3_600,
-        departures: currentJourneyItinerary.legs.map((leg) => ({
+        departures: itinerary.legs.map((leg) => ({
           patternId: leg.patternId,
           occurrenceId: leg.orderedOccurrenceIds[0],
           clockTime: '08:15',
@@ -423,7 +431,7 @@ function journeyCapture(capturedAt: Date): JourneyCapturePackage {
       },
       warnings: [], vetoes: [],
     },
-    serviceClaims: currentJourneyItinerary.legs.slice(0, 1).map((leg) => ({
+    serviceClaims: itinerary.legs.slice(0, 1).map((leg) => ({
       id: `service-claim-${leg.patternId}`,
       scope: { kind: 'pattern' as const, patternId: leg.patternId, routeId: leg.routeId, direction: leg.direction },
       state: 'normal' as const,
@@ -440,7 +448,12 @@ const RECONNECTION_SCENARIOS = [
   'Reconnect · stage 3 train invalidation',
   'Reconnect · stage 4 required guidance invalidation',
   'Reconnect · optional guidance removed',
-  'Reconnect · app-integrated active trip',
+  'Reconnect · app stage 1 path invalidation',
+  'Reconnect · app stage 2 service and transfer invalidation',
+  'Reconnect · app stage 3 one-snapshot withholding',
+  'Reconnect · app stage 3 two-snapshot recovery',
+  'Reconnect · app stage 4 required guidance invalidation',
+  'Reconnect · app optional guidance removed',
 ] as const;
 type ReconnectionScenario = typeof RECONNECTION_SCENARIOS[number];
 interface ValidationTransition {
@@ -480,9 +493,9 @@ function createBoard(capturedAt: Date, observedAt: Date, retrievedAt: Date): Boa
       {
         direction: 'northbound',
         primary: [
-          arrival(`train-a-n-${snapshotSequence}`, 'A', 'northbound', 3),
-          arrival(`train-c-n-${snapshotSequence}`, 'C', 'northbound', 5),
-          arrival(`train-a-n2-${snapshotSequence}`, 'A', 'northbound', 7),
+          arrival('train-a-n', 'A', 'northbound', 3),
+          arrival('train-c-n', 'C', 'northbound', 5),
+          arrival('train-a-n2', 'A', 'northbound', 7),
         ],
         secondary: [],
         explanations: [],
@@ -490,9 +503,9 @@ function createBoard(capturedAt: Date, observedAt: Date, retrievedAt: Date): Boa
       {
         direction: 'southbound',
         primary: [
-          arrival(`train-a-s-${snapshotSequence}`, 'A', 'southbound', 4),
-          arrival(`train-c-s-${snapshotSequence}`, 'C', 'southbound', 6),
-          arrival(`train-a-s2-${snapshotSequence}`, 'A', 'southbound', 8),
+          arrival('train-a-s', 'A', 'southbound', 4),
+          arrival('train-c-s', 'C', 'southbound', 6),
+          arrival('train-a-s2', 'A', 'southbound', 8),
         ],
         secondary: [],
         explanations: [],

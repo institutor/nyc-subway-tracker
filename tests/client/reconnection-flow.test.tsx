@@ -4,7 +4,10 @@ import { describe, expect, test, vi } from 'vitest';
 
 import { App } from '../../src/client/App';
 import type { BoardEnvelopeDto, MapOverlayEnvelopeDto } from '../../src/client/api/client';
-import type { ReconnectionTransition } from '../../src/client/recovery/run-reconnection';
+import {
+  createFailClosedReconnectionStage,
+  type ReconnectionTransition,
+} from '../../src/client/recovery/run-reconnection';
 import { writeLastUsedStation } from '../../src/client/state/app-state';
 import {
   ACTIVE_TRIP_STORE_KEY,
@@ -180,6 +183,8 @@ describe('App reconnection flow', () => {
       { kind: 'leg', id: 'leg-2' },
       { kind: 'leg', id: 'leg-3' },
       { kind: 'leg', id: 'leg-4' },
+      { kind: 'transfer', id: 'transfer-2' },
+      { kind: 'transfer', id: 'transfer-3' },
     ]);
     expect(context.recovery.ownerScopes['transfer-guidance']).toEqual([
       { kind: 'transfer', id: 'transfer-2' },
@@ -187,7 +192,76 @@ describe('App reconnection flow', () => {
     ]);
   });
 
-  test('does not admit legacy scalar accessibility claims into public UI or recovery ownership', async () => {
+  test('runs injected current owner scopes through the real App coordinator while preserving rider context', async () => {
+    const storage = new MemoryStorage();
+    const activeTrip = { ...fourLegActiveTripAtMiddle(), accessibleRouteOnly: true };
+    expect(createBrowserActiveTripStore(storage).capture(activeTrip)).toMatchObject({ kind: 'saved' });
+    const navigatorState = { onLine: false };
+    const events = new ControlledConnectivityEvents();
+    const transitions: ReconnectionTransition[] = [];
+    let clock = 0;
+    const loadStage = vi.fn(async (request: Parameters<typeof createFailClosedReconnectionStage>[0] extends never
+      ? never
+      : any) => request.stage === 1
+      ? {
+          kind: 'owner-result' as const,
+          result: createFailClosedReconnectionStage(
+            request.state,
+            1,
+            'Exact path and equipment owners are unavailable.',
+            new Date(Date.parse(request.context.recovery.startedAt) + 1).toISOString(),
+          ),
+        }
+      : { kind: 'use-default' as const });
+    const reconnectionOwners = {
+      ownerSetId: 'unit-current-owner-set',
+      equipmentScopes: [{ kind: 'machine' as const, id: 'EL-unit-1' }],
+      accessiblePathScopes: [{ kind: 'path' as const, id: 'path-unit-1' }],
+      positioningScopes: [{ kind: 'platform' as const, id: 'platform-unit-1' }],
+      guidanceRequirements: { positioning: 'required' as const, transfer: 'required' as const },
+      loadStage,
+    };
+
+    render(<App {...({
+      api: createClientApi(),
+      geolocation: new ControlledGeolocation(),
+      storage,
+      connectivityOptions: { navigator: navigatorState, eventTarget: events },
+      recoveryNow: () => new Date(Date.parse('2026-08-05T12:00:00.000Z') + clock++ * 1_000),
+      reconnectionOwners,
+      onReconnectionTransition: (transition: ReconnectionTransition) => transitions.push(transition),
+    } as any)} />);
+
+    navigatorState.onLine = true;
+    act(() => events.dispatch('online'));
+    await waitFor(() => expect(transitions.some(({ phase, stage }) => phase === 'presented' && stage === 1)).toBe(true));
+
+    expect(loadStage).toHaveBeenCalledWith(expect.objectContaining({ stage: 1 }), expect.any(AbortSignal));
+    const stageOne = transitions.find(({ phase, stage }) => phase === 'presented' && stage === 1)!.state;
+    expect(stageOne.context).toMatchObject({
+      accessibleRouteOnly: true,
+      manualCursor: { legIndex: 1, stopId: 'point-transfer-1-out' },
+      readingAnchorId: 'point-transfer-1-out',
+      guidanceRequirements: { positioning: 'required', transfer: 'required' },
+    });
+    expect(stageOne.context.recovery.ownerScopes).toMatchObject({
+      equipment: [{ kind: 'machine', id: 'EL-unit-1' }],
+      'accessible-path': [{ kind: 'path', id: 'path-unit-1' }],
+      positioning: [{ kind: 'platform', id: 'platform-unit-1' }],
+      'service-change': expect.arrayContaining([
+        { kind: 'leg', id: 'leg-2' },
+        { kind: 'transfer', id: 'transfer-2' },
+      ]),
+    });
+    expect(stageOne.visible.activeWarnings).toEqual([
+      expect.objectContaining({
+        stage: 1,
+        scopes: [{ kind: 'path', id: 'path-unit-1', label: 'path path-unit-1' }],
+      }),
+    ]);
+  });
+
+  test('rejects legacy scalar claims but still fails closed for a retained Accessible Only trip', async () => {
     const storage = new MemoryStorage();
     const legacy = {
       ...timedActiveTrip(),
@@ -226,8 +300,8 @@ describe('App reconnection flow', () => {
     await waitFor(() => expect(transitions.length).toBeGreaterThan(0));
     const context = transitions[0]!.state.context;
     expect(context.guidanceRequirements.positioning).toBe('none');
-    expect(context.recovery.ownerScopes.equipment).toEqual([]);
-    expect(context.recovery.ownerScopes['accessible-path']).toEqual([]);
+    expect(context.recovery.ownerScopes.equipment).toEqual([{ kind: 'leg', id: 'leg-1' }]);
+    expect(context.recovery.ownerScopes['accessible-path']).toEqual([{ kind: 'leg', id: 'leg-1' }]);
     expect(context.recovery.ownerScopes.positioning).toEqual([]);
     expect(context.recovery.eligibleScopes).not.toContainEqual({ kind: 'path', id: 'forged-path-owner' });
     expect(context.recovery.eligibleScopes).not.toContainEqual({ kind: 'platform', id: 'forged-platform-owner' });
@@ -236,10 +310,11 @@ describe('App reconnection flow', () => {
     const stageOne = transitions.find(({ phase, stage }) => phase === 'presented' && stage === 1)?.state;
     expect(stageOne?.stages[0]?.result).toMatchObject({
       stage: 1,
-      accessiblePath: { requiredForActiveTrip: false },
-      invalidation: null,
+      equipment: { disposition: 'unknown' },
+      accessiblePath: { requiredForActiveTrip: true, disposition: 'unverified' },
+      invalidation: { stage: 1, scopes: [{ kind: 'leg', id: 'leg-1', label: 'leg leg-1' }] },
     });
-    expect(stageOne?.visible.activeWarnings.some(({ stage }) => stage === 1)).toBe(false);
+    expect(stageOne?.visible.activeWarnings.some(({ stage }) => stage === 1)).toBe(true);
   });
 });
 

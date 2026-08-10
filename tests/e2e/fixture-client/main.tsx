@@ -1,13 +1,23 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { mountClient } from '../../../src/client/bootstrap';
-import { App } from '../../../src/client/App';
-import type { BoardEnvelopeDto, NearbyEnvelopeDto } from '../../../src/client/api/client';
+import { App, type AppReconnectionOwnerAdapter } from '../../../src/client/App';
+import {
+  createTransitApiClient,
+  type BoardEnvelopeDto,
+  type NearbyEnvelopeDto,
+  type TransitApiClient,
+} from '../../../src/client/api/client';
 import { ValidationAccessibilityPanel } from '../../../src/client/components/AccessibilityPanel';
 import { StatusBanner } from '../../../src/client/components/StatusBanner';
 import { boardRequestKey, type NearbyBoardState } from '../../../src/client/components/StationCard';
 import { ThumbDock } from '../../../src/client/components/ThumbDock';
 import { transitionAccessibilityWarning, type AccessibilityWarning } from '../../../src/shared/domain/underway-warning';
+import {
+  createFailClosedReconnectionStage,
+  type ReconnectionStageRequest,
+} from '../../../src/client/recovery/run-reconnection';
+import { createBrowserActiveTripStore, type ActiveTripRecord } from '../../../src/client/storage/active-trip-store';
 import type { OwnerAcceptance, ReconnectionStage, ReconnectionState } from '../../../src/shared/domain/reconnection';
 import { CommuteView } from '../../../src/client/views/CommuteView';
 import { NearbyView } from '../../../src/client/views/NearbyView';
@@ -41,6 +51,16 @@ import {
 } from './scenario-receipts';
 import './validation.css';
 
+const APP_RECONNECTION_SCENARIOS = [
+  'Reconnect · app stage 1 path invalidation',
+  'Reconnect · app stage 2 service and transfer invalidation',
+  'Reconnect · app stage 3 one-snapshot withholding',
+  'Reconnect · app stage 3 two-snapshot recovery',
+  'Reconnect · app stage 4 required guidance invalidation',
+  'Reconnect · app optional guidance removed',
+] as const;
+type AppReconnectionScenario = typeof APP_RECONNECTION_SCENARIOS[number];
+
 const SCENARIOS = [
   'Location allowed · practical walk ranking',
   'Location denied · last used station',
@@ -55,7 +75,7 @@ const SCENARIOS = [
   'Board · unresolved service change',
   'Board · two-update recovery',
   ...RECONNECTION_SCENARIOS,
-  'Reconnect · app-integrated active trip',
+  ...APP_RECONNECTION_SCENARIOS,
   'Accessibility · synthetic verified path',
   'Accessibility · empty live registry',
   'Accessibility · last decision point',
@@ -92,7 +112,7 @@ function ValidationDeck() {
           </section>
         </div>
       </div>
-      {scenario !== 'Reconnect · app-integrated active trip'
+      {!(APP_RECONNECTION_SCENARIOS as readonly string[]).includes(scenario)
         ? <ThumbDock active="nearby" onChange={() => undefined} />
         : null}
     </main>
@@ -112,7 +132,9 @@ function ScenarioContent({ scenario }: { readonly scenario: Scenario }) {
   if (scenario === 'Board · bypass veto') return <BypassBoard />;
   if (scenario === 'Board · unresolved service change') return <UnresolvedBoard />;
   if (scenario === 'Board · two-update recovery') return <ServiceRecovery />;
-  if (scenario === 'Reconnect · app-integrated active trip') return <ControlledAppReconnection />;
+  if ((APP_RECONNECTION_SCENARIOS as readonly string[]).includes(scenario)) {
+    return <ControlledAppReconnection scenario={scenario as AppReconnectionScenario} />;
+  }
   if ((RECONNECTION_SCENARIOS as readonly string[]).includes(scenario)) {
     return <ReconnectionSurface scenario={scenario as ReconnectionScenario} />;
   }
@@ -327,44 +349,300 @@ function ReconnectionSurface({ scenario }: { readonly scenario: ReconnectionScen
   </section>;
 }
 
-function ControlledAppReconnection() {
-  const storage = useMemo(() => new MemoryStorage(), []);
+function ControlledAppReconnection({ scenario }: { readonly scenario: AppReconnectionScenario }) {
+  const recoveryClock = useRef({ base: Date.now(), calls: 0 });
+  const storage = useMemo(() => {
+    const device = new MemoryStorage();
+    const result = createBrowserActiveTripStore(device).capture(appReconnectionTrip(
+      scenario === 'Reconnect · app stage 1 path invalidation',
+      new Date(recoveryClock.current.base),
+    ));
+    if (result.kind !== 'saved') throw new Error('App reconnection fixture trip was rejected');
+    return device;
+  }, [scenario]);
   const [connectivity, setConnectivity] = useState<'online' | 'offline' | 'checking'>('online');
+  const [latestState, setLatestState] = useState<ReconnectionState>();
   const sequence = useRef(0);
   const postQueue = useRef(Promise.resolve());
-  const recoveryClock = useRef({ base: Date.now(), calls: 0 });
-  const recoveryNow = () => {
+  const recoveryStarted = useRef(false);
+  const api = useMemo(() => appRecoveryApi(scenario, recoveryStarted), [scenario]);
+  const reconnectionOwners = useMemo(() => appReconnectionOwners(scenario), [scenario]);
+  const recoveryNow = useCallback(() => {
     recoveryClock.current.calls += 1;
     return new Date(recoveryClock.current.calls === 1
       ? recoveryClock.current.base - 1_000
       : recoveryClock.current.base + recoveryClock.current.calls * 60_000);
-  };
+  }, []);
+  const onTransition = useCallback((transition: {
+    readonly state: ReconnectionState;
+    readonly phase: 'requested' | 'presented';
+    readonly stage: ReconnectionStage;
+  }) => {
+    sequence.current += 1;
+    setLatestState(transition.state);
+    const receipt = reconnectionTransitionReceipt(
+      scenario, sequence.current, transition.state, transition.phase, transition.stage,
+    );
+    postQueue.current = postQueue.current.then(async () => {
+      await fetch('/__test/transitions', {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(receipt),
+      });
+    });
+    if (transition.phase === 'presented' && transition.stage === 5) {
+      setTimeout(() => setConnectivity('online'), 0);
+    }
+  }, [scenario]);
   return <section className="app-reconnection-fixture" aria-label="App-integrated reconnection fixture">
     <div role="toolbar" aria-label="Connectivity demonstration controls" className="validation-connectivity-controls">
       <button type="button" disabled={connectivity !== 'online'} onClick={() => setConnectivity('offline')}>Simulate offline</button>
-      <button type="button" disabled={connectivity !== 'offline'} onClick={() => setConnectivity('checking')}>Reconnect owners</button>
+      <button
+        id="app-reconnect-owners"
+        type="button"
+        disabled={connectivity === 'online'}
+        onClick={() => {
+          if (connectivity !== 'offline') return;
+          recoveryStarted.current = true;
+          setConnectivity('checking');
+        }}
+      >Reconnect owners</button>
     </div>
     <App
+      api={api}
       storage={storage}
       geolocation={null}
       connectivity={connectivity}
       recoveryNow={recoveryNow}
-      onReconnectionTransition={(transition) => {
-        sequence.current += 1;
-        const receipt = reconnectionTransitionReceipt(
-          'Reconnect · app-integrated active trip', sequence.current, transition.state, transition.phase, transition.stage,
-        );
-        postQueue.current = postQueue.current.then(async () => {
-          await fetch('/__test/transitions', {
-            method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(receipt),
-          });
-        });
-        if (transition.phase === 'presented' && transition.stage === 5) {
-          setTimeout(() => setConnectivity('online'), 0);
-        }
-      }}
+      initialSurface="map"
+      {...(reconnectionOwners ? { reconnectionOwners } : {})}
+      onReconnectionTransition={onTransition}
     />
+    <AppOwnerReceipt scenario={scenario} state={latestState} />
   </section>;
+}
+
+function AppOwnerReceipt({ scenario, state }: {
+  readonly scenario: AppReconnectionScenario;
+  readonly state?: ReconnectionState;
+}) {
+  if (!state) return <p role="status">Stored owner context is ready for reconnection.</p>;
+  const stageOne = state.stages.find(({ stage }) => stage === 1)?.result;
+  const stageTwo = state.stages.find(({ stage }) => stage === 2)?.result;
+  const stageThree = state.stages.find(({ stage }) => stage === 3)?.result;
+  const stageFour = state.stages.find(({ stage }) => stage === 4)?.result;
+  return <section aria-label="App-integrated owner receipt" className="preserved-context">
+    <h2>Real App owner receipt</h2>
+    <p>Accessible Route Only · {state.context.accessibleRouteOnly ? 'On' : 'Off'}</p>
+    {stageOne?.stage === 1 && stageOne.equipment.disposition === 'unknown' ? <p>Equipment Unknown</p> : null}
+    {stageTwo?.stage === 2 && stageTwo.invalidation?.scopes.some(({ kind, id }) => kind === 'transfer' && id === 'transfer-1')
+      ? <p>Affected transfer transfer-1</p> : null}
+    {stageThree?.stage === 3 && stageThree.arrivals.freshSnapshotCount === 1
+      ? <p>One coherent fresh snapshot · arrivals remain withheld</p> : null}
+    {stageThree?.stage === 3 && stageThree.arrivals.freshSnapshotCount === 2 && stageThree.storedTrainChoice === 'verified'
+      ? <p>Two coherent fresh snapshots · stored train readmitted</p> : null}
+    {scenario === 'Reconnect · app stage 4 required guidance invalidation'
+      && stageFour?.stage === 4 && stageFour.invalidation
+      ? <p>Required guidance removed</p> : null}
+    {scenario === 'Reconnect · app optional guidance removed'
+      && stageFour?.stage === 4 && stageFour.invalidation === null
+      ? <p>Optional guidance removed; trip remains valid.</p> : null}
+    <p>Cursor {state.context.manualCursor?.stopId} · filters {state.context.routeFilters.join(', ')}</p>
+    <p>Map {state.context.mapTuple.referenceMode} · {state.context.mapTuple.theme} · {state.context.mapTuple.viewportKey}</p>
+    <p>Surface {state.context.activeSurface} · focus {state.context.focusTargetId ?? 'none'} · reading {state.context.readingAnchorId ?? 'none'}</p>
+  </section>;
+}
+
+function appReconnectionOwners(
+  scenario: AppReconnectionScenario,
+): AppReconnectionOwnerAdapter | undefined {
+  if (scenario === 'Reconnect · app stage 1 path invalidation') return undefined;
+  const stage = scenario === 'Reconnect · app stage 2 service and transfer invalidation' ? 2 as const
+    : scenario === 'Reconnect · app stage 4 required guidance invalidation'
+      || scenario === 'Reconnect · app optional guidance removed' ? 4 as const : undefined;
+  const optional = scenario === 'Reconnect · app optional guidance removed';
+  return {
+    ...(stage === 4 ? {
+      positioningScopes: [{ kind: 'platform' as const, id: 'platform-a12-southbound' }],
+      guidanceRequirements: {
+        positioning: optional ? 'optional' as const : 'required' as const,
+        transfer: optional ? 'optional' as const : 'required' as const,
+      },
+    } : {}),
+    async loadStage(request: ReconnectionStageRequest, signal: AbortSignal) {
+      if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
+      const evidenceAt = new Date(Date.parse(request.context.recovery.startedAt) + 1).toISOString();
+      if (request.stage === 2 && stage !== 2) {
+        return { kind: 'owner-result', result: verifiedServiceStage(request, evidenceAt) };
+      }
+      if (request.stage === 4 && stage !== 4) {
+        return { kind: 'owner-result', result: verifiedGuidanceStage(request, evidenceAt) };
+      }
+      if (request.stage !== stage) return { kind: 'use-default' };
+      return {
+        kind: 'owner-result',
+        result: createFailClosedReconnectionStage(
+          request.state,
+          stage,
+          stage === 2
+            ? 'The exact service and transfer owner is unavailable.'
+            : 'The exact positioning and transfer-guidance owner is unavailable.',
+          evidenceAt,
+        ),
+      };
+    },
+  };
+}
+
+function verifiedServiceStage(request: ReconnectionStageRequest, evidenceAt: string) {
+  return {
+    stage: 2 as const,
+    serviceChanges: {
+      gate: appOwnerGate(request, 'service-change', evidenceAt),
+      disposition: 'resolved' as const,
+      vetoesApplied: true as const,
+    },
+    tripServicePattern: 'verified' as const,
+    invalidation: null,
+  };
+}
+
+function verifiedGuidanceStage(request: ReconnectionStageRequest, evidenceAt: string) {
+  const { positioning, transfer } = request.context.guidanceRequirements;
+  return {
+    stage: 4 as const,
+    positioning: {
+      gate: appOwnerGate(request, 'positioning', evidenceAt),
+      requirement: positioning,
+      disposition: positioning === 'none' ? 'removed' as const : 'verified' as const,
+    },
+    transferGuidance: {
+      gate: appOwnerGate(request, 'transfer-guidance', evidenceAt),
+      requirement: transfer,
+      disposition: transfer === 'none' ? 'removed' as const : 'verified' as const,
+    },
+    invalidation: null,
+  };
+}
+
+function appOwnerGate(
+  request: ReconnectionStageRequest,
+  domain: OwnerAcceptance['domain'],
+  evidenceAt: string,
+): OwnerAcceptance {
+  return {
+    domain,
+    ownerId: `fixture-${domain}-owner`,
+    evidenceId: `${request.context.recovery.requestIdentity}:${request.stage}:${domain}:verified`,
+    evidenceAt,
+    acceptedAt: evidenceAt,
+    recoveryEpochId: request.context.recovery.epochId,
+    requestIdentity: request.context.recovery.requestIdentity,
+    generation: request.context.recovery.generation,
+    activeTripId: request.context.recovery.activeTripId,
+    contextKey: request.context.recovery.contextKey,
+    scopeMembership: request.context.recovery.ownerScopes[domain],
+    disposition: 'accepted-fresh',
+  };
+}
+
+function appRecoveryApi(
+  scenario: AppReconnectionScenario,
+  recoveryStarted: { readonly current: boolean },
+): TransitApiClient {
+  const base = createTransitApiClient();
+  if (scenario !== 'Reconnect · app stage 3 one-snapshot withholding') return base;
+  let firstRecoveryBoard: BoardEnvelopeDto | undefined;
+  return {
+    ...base,
+    async board(stationId, filters, signal) {
+      const current = await base.board(stationId, filters, signal);
+      if (!recoveryStarted.current) return current;
+      if (!firstRecoveryBoard) {
+        firstRecoveryBoard = current;
+        return current;
+      }
+      return {
+        ...current,
+        responseIdentity: firstRecoveryBoard.responseIdentity,
+        decidedAt: firstRecoveryBoard.decidedAt,
+      };
+    },
+  };
+}
+
+function appReconnectionTrip(accessibleRouteOnly: boolean, base: Date): ActiveTripRecord {
+  const serviceDate = newYorkServiceDate(base);
+  const selectedDeparture = new Date(base.getTime() + 4 * 60_000);
+  const secondDeparture = new Date(base.getTime() + 14 * 60_000);
+  const capturedAt = base.toISOString();
+  const lastRetrievedAt = new Date(base.getTime() - 30_000).toISOString();
+  return {
+    id: 'trip-app-reconnection',
+    capturedAt,
+    captureContext: {
+      kind: 'response-owned', itineraryId: 'itinerary-app-reconnection',
+      requestMode: 'online-current', timing: 'timed', disclosure,
+    },
+    origin: { name: '125 St', complexId: 'A12', constituentId: 'A12' },
+    destination: { name: 'Canal St', complexId: 'R20', constituentId: 'R20' },
+    accessibleRouteOnly,
+    legs: [
+      {
+        id: 'leg-1',
+        route: { id: 'A', label: 'A', spokenIdentity: 'A train', shape: 'circle' },
+        boundDirection: 'southbound', actualDestination: 'Far Rockaway',
+        points: [
+          { id: 'point-1-1', kind: 'stop', stationName: '125 St', complexId: 'A12', constituentId: 'A12', instruction: 'Board the A train.' },
+          { id: 'point-1-2', kind: 'decision', stationName: '42 St', complexId: 'D14', constituentId: 'D14', instruction: 'Leave the A train for the transfer.' },
+        ],
+      },
+      {
+        id: 'leg-2',
+        route: { id: 'C', label: 'C', spokenIdentity: 'C train', shape: 'circle' },
+        boundDirection: 'eastbound', actualDestination: 'Euclid Av',
+        points: [
+          { id: 'point-2-1', kind: 'decision', stationName: '42 St', complexId: 'D14', constituentId: 'D14', instruction: 'Board the C train.' },
+          { id: 'point-2-2', kind: 'stop', stationName: 'Canal St', complexId: 'R20', constituentId: 'R20', instruction: 'Leave the train at your destination.' },
+        ],
+      },
+    ],
+    transfers: [{
+      id: 'transfer-1', atPointId: 'point-1-2', incomingLegId: 'leg-1', outgoingLegId: 'leg-2',
+      incomingDirection: 'southbound', incomingDestination: 'Far Rockaway',
+      outgoingDirection: 'eastbound', outgoingDestination: 'Euclid Av', steps: ['At 42 St, transfer from A to C.'],
+    }],
+    serviceClaims: [],
+    equipmentClaims: [],
+    cursor: { pointId: 'point-1-1' },
+    validity: {
+      result: 'current-itinerary', serviceDate, pattern: 'actual-now',
+      schedule: {
+        kind: 'current', editionId: 'fixture-supplemented-edition', anchorKind: 'published',
+        anchorAt: new Date(base.getTime() - 60 * 60_000).toISOString(), lastRetrievedAt,
+        effectiveFrom: serviceDate, effectiveUntil: serviceDate, currencyAgeSeconds: 3_600,
+        departures: [
+          { legId: 'leg-1', pointId: 'point-1-1', clockTime: newYorkClock(selectedDeparture), evidence: 'scheduled', timeZone: 'America/New_York' },
+          { legId: 'leg-2', pointId: 'point-2-1', clockTime: newYorkClock(secondDeparture), evidence: 'scheduled', timeZone: 'America/New_York' },
+        ],
+      },
+      warnings: [], vetoes: [],
+    },
+  };
+}
+
+function newYorkServiceDate(value: Date): string {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(value);
+  const part = (kind: Intl.DateTimeFormatPartTypes) => parts.find(({ type }) => type === kind)?.value;
+  return `${part('year')}-${part('month')}-${part('day')}`;
+}
+
+function newYorkClock(value: Date): string {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+  }).formatToParts(value);
+  const part = (kind: Intl.DateTimeFormatPartTypes) => parts.find(({ type }) => type === kind)?.value;
+  return `${part('hour')}:${part('minute')}`;
 }
 
 function AccessibilitySurface({ scenario }: { readonly scenario: Scenario }) {

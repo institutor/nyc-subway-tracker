@@ -1,7 +1,10 @@
 import { describe, expect, test, vi } from 'vitest';
 
 import type { JourneyEnvelopeDto } from '../../src/client/api/client';
-import { createAppReconnectionStageLoader } from '../../src/client/recovery/app-reconnection-loader';
+import {
+  createAppReconnectionStageLoader,
+  type AppReconnectionArtifacts,
+} from '../../src/client/recovery/app-reconnection-loader';
 import type { ActiveTripRecord } from '../../src/client/storage/active-trip-store';
 import type { PreservedReconnectionContext } from '../../src/shared/domain/reconnection';
 import { boardEnvelope, createClientApi, disclosure } from '../helpers/client-fixtures';
@@ -173,7 +176,7 @@ describe('App reconnection owner loader', () => {
     });
   });
 
-  test('observes exactly one fresh board but restores nothing for a stored train choice', async () => {
+  test('records one accepted snapshot from a duplicate replay while withholding a stored train choice', async () => {
     const first = {
       ...boardEnvelope(),
       responseIdentity: 'one-current-snapshot',
@@ -194,10 +197,120 @@ describe('App reconnection owner loader', () => {
     await expect(loader(
       { stage: 3, context: recoveryContext(), state: null as any },
       new AbortController().signal,
-    )).resolves.toBeUndefined();
-    expect(board).toHaveBeenCalledTimes(1);
+    )).resolves.toMatchObject({
+      stage: 3,
+      feedRecovery: { disposition: 'readmitted', gate: { disposition: 'accepted-fresh' } },
+      trainReadmission: { disposition: 'blocked', gate: { disposition: 'governed-fail-closed' } },
+      arrivals: {
+        disposition: 'withheld',
+        freshSnapshotCount: 1,
+        freshSnapshots: [{ evidenceId: 'one-current-snapshot', disposition: 'accepted-fresh' }],
+      },
+      storedTrainChoice: 'unverified',
+      invalidation: { stage: 3, scopes: [{ kind: 'train', id: 'departure:leg-1:point-origin:08:15' }] },
+    });
+    expect(board).toHaveBeenCalledTimes(2);
+  });
+
+  test('restores a stored train choice only after two coherent fresh boards', async () => {
+    const coherentBoard = storedTrainBoard();
+    const first = {
+      ...coherentBoard, responseIdentity: 'coherent-snapshot-1',
+      decidedAt: '2026-08-05T12:00:01.000Z', serverTime: '2026-08-05T12:00:01.000Z',
+    };
+    const second = {
+      ...coherentBoard, responseIdentity: 'coherent-snapshot-2',
+      decidedAt: '2026-08-05T12:00:02.000Z', serverTime: '2026-08-05T12:00:02.000Z',
+    };
+    const board = vi.fn()
+      .mockResolvedValueOnce(first)
+      .mockResolvedValueOnce(second);
+    const artifacts: AppReconnectionArtifacts = {};
+    const loader = createAppReconnectionStageLoader({
+      api: createClientApi({ board }),
+      stationId: 'A12',
+      filters: { routeIds: ['A'], direction: 'southbound' },
+      hasUnrelatedSavedRecords: false,
+      artifacts,
+      activeTrip: timedActiveTrip(),
+      now: () => new Date(ACCEPTED_AT),
+    });
+
+    await expect(loader(
+      { stage: 3, context: recoveryContext(), state: null as any },
+      new AbortController().signal,
+    )).resolves.toMatchObject({
+      stage: 3,
+      feedRecovery: { disposition: 'readmitted' },
+      trainReadmission: { disposition: 'admitted' },
+      arrivals: {
+        disposition: 'current',
+        freshSnapshotCount: 2,
+        freshSnapshots: [
+          { evidenceId: 'coherent-snapshot-1' },
+          { evidenceId: 'coherent-snapshot-2' },
+        ],
+      },
+      storedTrainChoice: 'verified',
+      invalidation: null,
+    });
+    expect(board).toHaveBeenCalledTimes(2);
+    expect(artifacts.selectedBoard).toBe(second);
+  });
+
+  test('does not restore an unrelated same-route train outside the selected departure window', async () => {
+    const unrelated = storedTrainBoard('2026-08-05T12:04:00.000Z');
+    const first = {
+      ...unrelated, responseIdentity: 'unrelated-snapshot-1',
+      decidedAt: '2026-08-05T12:00:01.000Z', serverTime: '2026-08-05T12:00:01.000Z',
+    };
+    const second = {
+      ...unrelated, responseIdentity: 'unrelated-snapshot-2',
+      decidedAt: '2026-08-05T12:00:02.000Z', serverTime: '2026-08-05T12:00:02.000Z',
+    };
+    const board = vi.fn().mockResolvedValueOnce(first).mockResolvedValueOnce(second);
+    const loader = createAppReconnectionStageLoader({
+      api: createClientApi({ board }), stationId: 'A12',
+      filters: { routeIds: ['A'], direction: 'southbound' },
+      hasUnrelatedSavedRecords: false, artifacts: {}, activeTrip: timedActiveTrip(),
+      now: () => new Date(ACCEPTED_AT),
+    });
+
+    await expect(loader(
+      { stage: 3, context: recoveryContext(), state: null as any },
+      new AbortController().signal,
+    )).resolves.toMatchObject({
+      stage: 3,
+      arrivals: { disposition: 'withheld', freshSnapshotCount: 1 },
+      storedTrainChoice: 'unverified',
+      invalidation: { stage: 3 },
+    });
+    expect(board).toHaveBeenCalledTimes(2);
   });
 });
+
+function storedTrainBoard(arrivalAt = '2026-08-05T12:15:00.000Z') {
+  const envelope = boardEnvelope();
+  return {
+    ...envelope,
+    data: envelope.data ? {
+      ...envelope.data,
+      directions: envelope.data.directions.map((direction) => direction.direction === 'southbound'
+        ? {
+            ...direction,
+            primary: direction.primary.map((arrival) => arrival.kind === 'live'
+              ? {
+                  ...arrival,
+                  destination: 'Far Rockaway',
+                  at: arrivalAt,
+                  validThrough: '2026-08-05T12:16:30.000Z',
+                }
+              : { ...arrival, destination: 'Far Rockaway' }),
+          }
+        : direction),
+    } : null,
+  };
+}
 
 function recoveryContext(serviceLegIds: readonly string[] = ['leg-1']): PreservedReconnectionContext {
   const contextScope = [{ kind: 'context' as const, id: 'context-1' }];
