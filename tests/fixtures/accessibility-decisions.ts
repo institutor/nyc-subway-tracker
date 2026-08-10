@@ -9,7 +9,7 @@ import {
   type EquipmentStatusDecision,
 } from '../../src/shared/domain/equipment-status';
 import { classifyPathImpact } from '../../src/shared/domain/path-impact';
-import { createAccessibilityWarning, deriveLastAccessibleDecisionPoint } from '../../src/shared/domain/underway-warning';
+import { acceptAccessibilityJourneyProgress, createAccessibilityWarning, deriveLastAccessibleDecisionPoint } from '../../src/shared/domain/underway-warning';
 
 function review(role: string) {
   return { decision: 'approve' as const, reviewer: `${role} Reviewer`, date: '2026-07-30', recordVersion: 'coverage-v1' };
@@ -225,6 +225,11 @@ export function resolvedWarning(
   const changedEquipment = assessEquipmentStatus({ targetEquipmentId: 'EL-1', decisionTime: new Date('2026-08-01T00:02:00.000Z'), inventory, history });
   const impactDecision = classifyPathImpact({ changedEquipment, selectedPath, alternatePaths: [], decisionTime: new Date('2026-08-01T00:02:00.000Z') })!;
   const decisionTime = new Date('2026-08-01T00:02:00.000Z');
-  const decisionPoint = deriveLastAccessibleDecisionPoint({ cursorOrder: 1, affectedOrder: 2, points: [], selectedPath, decisionTime });
+  const progress = acceptAccessibilityJourneyProgress({
+    progressId: `progress:${selectedPath.pathId}`, evidenceOwner: 'app-owned-accessibility-journey-progress',
+    selectedPathEvaluationId: selectedPath.evaluationId, observedThroughOrder: 1, possibleThroughOrder: 1,
+    affectedOrder: 3, decisionPoints: [], evaluatedAt: decisionTime.toISOString(),
+  }, selectedPath);
+  const decisionPoint = deriveLastAccessibleDecisionPoint({ evidence: progress, selectedPath, decisionTime });
   return createAccessibilityWarning({ phase: 'underway', decisionPoint, impactDecision, alternativeSelection: resolvedAlternativeSelection(selectedPath), decisionTime });
 }

@@ -2,7 +2,7 @@ import { describe, expect, test } from 'vitest';
 import { acceptAccessibilityAlternativeRegistry, chooseAccessibilityAlternative } from '../../src/shared/domain/accessibility-alternatives';
 import { acceptEquipmentHistory, acceptEquipmentInventory, assessEquipmentStatus } from '../../src/shared/domain/equipment-status';
 import { classifyPathImpact } from '../../src/shared/domain/path-impact';
-import { createAccessibilityWarning, deriveLastAccessibleDecisionPoint, transitionAccessibilityWarning } from '../../src/shared/domain/underway-warning';
+import { acceptAccessibilityJourneyProgress, createAccessibilityWarning, deriveLastAccessibleDecisionPoint, transitionAccessibilityWarning } from '../../src/shared/domain/underway-warning';
 import { resolvedPath } from '../fixtures/accessibility-decisions';
 
 const warningTime = new Date('2026-08-01T00:02:00.000Z');
@@ -31,16 +31,30 @@ function warning(phase: 'predeparture' | 'underway' = 'underway', decisionPoint?
 }
 
 function unknownDecisionPoint(selectedPath: ReturnType<typeof resolvedPath>) {
-  return deriveLastAccessibleDecisionPoint({ cursorOrder: 1, affectedOrder: 5, points: [], selectedPath, decisionTime: warningTime });
+  const evidence = progressEvidence(selectedPath, { points: [] });
+  return deriveLastAccessibleDecisionPoint({ evidence, selectedPath, decisionTime: warningTime });
 }
 
 function knownDecisionPoint(pointId: string) {
   const selectedPath = impact().selectedPath;
-  return deriveLastAccessibleDecisionPoint({
-    cursorOrder: 1, affectedOrder: 5,
-    points: [{ id: pointId, order: 4, reachable: true, hasVerifiedSafeAction: true }],
-    selectedPath, decisionTime: warningTime,
-  });
+  const evidence = progressEvidence(selectedPath, { points: [{ id: pointId, order: 2 }] });
+  return deriveLastAccessibleDecisionPoint({ evidence, selectedPath, decisionTime: warningTime });
+}
+
+function progressEvidence(
+  selectedPath: ReturnType<typeof resolvedPath>,
+  overrides: { observedThroughOrder?: number; possibleThroughOrder?: number; points?: readonly { id: string; order: number }[] } = {},
+) {
+  return acceptAccessibilityJourneyProgress({
+    progressId: `progress:${selectedPath.pathId}:${overrides.possibleThroughOrder ?? 1}:${overrides.points?.map(({ id }) => id).join(',') ?? 'default'}`,
+    evidenceOwner: 'app-owned-accessibility-journey-progress',
+    selectedPathEvaluationId: selectedPath.evaluationId,
+    observedThroughOrder: overrides.observedThroughOrder ?? 1,
+    possibleThroughOrder: overrides.possibleThroughOrder ?? 1,
+    affectedOrder: 3,
+    decisionPoints: (overrides.points ?? [{ id: 'p2', order: 2 }]).map(({ id, order }) => ({ id, order, actionPathEvaluationId: selectedPath.evaluationId })),
+    evaluatedAt: warningTime.toISOString(),
+  }, selectedPath);
 }
 
 function warningContext(
@@ -63,13 +77,27 @@ function warningContext(
 describe('underway accessibility warning', () => {
   test('chooses the latest still-reachable verified decision point before the affected connection', () => {
     const selectedPath = impact().selectedPath;
-    expect(deriveLastAccessibleDecisionPoint({ cursorOrder: 1, affectedOrder: 5, points: [{ id: 'p2', order: 2, reachable: true, hasVerifiedSafeAction: true }, { id: 'p4', order: 4, reachable: true, hasVerifiedSafeAction: true }, { id: 'p6', order: 6, reachable: true, hasVerifiedSafeAction: true }], selectedPath, decisionTime: warningTime })).toMatchObject({ status: 'known', pointId: 'p4' });
+    const evidence = progressEvidence(selectedPath, { points: [{ id: 'p1', order: 1 }, { id: 'p2', order: 2 }] });
+    expect(deriveLastAccessibleDecisionPoint({ evidence, selectedPath, decisionTime: warningTime })).toMatchObject({ status: 'known', pointId: 'p2' });
   });
 
   test('returns Unknown when reachability is unknown or the point may have passed', () => {
     const selectedPath = impact().selectedPath;
-    expect(deriveLastAccessibleDecisionPoint({ cursorOrder: 4, affectedOrder: 5, points: [{ id: 'p4', order: 4, reachable: 'unknown', hasVerifiedSafeAction: true }], selectedPath, decisionTime: warningTime })).toMatchObject({ status: 'unknown' });
-    expect(deriveLastAccessibleDecisionPoint({ cursorOrder: 1, affectedOrder: 5, points: [{ id: 'p4', order: 4, reachable: true, hasVerifiedSafeAction: true, possiblyPassed: true }], selectedPath, decisionTime: warningTime })).toMatchObject({ status: 'unknown' });
+    const noOwnedPoint = progressEvidence(selectedPath, { points: [] });
+    const possiblyPassed = progressEvidence(selectedPath, { possibleThroughOrder: 2, points: [{ id: 'p2', order: 2 }] });
+    expect(deriveLastAccessibleDecisionPoint({ evidence: noOwnedPoint, selectedPath, decisionTime: warningTime })).toMatchObject({ status: 'unknown' });
+    expect(deriveLastAccessibleDecisionPoint({ evidence: possiblyPassed, selectedPath, decisionTime: warningTime })).toMatchObject({ status: 'unknown' });
+  });
+
+  test('derives the decision point only from opaque app-owned journey progress, never caller booleans', () => {
+    const selectedPath = impact().selectedPath;
+    const evidence = progressEvidence(selectedPath);
+    expect(() => deriveLastAccessibleDecisionPoint({ evidence: { ...evidence }, selectedPath, decisionTime: warningTime } as never)).toThrow(/accepted journey progress/i);
+    expect(() => deriveLastAccessibleDecisionPoint({
+      cursorOrder: 1, affectedOrder: 3,
+      points: [{ id: 'forged', order: 2, reachable: true, hasVerifiedSafeAction: true }],
+      selectedPath, decisionTime: warningTime,
+    } as never)).toThrow(/accepted journey progress/i);
   });
 
   test('distinguishes predeparture, underway known-point, and immediate states with exact warning content', () => {
@@ -82,7 +110,7 @@ describe('underway accessibility warning', () => {
 
   test('rejects a copied decision-point result instead of accepting a structural lookalike', () => {
     const impactContext = impact();
-    const point = deriveLastAccessibleDecisionPoint({ cursorOrder: 1, affectedOrder: 5, points: [{ id: 'p4', order: 4, reachable: true, hasVerifiedSafeAction: true }], selectedPath: impactContext.selectedPath, decisionTime: warningTime });
+    const point = deriveLastAccessibleDecisionPoint({ evidence: progressEvidence(impactContext.selectedPath), selectedPath: impactContext.selectedPath, decisionTime: warningTime });
     expect(() => createAccessibilityWarning({
       phase: 'underway',
       decisionPoint: { ...point }, impactDecision: impactContext.decision,
@@ -160,6 +188,16 @@ describe('underway accessibility warning', () => {
       { type: 'owner-resolved', pathDecision: staleEvidenceOwner },
       transitionTime,
     ).active).toBe(true);
+  });
+
+  test('keeps the warning active but removes an expired alternative label from rider copy', () => {
+    const active = warning();
+    expect(active.content).toContain('Use the verified 127 St entrance path.');
+    const afterAlternativeExpiry = new Date('2026-08-01T00:04:00.001Z');
+    const transitioned = transitionAccessibilityWarning(active, { type: 'navigate' }, afterAlternativeExpiry);
+    expect(transitioned.active).toBe(true);
+    expect(transitioned.content).not.toContain('Use the verified 127 St entrance path.');
+    expect(transitioned.content.at(-1)).toBe('No current verified replacement is available; wait for a fresh accessible route.');
   });
 
   test('rejects scalar clearing assertions and caller-authored warnings', () => {

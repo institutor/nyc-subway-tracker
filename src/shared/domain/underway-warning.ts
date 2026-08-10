@@ -7,6 +7,7 @@ import {
 import {
   accessiblePathDecisionAllowsUse,
   accessiblePathEquipmentDependenciesPostdate,
+  isResolvedAccessiblePathDecision,
   type ResolvedAccessiblePathDecision,
 } from './accessible-path';
 import {
@@ -27,6 +28,75 @@ export type DecisionPointResult = Readonly<({
 ))>;
 
 const warningBrand: unique symbol = Symbol('resolved-accessibility-warning');
+
+const journeyProgressBrand: unique symbol = Symbol('accepted-accessibility-journey-progress');
+export interface AcceptedAccessibilityJourneyProgress {
+  readonly [journeyProgressBrand]: true;
+  readonly progressId: string;
+  readonly evidenceOwner: 'app-owned-accessibility-journey-progress';
+  readonly selectedPathEvaluationId: string;
+  readonly observedThroughOrder: number;
+  readonly possibleThroughOrder: number;
+  readonly affectedOrder: number;
+  readonly evaluatedAt: string;
+}
+export interface AccessibilityJourneyProgressInput {
+  readonly progressId: string;
+  readonly evidenceOwner: 'app-owned-accessibility-journey-progress';
+  readonly selectedPathEvaluationId: string;
+  readonly observedThroughOrder: number;
+  readonly possibleThroughOrder: number;
+  readonly affectedOrder: number;
+  readonly decisionPoints: readonly { readonly id: string; readonly order: number; readonly actionPathEvaluationId: string }[];
+  readonly evaluatedAt: string;
+}
+const acceptedJourneyProgress = new WeakSet<object>();
+const acceptedJourneyProgressState = new WeakMap<object, { readonly selectedPath: ResolvedAccessiblePathDecision; readonly decisionPoints: AccessibilityJourneyProgressInput['decisionPoints'] }>();
+
+export function acceptAccessibilityJourneyProgress(
+  raw: AccessibilityJourneyProgressInput,
+  selectedPath: ResolvedAccessiblePathDecision,
+): AcceptedAccessibilityJourneyProgress {
+  const root = strictRecord(raw, ['progressId','evidenceOwner','selectedPathEvaluationId','observedThroughOrder','possibleThroughOrder','affectedOrder','decisionPoints','evaluatedAt'], 'accessibility journey progress');
+  if (root.evidenceOwner !== 'app-owned-accessibility-journey-progress') throw new Error('Accessibility journey progress owner is invalid');
+  const evaluatedAt = canonicalInstant(root.evaluatedAt, 'accessibility journey progress evaluation');
+  if (!isResolvedAccessiblePathDecision(selectedPath) || root.selectedPathEvaluationId !== selectedPath.evaluationId
+    || Date.parse(evaluatedAt) < Date.parse(selectedPath.evaluatedAt)) {
+    throw new Error('Accessibility journey progress does not join the exact resolved selected path');
+  }
+  const observedThroughOrder = journeyOrder(root.observedThroughOrder, selectedPath.journeyChain.length, 'observed journey order');
+  const possibleThroughOrder = journeyOrder(root.possibleThroughOrder, selectedPath.journeyChain.length, 'possible journey order');
+  const affectedOrder = journeyOrder(root.affectedOrder, selectedPath.journeyChain.length, 'affected journey order');
+  if (observedThroughOrder > possibleThroughOrder || possibleThroughOrder > affectedOrder) {
+    throw new Error('Accessibility journey progress order is incoherent');
+  }
+  if (!Array.isArray(root.decisionPoints)) throw new Error('Accessibility journey progress decision points must be an array');
+  const pointIds = new Set<string>();
+  const decisionPoints = root.decisionPoints.map((rawPoint) => {
+    const point = strictRecord(rawPoint, ['id','order','actionPathEvaluationId'], 'accessibility journey decision point');
+    const id = identity(point.id, 'decision-point identity');
+    if (pointIds.has(id)) throw new Error('Duplicate accessibility journey decision point identity');
+    pointIds.add(id);
+    const order = journeyOrder(point.order, selectedPath.journeyChain.length, 'decision-point journey order');
+    if (order >= affectedOrder || point.actionPathEvaluationId !== selectedPath.evaluationId) {
+      throw new Error('Accessibility journey decision point does not bind a safe action before the affected connection');
+    }
+    return deepFreeze({ id, order, actionPathEvaluationId: selectedPath.evaluationId });
+  });
+  const accepted = Object.freeze({
+    [journeyProgressBrand]: true as const,
+    progressId: identity(root.progressId, 'journey progress identity'),
+    evidenceOwner: 'app-owned-accessibility-journey-progress' as const,
+    selectedPathEvaluationId: selectedPath.evaluationId,
+    observedThroughOrder,
+    possibleThroughOrder,
+    affectedOrder,
+    evaluatedAt,
+  });
+  acceptedJourneyProgress.add(accepted);
+  acceptedJourneyProgressState.set(accepted, { selectedPath, decisionPoints: deepFreeze(decisionPoints) });
+  return accepted;
+}
 export interface AccessibilityWarning {
   readonly [warningBrand]: true;
   readonly warningId: string;
@@ -70,29 +140,23 @@ const resolvedDecisionPoints = new WeakSet<object>();
 const resolvedWarnings = new WeakSet<object>();
 
 export function deriveLastAccessibleDecisionPoint(input: {
-  readonly cursorOrder: number;
-  readonly affectedOrder: number;
-  readonly points: readonly {
-    readonly id: string;
-    readonly order: number;
-    readonly reachable: boolean | 'unknown';
-    readonly hasVerifiedSafeAction: boolean;
-    readonly possiblyPassed?: boolean;
-  }[];
+  readonly evidence: AcceptedAccessibilityJourneyProgress;
   readonly selectedPath: ResolvedAccessiblePathDecision;
   readonly decisionTime: Date;
 }): DecisionPointResult {
   const evaluatedAt = canonicalDate(input.decisionTime, 'decision-point evaluation time');
-  if (!accessiblePathDecisionAllowsUse(input.selectedPath, input.decisionTime)) {
-    throw new Error('Decision-point evaluation requires a current resolved selected path');
+  const state = acceptedJourneyProgressState.get(input.evidence);
+  if (!acceptedJourneyProgress.has(input.evidence) || !state || state.selectedPath !== input.selectedPath) {
+    throw new Error('Decision-point evaluation requires accepted journey progress for the exact selected path');
   }
-  const candidates = input.points.filter((point) => point.order >= input.cursorOrder && point.order < input.affectedOrder);
-  if (candidates.some((point) => point.reachable === 'unknown' || point.possiblyPassed === true)) {
-    return resolveDecisionPoint({ status: 'unknown' }, evaluatedAt, input.selectedPath.evaluationId);
+  if (input.evidence.evaluatedAt !== evaluatedAt || input.evidence.selectedPathEvaluationId !== input.selectedPath.evaluationId) {
+    throw new Error('Accepted journey progress must match the exact decision time and selected path');
   }
-  const passing = candidates.filter((point) => point.reachable === true && point.hasVerifiedSafeAction).sort((a, b) => b.order - a.order);
+  const passing = state.decisionPoints
+    .filter((point) => point.order > input.evidence.possibleThroughOrder && point.order < input.evidence.affectedOrder)
+    .sort((left, right) => right.order - left.order);
   return passing.length
-    ? resolveDecisionPoint({ status: 'known', pointId: identity(passing[0].id, 'decision-point identity') }, evaluatedAt, input.selectedPath.evaluationId)
+    ? resolveDecisionPoint({ status: 'known', pointId: passing[0].id }, evaluatedAt, input.selectedPath.evaluationId)
     : resolveDecisionPoint({ status: 'unknown' }, evaluatedAt, input.selectedPath.evaluationId);
 }
 
@@ -197,21 +261,24 @@ export function transitionAccessibilityWarning(
   const transitionedAt = canonicalDate(decisionTime, 'warning transition time');
   if (Date.parse(transitionedAt) < Date.parse(warning.lastTransitionAt)) throw new Error('Warning transition time must be monotonic');
   if (!warning.active) return warning;
+  const freshnessChanges = Date.parse(transitionedAt) > Date.parse(warning.validThrough)
+    ? { content: [...warning.content.slice(0, -1), 'No current verified replacement is available; wait for a fresh accessible route.'] }
+    : {};
   if (event.type === 'replacement-selected'
     && alternativeSelectionAllowsUse(event.alternativeSelection, decisionTime)
     && event.alternativeSelection.decisionId === warning.alternativeSelectionDecisionId) {
     const offer = event.alternativeSelection.visible.find((candidate) => candidate.offerId === event.offerId);
     if (offer && replacementReevaluationPasses(warning, offer, event.pathDecision, decisionTime)) {
-      return transitionWarning(warning, transitionedAt, { active: false, state: 'resolved', selectedPathId: event.pathDecision.pathId });
+      return transitionWarning(warning, transitionedAt, { ...freshnessChanges, active: false, state: 'resolved', selectedPathId: event.pathDecision.pathId });
     }
   }
   if (event.type === 'owner-resolved' && ownerReevaluationPasses(warning, event.pathDecision, decisionTime)) {
-    return transitionWarning(warning, transitionedAt, { active: false, state: 'resolved' });
+    return transitionWarning(warning, transitionedAt, { ...freshnessChanges, active: false, state: 'resolved' });
   }
-  if (event.type === 'acknowledge') return transitionWarning(warning, transitionedAt, { acknowledged: true });
-  if (event.type === 'go-offline') return transitionWarning(warning, transitionedAt, { state: 'offline-preserved', stale: true });
-  if (event.type === 'reconnect' || event.type === 'single-machine-restored') return transitionWarning(warning, transitionedAt, { state: 'revalidating' });
-  return transitionWarning(warning, transitionedAt, {});
+  if (event.type === 'acknowledge') return transitionWarning(warning, transitionedAt, { ...freshnessChanges, acknowledged: true });
+  if (event.type === 'go-offline') return transitionWarning(warning, transitionedAt, { ...freshnessChanges, state: 'offline-preserved', stale: true });
+  if (event.type === 'reconnect' || event.type === 'single-machine-restored') return transitionWarning(warning, transitionedAt, { ...freshnessChanges, state: 'revalidating' });
+  return transitionWarning(warning, transitionedAt, freshnessChanges);
 }
 
 export function isResolvedAccessibilityWarning(value: unknown): value is AccessibilityWarning {
@@ -236,10 +303,10 @@ export function warningMatchesAlternativeSelection(
 export function warningMatchesDisplayedPath(
   warning: unknown,
   path: unknown,
-  decisionTime: Date,
+  _decisionTime: Date,
 ): warning is AccessibilityWarning {
   if (!isResolvedAccessibilityWarning(warning) || !warning.active
-    || !accessiblePathDecisionAllowsUse(path, decisionTime)) return false;
+    || !isResolvedAccessiblePathDecision(path)) return false;
   const exactEvaluation = path.evaluationId === warning.selectedPathEvaluationId;
   const newerEvaluation = Date.parse(path.evaluatedAt) > Date.parse(warning.createdAt);
   return (exactEvaluation || newerEvaluation)
@@ -339,6 +406,24 @@ function directionLabel(value: string): string { return value.charAt(0).toUpperC
 function sameValues(left: readonly string[], right: readonly string[]): boolean { return left.length === right.length && left.every((value, index) => value === right[index]); }
 function identity(value: unknown, label: string): string { if (typeof value !== 'string' || value.trim() !== value || !value || value.length > 240) throw new Error(`${label} is invalid`); return value; }
 function canonicalDate(value: Date, label: string): string { if (!(value instanceof Date) || !Number.isFinite(value.getTime())) throw new Error(`${label} is invalid`); return value.toISOString(); }
+function canonicalInstant(value: unknown, label: string): string {
+  if (typeof value !== 'string') throw new Error(`${label} is invalid`);
+  const parsed = new Date(value);
+  if (!Number.isFinite(parsed.getTime()) || parsed.toISOString() !== value) throw new Error(`${label} must be a canonical instant`);
+  return value;
+}
+function journeyOrder(value: unknown, maximum: number, label: string): number {
+  if (!Number.isInteger(value) || Number(value) < 1 || Number(value) > maximum) throw new Error(`${label} is invalid`);
+  return Number(value);
+}
+function strictRecord(value: unknown, fields: readonly string[], label: string): Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(`${label} must be an object`);
+  const root = value as Record<string, unknown>;
+  const ownKeys = Reflect.ownKeys(root);
+  if (ownKeys.length !== fields.length || fields.some((field) => !Object.prototype.hasOwnProperty.call(root, field))
+    || ownKeys.some((field) => typeof field !== 'string' || !fields.includes(field))) throw new Error(`${label} must contain its exact schema`);
+  return root;
+}
 function resolveWarning(value: Omit<AccessibilityWarning, typeof warningBrand>): AccessibilityWarning {
   const warning = deepFreeze({ [warningBrand]: true as const, ...value });
   resolvedWarnings.add(warning);

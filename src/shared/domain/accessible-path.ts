@@ -123,6 +123,7 @@ export interface ResolvedAccessiblePathDecision {
   readonly direction: Direction;
   readonly platformId: string;
   readonly journeyScope: AccessibleJourneyIntent;
+  readonly journeyChain: readonly AccessibleJourneyChainEntry[];
   readonly equipmentIds: readonly string[];
   readonly equipmentDecisionIds: Readonly<Record<string, string>>;
   readonly equipmentSourceScopeId: string;
@@ -434,6 +435,7 @@ function resolvedPathDecision(
     direction: firstRide.direction,
     platformId: item.coverage.origin.platform.id,
     journeyScope,
+    journeyChain: item.coverage.journeyChain.map((entry) => ({ ...entry })),
     equipmentIds: [...item.coverage.equipmentIds],
     equipmentDecisionIds,
     equipmentSourceScopeId: request.equipmentSourceScopeId,

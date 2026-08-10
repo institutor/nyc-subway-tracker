@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import {
   acceptAccessibilityAlternativeRegistry,
+  acceptNearbyStationEvidence,
   chooseAccessibilityAlternative,
   grantBusAlternativeConsent,
   type AccessibilityAlternativeOfferInput,
@@ -39,7 +40,20 @@ function candidate(
   return { path, offer };
 }
 
-function registry(candidates: readonly ReturnType<typeof candidate>[], selectedPath = resolvedPath('selected')) {
+function registry(
+  candidates: readonly ReturnType<typeof candidate>[],
+  selectedPath = resolvedPath('selected'),
+  nearbyEvidence = candidates.filter(({ offer }) => offer.tier === 'nearby-station').map(({ path }, index) => acceptNearbyStationEvidence({
+    evidenceId: `nearby:${index}:${path.pathId}`,
+    evidenceOwner: 'app-owned-nearby-stations',
+    selectedStationComplexId: selectedPath.stationComplexId,
+    candidateStationComplexId: path.stationComplexId,
+    originIntent: selectedPath.originIntent,
+    destinationIntent: selectedPath.destinationIntent,
+    verifiedAt: decisionTime.toISOString(),
+    validThrough: '2026-08-01T00:10:00.000Z',
+  }, selectedPath, path)),
+) {
   return acceptAccessibilityAlternativeRegistry({
     registryId: `registry:${candidates.map(({ offer }) => offer.offerId).join(',') || 'empty'}`,
     evidenceOwner: 'app-owned-accessibility-alternatives',
@@ -47,7 +61,7 @@ function registry(candidates: readonly ReturnType<typeof candidate>[], selectedP
     createdAt: decisionTime.toISOString(),
     validThrough: '2026-08-01T00:10:00.000Z',
     offers: candidates.map(({ offer }) => offer),
-  }, selectedPath, candidates.map(({ path }) => path));
+  }, selectedPath, candidates.map(({ path }) => path), nearbyEvidence);
 }
 
 describe('accessible alternatives', () => {
@@ -121,6 +135,27 @@ describe('accessible alternatives', () => {
     expect(() => registry([forged])).toThrow(/same-complex|station scope/i);
     const verified = registry([candidate('verified', 'same-complex')]);
     expect(chooseAccessibilityAlternative(verified, { decisionTime }).first?.id).toBe('verified');
+  });
+
+  test('rejects reusing the selected evaluation or canonical path as its own alternative', () => {
+    const selectedPath = resolvedPath('selected');
+    const reused = candidate('selected', 'same-complex');
+    expect(reused.path.pathId).toBe(selectedPath.pathId);
+    expect(() => registry([reused], selectedPath)).toThrow(/selected path|alternative/i);
+  });
+
+  test('requires opaque app-owned nearby-station evidence instead of trusting the caller tier', () => {
+    const selectedPath = resolvedPath('selected');
+    const nearby = candidate('nearby-owned', 'nearby-station');
+    expect(() => registry([nearby], selectedPath, [])).toThrow(/nearby.*evidence|evidence.*nearby/i);
+    const genuine = acceptNearbyStationEvidence({
+      evidenceId: 'nearby-owned-evidence', evidenceOwner: 'app-owned-nearby-stations',
+      selectedStationComplexId: selectedPath.stationComplexId, candidateStationComplexId: nearby.path.stationComplexId,
+      originIntent: selectedPath.originIntent, destinationIntent: selectedPath.destinationIntent,
+      verifiedAt: decisionTime.toISOString(), validThrough: '2026-08-01T00:10:00.000Z',
+    }, selectedPath, nearby.path);
+    expect(() => registry([nearby], selectedPath, [{ ...genuine } as never])).toThrow(/nearby.*evidence|accepted/i);
+    expect(chooseAccessibilityAlternative(registry([nearby], selectedPath, [genuine]), { decisionTime }).first?.id).toBe('nearby-owned');
   });
 
   test.each([

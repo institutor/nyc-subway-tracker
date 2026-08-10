@@ -34,6 +34,59 @@ export interface AccessibilityAlternativeRegistryInput {
   readonly offers: readonly AccessibilityAlternativeOfferInput[];
 }
 
+const nearbyStationEvidenceBrand: unique symbol = Symbol('accepted-nearby-station-evidence');
+export interface AcceptedNearbyStationEvidence {
+  readonly [nearbyStationEvidenceBrand]: true;
+  readonly evidenceId: string;
+  readonly evidenceOwner: 'app-owned-nearby-stations';
+  readonly selectedStationComplexId: string;
+  readonly candidateStationComplexId: string;
+  readonly originIntent: string;
+  readonly destinationIntent: string;
+  readonly verifiedAt: string;
+  readonly validThrough: string;
+}
+const acceptedNearbyStationEvidence = new WeakSet<object>();
+const nearbyStationEvidencePaths = new WeakMap<object, { readonly selectedPath: ResolvedAccessiblePathDecision; readonly candidatePath: ResolvedAccessiblePathDecision }>();
+
+export function acceptNearbyStationEvidence(
+  raw: Omit<AcceptedNearbyStationEvidence, typeof nearbyStationEvidenceBrand>,
+  selectedPath: ResolvedAccessiblePathDecision,
+  candidatePath: ResolvedAccessiblePathDecision,
+): AcceptedNearbyStationEvidence {
+  const root = strictRecord(raw, ['evidenceId','evidenceOwner','selectedStationComplexId','candidateStationComplexId','originIntent','destinationIntent','verifiedAt','validThrough'], 'nearby-station evidence');
+  if (root.evidenceOwner !== 'app-owned-nearby-stations') throw new Error('Nearby-station evidence owner is invalid');
+  const verifiedAt = instant(root.verifiedAt, 'nearby-station verification');
+  const validThrough = instant(root.validThrough, 'nearby-station validity end');
+  if (!isResolvedAccessiblePathDecision(selectedPath) || !isResolvedAccessiblePathDecision(candidatePath)
+    || !accessiblePathDecisionAllowsUse(selectedPath, new Date(verifiedAt))
+    || !accessiblePathDecisionAllowsUse(candidatePath, new Date(verifiedAt))
+    || candidatePath.pathId === selectedPath.pathId || candidatePath.evaluationId === selectedPath.evaluationId
+    || root.selectedStationComplexId !== selectedPath.stationComplexId
+    || root.candidateStationComplexId !== candidatePath.stationComplexId
+    || candidatePath.stationComplexId === selectedPath.stationComplexId
+    || root.originIntent !== selectedPath.originIntent || root.originIntent !== candidatePath.originIntent
+    || root.destinationIntent !== selectedPath.destinationIntent || root.destinationIntent !== candidatePath.destinationIntent
+    || Date.parse(validThrough) < Date.parse(verifiedAt)
+    || Date.parse(validThrough) > Math.min(Date.parse(selectedPath.validThrough), Date.parse(candidatePath.validThrough))) {
+    throw new Error('Nearby-station evidence does not join the exact current selected and candidate paths');
+  }
+  const accepted = deepFreeze({
+    [nearbyStationEvidenceBrand]: true as const,
+    evidenceId: identity(root.evidenceId, 'nearby-station evidence identity'),
+    evidenceOwner: 'app-owned-nearby-stations' as const,
+    selectedStationComplexId: selectedPath.stationComplexId,
+    candidateStationComplexId: candidatePath.stationComplexId,
+    originIntent: selectedPath.originIntent,
+    destinationIntent: selectedPath.destinationIntent,
+    verifiedAt,
+    validThrough,
+  });
+  acceptedNearbyStationEvidence.add(accepted);
+  nearbyStationEvidencePaths.set(accepted, { selectedPath, candidatePath });
+  return accepted;
+}
+
 const registryBrand: unique symbol = Symbol('accepted-accessibility-alternative-registry');
 export interface AcceptedAccessibilityAlternativeRegistry {
   readonly [registryBrand]: true;
@@ -124,6 +177,7 @@ export function acceptAccessibilityAlternativeRegistry(
   raw: AccessibilityAlternativeRegistryInput,
   selectedPath: ResolvedAccessiblePathDecision,
   candidatePaths: readonly ResolvedAccessiblePathDecision[],
+  nearbyEvidence: readonly AcceptedNearbyStationEvidence[] = [],
 ): AcceptedAccessibilityAlternativeRegistry {
   const root = strictRecord(raw, ['registryId', 'evidenceOwner', 'selectedPathEvaluationId', 'createdAt', 'validThrough', 'offers'], 'accessibility alternative registry');
   if (root.evidenceOwner !== 'app-owned-accessibility-alternatives') throw new Error('Accessibility alternative registry owner is invalid');
@@ -168,6 +222,9 @@ export function acceptAccessibilityAlternativeRegistry(
       || pathDecision.status !== 'eligible' || !accessiblePathDecisionAllowsUse(pathDecision, new Date(createdAt))) {
       throw new Error('Alternative offer does not join its exact current accepted path evaluation and selected intent');
     }
+    if (pathDecision.evaluationId === selectedPath.evaluationId || pathDecision.pathId === selectedPath.pathId) {
+      throw new Error('The selected path cannot be reused as its own alternative');
+    }
     if (Date.parse(validThrough) > Date.parse(pathDecision.validThrough)) throw new Error('Alternative registry outlives a candidate path evaluation');
     if (tier === 'same-complex' && (pathDecision.stationComplexId !== selectedPath.stationComplexId
       || pathDecision.constituentStationId !== selectedPath.constituentStationId)) {
@@ -175,6 +232,9 @@ export function acceptAccessibilityAlternativeRegistry(
     }
     if (tier === 'nearby-station' && pathDecision.stationComplexId === selectedPath.stationComplexId) {
       throw new Error('Nearby-station alternative must be independently scoped to another station complex');
+    }
+    if (tier === 'nearby-station' && !nearbyEvidence.some((evidence) => nearbyEvidenceMatches(evidence, selectedPath, pathDecision, createdAt, validThrough))) {
+      throw new Error('Nearby-station alternative requires exact current app-owned nearby evidence');
     }
     return deepFreeze({
       offerId,
@@ -351,8 +411,24 @@ function busConsentAllowsUse(
 function strictRecord(value: unknown, fields: readonly string[], label: string): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(`${label} must be an object`);
   const root = value as Record<string, unknown>;
-  if (Object.keys(root).length !== fields.length || fields.some((field) => !(field in root))) throw new Error(`${label} must contain its exact schema`);
+  const ownKeys = Reflect.ownKeys(root);
+  if (ownKeys.length !== fields.length || fields.some((field) => !Object.prototype.hasOwnProperty.call(root, field))
+    || ownKeys.some((field) => typeof field !== 'string' || !fields.includes(field))) throw new Error(`${label} must contain its exact schema`);
   return root;
+}
+function nearbyEvidenceMatches(
+  evidence: AcceptedNearbyStationEvidence,
+  selectedPath: ResolvedAccessiblePathDecision,
+  candidatePath: ResolvedAccessiblePathDecision,
+  createdAt: string,
+  validThrough: string,
+): boolean {
+  const paths = nearbyStationEvidencePaths.get(evidence);
+  return acceptedNearbyStationEvidence.has(evidence) && paths?.selectedPath === selectedPath && paths.candidatePath === candidatePath
+    && evidence.selectedStationComplexId === selectedPath.stationComplexId
+    && evidence.candidateStationComplexId === candidatePath.stationComplexId
+    && evidence.originIntent === selectedPath.originIntent && evidence.destinationIntent === selectedPath.destinationIntent
+    && Date.parse(createdAt) >= Date.parse(evidence.verifiedAt) && Date.parse(validThrough) <= Date.parse(evidence.validThrough);
 }
 function identity(value: unknown, label: string): string { if (typeof value !== 'string' || value.trim() !== value || !value || value.length > 240) throw new Error(`${label} is invalid`); return value; }
 function instant(value: unknown, label: string): string { if (typeof value !== 'string' || !Number.isFinite(Date.parse(value)) || new Date(value).toISOString() !== value) throw new Error(`${label} must be a canonical ISO instant`); return value; }

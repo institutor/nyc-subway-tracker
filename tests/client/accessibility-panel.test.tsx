@@ -4,6 +4,7 @@ import { AccessibilityPanel, ValidationAccessibilityPanel } from '../../src/clie
 import { PlatformGuidance, ValidationPlatformGuidance } from '../../src/client/components/PlatformGuidance';
 import type { ResolvedAccessiblePathDecision } from '../../src/shared/domain/accessible-path';
 import { resolvedAlternativeSelection, resolvedEquipmentStatus, resolvedWarning } from '../fixtures/accessibility-decisions';
+import { transitionAccessibilityWarning } from '../../src/shared/domain/underway-warning';
 import { resolvedPath } from '../fixtures/accessibility-decisions';
 import { resolvedValidationGuidance } from '../fixtures/platform-guidance';
 
@@ -92,6 +93,21 @@ describe('accessible-path rider panel', () => {
     });
     render(<ValidationAccessibilityPanel warning={warning} path={newerSamePath} equipment={[]} alternative={null} onSelectAlternative={() => undefined} decisionTime={laterDecisionTime} />);
     expect(screen.getByRole('alert')).toBeTruthy();
+  });
+
+  test('keeps an active offline warning visible after the positive selected-path receipt expires', () => {
+    const offlineWarning = transitionAccessibilityWarning(warning, { type: 'go-offline' }, new Date('2026-08-01T00:03:00.000Z'));
+    render(<ValidationAccessibilityPanel
+      warning={offlineWarning}
+      path={selectedPath}
+      equipment={[]}
+      alternative={alternative}
+      onSelectAlternative={() => undefined}
+      decisionTime={new Date('2026-08-01T00:06:00.001Z')}
+    />);
+    expect(screen.getByRole('alert')).toBeTruthy();
+    expect(screen.getByText('Current path not verified')).toBeTruthy();
+    expect(screen.queryByRole('button')).toBeNull();
   });
 
   test('does not render a genuine same-machine equipment receipt that the displayed path did not own', () => {

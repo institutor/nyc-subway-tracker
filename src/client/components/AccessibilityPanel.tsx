@@ -41,7 +41,7 @@ function AccessibilityPanelForSurface({ warning, path, equipment, alternative, o
       && decision.sourceScopeId === resolvedPath.equipmentSourceScopeId
       && decision.sourceVersion === resolvedPath.equipmentSourceVersion;
   }) : [];
-  const resolvedWarning = resolvedPath && warningMatchesDisplayedPath(warning, resolvedPath, decisionTime) ? warning : null;
+  const resolvedWarning = warningMatchesDisplayedPath(warning, path, decisionTime) ? warning : null;
   const resolvedAlternative = resolvedWarning && isResolvedAccessibilityAlternativeSelection(alternative)
     && warningMatchesAlternativeSelection(resolvedWarning, alternative, decisionTime) ? alternative.first : null;
   return <section className="accessibility-panel" aria-label="Step-free path">
