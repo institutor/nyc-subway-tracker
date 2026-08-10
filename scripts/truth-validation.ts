@@ -5,8 +5,18 @@ import { fileURLToPath } from 'node:url';
 
 import type { SourceProvenance } from '../src/server/data/fetch-source';
 import { createSourceRegistry, type RemoteSource } from '../src/server/data/source-registry';
+import {
+  decodeAlertSnapshotJson,
+  type AlertSnapshot,
+  type NormalizedAlert,
+} from '../src/server/gtfs/alert-loader';
+import type { NormalizedStopCall, NormalizedTripUpdate, RealtimeSnapshot } from '../src/server/gtfs/realtime-normalizer';
 import { loadStaticGtfsArchive } from '../src/server/gtfs/static-loader';
-import { isServiceActive, serviceTimeToInstant } from '../src/server/gtfs/static-normalizer';
+import {
+  isServiceActive,
+  serviceTimeToInstant,
+  type ServicePattern,
+} from '../src/server/gtfs/static-normalizer';
 import { evaluateExposure, type ExposureStage } from '../src/server/release/exposure-gates';
 import {
   buildBoundedShadowRecord,
@@ -28,11 +38,15 @@ import {
 } from '../src/shared/domain/arrival-admission';
 import {
   classifyAlertSnapshot,
+  type DeclaredServiceConsequence,
   type ServiceAlertEvidence,
   type ServiceClaimScope,
+  type StructuredAlertEffect,
 } from '../src/shared/domain/alert-scope';
-import { FeedHealthGovernor } from '../src/shared/domain/feed-health';
-import { resolveRerouteClaim, type RerouteClaimInput } from '../src/shared/domain/reroute';
+import { FeedHealthGovernor, type FeedHealthDecision } from '../src/shared/domain/feed-health';
+import { resolveRerouteClaim } from '../src/shared/domain/reroute';
+import { buildScheduleFallback } from '../src/shared/domain/schedule-fallback';
+import { ScheduleEditionRegistry } from '../src/shared/domain/schedule-owner';
 import {
   CLAIM_SUPPRESSED_PRODUCTS,
   evaluateServiceChanges,
@@ -95,8 +109,19 @@ export interface TruthValidationIo {
   readonly stderr: (value: string) => void;
 }
 
-interface TruthValidationOptions {
+export interface TruthFixtureOverrides {
+  readonly weekdayRealtime?: Uint8Array;
+  readonly weekdayAlerts?: Uint8Array;
+  readonly weekendRegularGtfs?: Uint8Array;
+  readonly weekendSupplementedGtfs?: Uint8Array;
+  readonly weekendAlerts?: Uint8Array;
+  readonly majorDisruptionAlerts?: Uint8Array;
+  readonly falseBypassAlerts?: Uint8Array;
+}
+
+export interface TruthValidationOptions {
   readonly fixtureRoot?: string;
+  readonly fixtureOverrides?: TruthFixtureOverrides;
 }
 
 const NORMAL_BASE = new Date('2026-08-04T06:01:00.000Z');
@@ -110,7 +135,7 @@ export async function runTruthValidationScenario(
   options: TruthValidationOptions = {},
 ): Promise<TruthValidationReceipt> {
   const fixtureRoot = options.fixtureRoot ?? DEFAULT_FIXTURE_ROOT;
-  const checks = await scenarioChecks(scenario, fixtureRoot);
+  const checks = await scenarioChecks(scenario, fixtureRoot, options.fixtureOverrides ?? {});
   return finalizeReceipt(scenario, checks);
 }
 
@@ -159,41 +184,32 @@ export async function runTruthValidationCli(
 async function scenarioChecks(
   scenario: TruthValidationScenario,
   fixtureRoot: string,
+  overrides: TruthFixtureOverrides,
 ): Promise<readonly TruthValidationCheck[]> {
   switch (scenario) {
-    case 'normal-weekday': return normalWeekdayChecks(fixtureRoot);
-    case 'weekend-planned-work': return weekendPlannedWorkChecks(fixtureRoot);
+    case 'normal-weekday': return normalWeekdayChecks(fixtureRoot, overrides);
+    case 'weekend-planned-work': return weekendPlannedWorkChecks(overrides);
     case 'late-night-midnight': return lateNightChecks(fixtureRoot);
-    case 'major-disruption': return majorDisruptionChecks();
+    case 'major-disruption': return majorDisruptionChecks(fixtureRoot, overrides);
     case 'later-stop-comparison': return laterStopComparisonChecks();
     case 'route-group-bulk-drop': return routeGroupBulkDropChecks();
-    case 'false-bypass-incident-drill': return falseBypassDrillChecks();
+    case 'false-bypass-incident-drill': return falseBypassDrillChecks(fixtureRoot, overrides);
   }
 }
 
-async function normalWeekdayChecks(fixtureRoot: string): Promise<readonly TruthValidationCheck[]> {
-  const { realtime, alerts } = await coordinatedFixtures(fixtureRoot);
+async function normalWeekdayChecks(
+  fixtureRoot: string,
+  overrides: TruthFixtureOverrides,
+): Promise<readonly TruthValidationCheck[]> {
+  const { realtime, alerts } = await coordinatedFixtures(fixtureRoot, {
+    realtimeBytes: overrides.weekdayRealtime,
+    alertBytes: overrides.weekdayAlerts,
+    retrievedAt: NORMAL_BASE.toISOString(),
+  });
   const regular = await loadRegularFixture(fixtureRoot);
   const health = new FeedHealthGovernor().observe(realtime, NORMAL_BASE);
-  const claim = serviceClaim({
-    claimId: 'weekday-a-a23n', routeId: 'A', exactDirectionalStopId: 'A23N', constituentStopId: 'A23',
-    direction: 'northbound', tripId: realtime.tripUpdates[0].trip.tripId,
-    trainId: realtime.tripUpdates[0].trainInstanceId,
-  });
-  const gate = emptyServiceDecision(claim, NORMAL_BASE);
-  const admission = admitArrivalCandidate(arrivalCandidate({
-    at: NORMAL_BASE,
-    routeId: 'A',
-    feedGroupId: 'subway-rt-ace',
-    exactStopId: 'A23N',
-    destination: 'Inwood-207 St',
-    stableTrainIdentity: realtime.tripUpdates[0].trainInstanceId,
-    publishedTripId: realtime.tripUpdates[0].trip.tripId,
-    serviceClaimId: claim.claimId,
-    serviceChangeGate: gate,
-  }), scopeFor(gate, {
-    at: NORMAL_BASE, feedGroupId: 'subway-rt-ace', exactStopId: 'A23N', destination: 'Inwood-207 St',
-  }));
+  const bound = deriveRealtimeArrivalFixture(realtime, alerts, NORMAL_BASE, health);
+  const admission = admitArrivalCandidate(bound.candidate, bound.scope);
 
   return [
     check('coordinated-fixture-sources', realtime.entityCount === 5 && alerts.alerts.length === 2,
@@ -202,6 +218,18 @@ async function normalWeekdayChecks(fixtureRoot: string): Promise<readonly TruthV
         realtimeHash: realtime.contentHash,
         alertSource: alerts.sourceId,
         alertHash: alerts.contentHash,
+      }),
+    check('realtime-claim-binding', bound.bindingComplete,
+      'ARRIVAL_SCOPE_DERIVED_FROM_NORMALIZED_REALTIME', {
+        realtimeHash: realtime.contentHash,
+        alertHash: alerts.contentHash,
+        entityEvidenceId: bound.update.evidenceId,
+        routeId: bound.claim.routeId,
+        direction: bound.claim.direction,
+        targetStopId: bound.claim.exactDirectionalStopId,
+        tripId: bound.claim.tripId,
+        trainId: bound.claim.trainId,
+        destinationStopId: bound.destinationStopId,
       }),
     check('operating-service-date', isServiceActive(regular.data, 'WEEK', '20260804'),
       'OPERATING_SERVICE_ACTIVE', { serviceId: 'WEEK', serviceDate: '20260804', edition: regular.canonicalContentId }),
@@ -212,45 +240,113 @@ async function normalWeekdayChecks(fixtureRoot: string): Promise<readonly TruthV
   ];
 }
 
-async function weekendPlannedWorkChecks(fixtureRoot: string): Promise<readonly TruthValidationCheck[]> {
-  const supplemented = await loadSupplementedFixture(fixtureRoot);
-  const reroute = resolveRerouteClaim(plannedWeekendReroute());
-  const claim = serviceClaim({
-    claimId: 'weekend-f-d17n', routeId: 'F', exactDirectionalStopId: 'D17N', constituentStopId: 'D17',
-    direction: 'northbound', tripId: 'weekend-f-1', trainId: 'weekend-f-train-1',
+async function weekendPlannedWorkChecks(
+  overrides: TruthFixtureOverrides,
+): Promise<readonly TruthValidationCheck[]> {
+  const coverage = weekendCoverage();
+  const regular = await loadStaticGtfsArchive(
+    overrides.weekendRegularGtfs ?? weekendGtfsBytes('regular'),
+    {
+      source: 'regular-gtfs', retrievedAt: plusSeconds(WEEKEND_BASE, -7_200), coverage: [coverage],
+      wrapper: { fixture: 'weekend-regular-v1' },
+    },
+  );
+  const supplemented = await loadStaticGtfsArchive(
+    overrides.weekendSupplementedGtfs ?? weekendGtfsBytes('supplemented'),
+    {
+      source: 'supplemented-gtfs', publishedAt: plusSeconds(WEEKEND_BASE, -7_100),
+      retrievedAt: plusSeconds(WEEKEND_BASE, -7_000), sourceOrder: 1, coverage: [coverage],
+      wrapper: { fixture: 'weekend-supplemented-v1' },
+    },
+  );
+  const alerts = decodeFixtureAlerts(
+    overrides.weekendAlerts ?? weekendAlertBytes(),
+    plusSeconds(WEEKEND_BASE, -30),
+  );
+  const regularPattern = exactPattern(regular.data.servicePatterns, 'weekend regular');
+  const supplementedPattern = exactPattern(supplemented.data.servicePatterns, 'weekend supplemented');
+  if (regularPattern.routeId !== supplementedPattern.routeId || regularPattern.direction !== supplementedPattern.direction) {
+    throw new Error('Weekend regular and supplemented pattern ownership join failed');
+  }
+  const omittedStops = regularPattern.stopIds.filter((stopId) => !supplementedPattern.stopIds.includes(stopId));
+  if (omittedStops.length !== 1) throw new Error('Weekend supplemented pattern must own exactly one omitted stop');
+  const targetStopId = omittedStops[0];
+  const matchingAlert = exactAlertFor(alerts, {
+    routeId: regularPattern.routeId, stopId: targetStopId, directionId: 0, effect: 'MODIFIED_SERVICE',
+  }, 'weekend planned work');
+  const reroute = resolveRerouteClaim({
+    changeKind: 'reroute',
+    planned: true,
+    assessedAt: WEEKEND_BASE,
+    alertScope: 'match',
+    originalRoute: { id: regularPattern.routeId, label: regularPattern.routeId },
+    direction: regularPattern.direction === 'northbound' ? 'northbound' : 'southbound',
+    targetExactDirectionalStopId: targetStopId,
+    originalDirectionalStopIds: regularPattern.stopIds,
+    effectiveSupplementedPattern: {
+      sourceId: supplemented.canonicalContentId,
+      routeId: supplementedPattern.routeId,
+      direction: supplementedPattern.direction === 'northbound' ? 'northbound' : 'southbound',
+      orderedDirectionalStopIds: supplementedPattern.stopIds,
+      provenance: {
+        source: 'supplemented-gtfs', acceptance: 'accepted', currency: 'current',
+        editionId: `supplemented-gtfs:${supplemented.canonicalContentId}`,
+        canonicalContentId: supplemented.canonicalContentId,
+        publishedAt: new Date(supplemented.publishedAt!),
+        firstAcceptedRetrievedAt: new Date(supplemented.retrievedAt),
+        observedAt: new Date(supplemented.retrievedAt),
+        acceptedAt: new Date(supplemented.retrievedAt),
+        sourceOrder: supplemented.sourceOrder!,
+      },
+    },
+    liveRemainingStopIds: supplementedPattern.stopIds,
+    pathEvidence: [],
   });
-  const gate = hardServiceDecision(claim, WEEKEND_BASE, {
-    alertId: 'planned-weekend-bypass',
-    activePeriods: [],
-    selectors: [{
-      selectorId: 'planned-exact-stop', routeId: 'F', direction: 'northbound', exactDirectionalStopId: 'D17N',
-    }],
-    structuredEffect: 'NO_SERVICE',
-    declaredConsequence: 'station-closure',
-    official: { headerRaw: 'F trains bypass this stop', descriptionRaw: 'F trains are not stopping at this station.' },
+  const registry = new ScheduleEditionRegistry();
+  const regularObservation = registry.observe(regular);
+  const supplementObservation = registry.observe(supplemented);
+  const fallback = buildScheduleFallback({
+    feedDecision: {
+      feedGroupId: 'subway-rt-bdfm', kind: 'unavailable', fallbackEligibility: 'eligible', presentation: 'none',
+    },
+    scope: {
+      feedGroupId: 'subway-rt-bdfm', exactStopId: targetStopId, direction: regularPattern.direction,
+      operationalAxis: regularPattern.direction, comparisonAt: plusSeconds(WEEKEND_BASE, -300),
+      serviceDates: ['20260808'], routeIds: [regularPattern.routeId],
+    },
+    registry,
   });
-  const admission = admitArrivalCandidate(arrivalCandidate({
-    at: WEEKEND_BASE, routeId: 'F', feedGroupId: 'subway-rt-bdfm', exactStopId: 'D17N',
-    destination: 'Jamaica-179 St', stableTrainIdentity: 'weekend-f-train-1', publishedTripId: 'weekend-f-1',
-    serviceClaimId: claim.claimId, serviceChangeGate: gate,
-  }), scopeFor(gate, {
-    at: WEEKEND_BASE, feedGroupId: 'subway-rt-bdfm', exactStopId: 'D17N', destination: 'Jamaica-179 St',
-  }));
+  const fixtureBound = matchingAlert.evidenceId === alerts.rawEvidence.evidenceId
+    && regularPattern.stopIds.includes(targetStopId)
+    && !supplementedPattern.stopIds.includes(targetStopId)
+    && isServiceActive(regular.data, 'WKND', '20260808')
+    && isServiceActive(supplemented.data, 'WKND', '20260808');
 
   return [
-    check('supplemented-edition', supplemented.source === 'supplemented-gtfs'
-      && !supplemented.data.trips.some((trip) => trip.tripId === 'regular-omitted'),
-    'SUPPLEMENTED_EDITION_ACCEPTED', {
-      edition: supplemented.canonicalContentId,
-      sourceOrder: supplemented.sourceOrder,
-      tripCount: supplemented.data.trips.length,
+    check('weekend-fixture-binding', fixtureBound,
+      'PLANNED_WORK_SCOPE_BOUND_TO_NORMALIZED_FIXTURES', {
+        regularEdition: regular.canonicalContentId,
+        supplementedEdition: supplemented.canonicalContentId,
+        alertHash: alerts.contentHash,
+        alertEvidenceId: matchingAlert.evidenceId,
+        routeId: regularPattern.routeId,
+        direction: regularPattern.direction,
+        targetStopId,
+        serviceDate: '20260808',
+      }),
+    check('supplemented-owner', regularObservation.status === 'accepted-new'
+      && supplementObservation.status === 'accepted-new'
+      && fallback.source === 'supplemented-gtfs',
+    'SUPPLEMENTED_SCHEDULE_OWNS_EXACT_SCOPE', {
+      regularObservation, supplementObservation, fallbackSource: fallback.source,
+      fallbackCurrency: fallback.currency,
     }),
     check('planned-stop-exclusion', reroute.kind === 'suppressed'
       && reroute.reason === 'original-stop-excluded-by-effective-pattern',
     'PLANNED_STOP_EXCLUDED', reroute),
-    check('service-veto-precedence', admission.kind === 'rejected'
-      && admission.failedGate === 'service' && admission.boardTreatment === 'resolved-suppression',
-    'SERVICE_CHANGE_VETO_BLOCKED_ARRIVAL', admission),
+    check('omitted-stop-board-empty', fallback.mode === 'scheduled-fallback'
+      && fallback.rows.length === 0 && fallback.exclusions.length === 0,
+    'SUPPLEMENT_MASK_PREVENTED_REGULAR_ARRIVAL', fallback),
   ];
 }
 
@@ -282,32 +378,41 @@ async function lateNightChecks(fixtureRoot: string): Promise<readonly TruthValid
   ];
 }
 
-async function majorDisruptionChecks(): Promise<readonly TruthValidationCheck[]> {
-  const claim = serviceClaim({
-    claimId: 'disruption-f-a24n', routeId: 'F', exactDirectionalStopId: 'A24N', constituentStopId: 'A24',
-    direction: 'northbound', tripId: 'disruption-f-1', trainId: 'disruption-f-train-1',
+async function majorDisruptionChecks(
+  fixtureRoot: string,
+  overrides: TruthFixtureOverrides,
+): Promise<readonly TruthValidationCheck[]> {
+  const { realtime, alerts } = await coordinatedFixtures(fixtureRoot, {
+    alertBytes: overrides.majorDisruptionAlerts ?? majorDisruptionAlertBytes(),
+    retrievedAt: NORMAL_BASE.toISOString(),
   });
-  const gate = hardServiceDecision(claim, DAY_BASE, {
-    alertId: 'major-f-suspension',
-    activePeriods: [],
-    selectors: [{ selectorId: 'entire-route', routeId: 'F' }],
-    structuredEffect: 'NO_SERVICE',
-    declaredConsequence: 'full-suspension',
-    official: { headerRaw: 'F service is suspended', descriptionRaw: 'No F trains are running.' },
+  const health = new FeedHealthGovernor().observe(realtime, NORMAL_BASE);
+  const bound = deriveRealtimeArrivalFixture(realtime, alerts, NORMAL_BASE, health);
+  const admission = admitArrivalCandidate(bound.candidate, bound.scope);
+  const matchedAlert = findAlertFor(alerts, {
+    routeId: bound.claim.routeId,
+    stopId: bound.claim.exactDirectionalStopId,
+    directionId: directionId(bound.claim.direction),
+    effect: 'NO_SERVICE',
   });
-  const admission = admitArrivalCandidate(arrivalCandidate({
-    at: DAY_BASE, routeId: 'F', feedGroupId: 'subway-rt-bdfm', exactStopId: 'A24N',
-    destination: 'Jamaica-179 St', stableTrainIdentity: 'disruption-f-train-1', publishedTripId: 'disruption-f-1',
-    serviceClaimId: claim.claimId, serviceChangeGate: gate,
-  }), scopeFor(gate, {
-    at: DAY_BASE, feedGroupId: 'subway-rt-bdfm', exactStopId: 'A24N', destination: 'Jamaica-179 St',
-  }));
 
   return [
-    check('resolved-service-suppression', gate.kind === 'resolved-suppression'
-      && gate.disposition === 'resolved-ineligible', 'RESOLVED_MAJOR_DISRUPTION', gate),
-    check('dependent-product-containment', sameStrings(gate.suppressedProducts, CLAIM_SUPPRESSED_PRODUCTS),
-      'ALL_DEPENDENT_PRODUCTS_SUPPRESSED', gate.suppressedProducts),
+    check('disruption-fixture-binding', bound.bindingComplete && matchedAlert !== null
+      && matchedAlert.evidenceId === alerts.rawEvidence.evidenceId,
+    'DISRUPTION_SCOPE_DERIVED_FROM_NORMALIZED_SOURCES', {
+      realtimeHash: realtime.contentHash,
+      alertHash: alerts.contentHash,
+      alertEvidenceId: matchedAlert?.evidenceId,
+      routeId: bound.claim.routeId,
+      direction: bound.claim.direction,
+      targetStopId: bound.claim.exactDirectionalStopId,
+      tripId: bound.claim.tripId,
+      trainId: bound.claim.trainId,
+    }),
+    check('resolved-service-suppression', bound.gate.kind === 'resolved-suppression'
+      && bound.gate.disposition === 'resolved-ineligible', 'RESOLVED_MAJOR_DISRUPTION', bound.gate),
+    check('dependent-product-containment', sameStrings(bound.gate.suppressedProducts, CLAIM_SUPPRESSED_PRODUCTS),
+      'ALL_DEPENDENT_PRODUCTS_SUPPRESSED', bound.gate.suppressedProducts),
     check('arrival-claim-suppression', admission.kind === 'rejected'
       && admission.failedGate === 'service' && admission.boardTreatment === 'resolved-suppression',
     'ARRIVAL_NOT_ADMITTED', admission),
@@ -387,48 +492,63 @@ async function routeGroupBulkDropChecks(): Promise<readonly TruthValidationCheck
   return checks;
 }
 
-async function falseBypassDrillChecks(): Promise<readonly TruthValidationCheck[]> {
-  const claim = serviceClaim({
-    claimId: 'drill-f-a24n', routeId: 'F', exactDirectionalStopId: 'A24N', constituentStopId: 'A24',
-    direction: 'northbound', tripId: 'drill-f-1', trainId: 'drill-f-train-1',
+async function falseBypassDrillChecks(
+  fixtureRoot: string,
+  overrides: TruthFixtureOverrides,
+): Promise<readonly TruthValidationCheck[]> {
+  const originalAt = new Date('2026-08-04T06:00:30.000Z');
+  const incidentAt = NORMAL_BASE;
+  const originalSources = await coordinatedFixtures(fixtureRoot, { retrievedAt: originalAt.toISOString() });
+  const incidentSources = await coordinatedFixtures(fixtureRoot, {
+    alertBytes: overrides.falseBypassAlerts ?? falseBypassAlertBytes(),
+    retrievedAt: incidentAt.toISOString(),
   });
-  const originalGate = emptyServiceDecision(claim, DAY_BASE);
-  const candidate = arrivalCandidate({
-    at: DAY_BASE, routeId: 'F', feedGroupId: 'subway-rt-bdfm', exactStopId: 'A24N',
-    destination: 'Jamaica-179 St', stableTrainIdentity: 'drill-f-train-1', publishedTripId: 'drill-f-1',
-    serviceClaimId: claim.claimId, serviceChangeGate: originalGate,
+  const originalHealth = new FeedHealthGovernor().observe(originalSources.realtime, originalAt);
+  const incidentHealth = new FeedHealthGovernor().observe(incidentSources.realtime, incidentAt);
+  const originalBound = deriveRealtimeArrivalFixture(
+    originalSources.realtime, originalSources.alerts, originalAt, originalHealth,
+  );
+  const incidentBound = deriveRealtimeArrivalFixture(
+    incidentSources.realtime, incidentSources.alerts, incidentAt, incidentHealth,
+  );
+  const original = admitArrivalCandidate(originalBound.candidate, originalBound.scope);
+  const contained = admitArrivalCandidate(incidentBound.candidate, incidentBound.scope);
+  const matchedAlert = findAlertFor(incidentSources.alerts, {
+    routeId: incidentBound.claim.routeId,
+    stopId: incidentBound.claim.exactDirectionalStopId,
+    directionId: directionId(incidentBound.claim.direction),
+    effect: 'NO_SERVICE',
   });
-  const original = admitArrivalCandidate(candidate, scopeFor(originalGate, {
-    at: DAY_BASE, feedGroupId: 'subway-rt-bdfm', exactStopId: 'A24N', destination: 'Jamaica-179 St',
-  }));
-  const incidentAt = plusSeconds(DAY_BASE, 30);
-  const veto = hardServiceDecision(claim, incidentAt, {
-    alertId: 'drill-confirmed-bypass',
-    activePeriods: [],
-    selectors: [{
-      selectorId: 'drill-exact-stop', routeId: 'F', direction: 'northbound', exactDirectionalStopId: 'A24N',
-    }],
-    structuredEffect: 'NO_SERVICE',
-    declaredConsequence: 'station-closure',
-    official: { headerRaw: 'F trains bypass 14 St', descriptionRaw: 'F trains are not stopping at 14 St.' },
-  });
-  const containedCandidate = arrivalCandidate({
-    at: incidentAt, routeId: 'F', feedGroupId: 'subway-rt-bdfm', exactStopId: 'A24N',
-    destination: 'Jamaica-179 St', stableTrainIdentity: 'drill-f-train-1', publishedTripId: 'drill-f-1',
-    serviceClaimId: claim.claimId, serviceChangeGate: veto,
-  });
-  const contained = admitArrivalCandidate(containedCandidate, scopeFor(veto, {
-    at: incidentAt, feedGroupId: 'subway-rt-bdfm', exactStopId: 'A24N', destination: 'Jamaica-179 St',
-  }));
+  const sameOperationalClaim = originalSources.realtime.contentHash === incidentSources.realtime.contentHash
+    && originalBound.claim.routeId === incidentBound.claim.routeId
+    && originalBound.claim.exactDirectionalStopId === incidentBound.claim.exactDirectionalStopId
+    && originalBound.claim.direction === incidentBound.claim.direction
+    && originalBound.claim.tripId === incidentBound.claim.tripId
+    && originalBound.claim.trainId === incidentBound.claim.trainId
+    && originalBound.destinationStopId === incidentBound.destinationStopId;
 
   return [
+    check('incident-fixture-binding', sameOperationalClaim && originalBound.bindingComplete
+      && incidentBound.bindingComplete && matchedAlert?.evidenceId === incidentSources.alerts.rawEvidence.evidenceId,
+    'INCIDENT_TIMELINE_BOUND_TO_NORMALIZED_SOURCES', {
+      originalRealtimeHash: originalSources.realtime.contentHash,
+      originalAlertHash: originalSources.alerts.contentHash,
+      incidentRealtimeHash: incidentSources.realtime.contentHash,
+      incidentAlertHash: incidentSources.alerts.contentHash,
+      incidentAlertEvidenceId: matchedAlert?.evidenceId,
+      routeId: incidentBound.claim.routeId,
+      direction: incidentBound.claim.direction,
+      targetStopId: incidentBound.claim.exactDirectionalStopId,
+      tripId: incidentBound.claim.tripId,
+      trainId: incidentBound.claim.trainId,
+    }),
     check('original-admission-reconstruction', original.kind === 'admitted',
       'ORIGINAL_DECISION_RECONSTRUCTED', original),
     check('current-bypass-veto', contained.kind === 'rejected'
       && contained.failedGate === 'service' && contained.boardTreatment === 'resolved-suppression',
     'RESOLVED_SERVICE_VETO_BLOCKED_ARRIVAL', contained),
-    check('containment-product-scope', sameStrings(veto.suppressedProducts, CLAIM_SUPPRESSED_PRODUCTS),
-      'FALSE_BYPASS_DEPENDENCIES_CONTAINED', veto.suppressedProducts),
+    check('containment-product-scope', sameStrings(incidentBound.gate.suppressedProducts, CLAIM_SUPPRESSED_PRODUCTS),
+      'FALSE_BYPASS_DEPENDENCIES_CONTAINED', incidentBound.gate.suppressedProducts),
     check('zero-exposure-incident-path', contained.kind === 'rejected'
       && allPublicLocksClosed(), 'POTENTIAL_FALSE_BYPASS_CONTAINED_IN_VALIDATION', {
         candidateDisposition: contained.kind,
@@ -485,9 +605,19 @@ function check(id: string, passed: boolean, reasonCode: string, evidence: unknow
   });
 }
 
-async function coordinatedFixtures(fixtureRoot: string) {
-  const realtimeBytes = await readFile(join(fixtureRoot, 'realtime', 'current.pb'));
-  const alertBytes = await readFile(join(fixtureRoot, 'alerts', 'subway-alerts.json'));
+async function coordinatedFixtures(
+  fixtureRoot: string,
+  options: {
+    readonly realtimeBytes?: Uint8Array;
+    readonly alertBytes?: Uint8Array;
+    readonly retrievedAt?: string;
+  } = {},
+) {
+  const realtimeBytes = options.realtimeBytes
+    ?? await readFile(join(fixtureRoot, 'realtime', 'current.pb'));
+  const alertBytes = options.alertBytes
+    ?? await readFile(join(fixtureRoot, 'alerts', 'subway-alerts.json'));
+  const retrievedAt = options.retrievedAt ?? NORMAL_BASE.toISOString();
   const registry = createSourceRegistry({});
   const realtimeSource = requiredRemote(registry, 'subway-rt-ace');
   const alertSource = requiredRemote(registry, 'subway-alerts');
@@ -497,7 +627,7 @@ async function coordinatedFixtures(fixtureRoot: string) {
     retrieve: async (source) => {
       const json = source.id === 'subway-alerts';
       const bytes = json ? alertBytes : realtimeBytes;
-      return { bytes, provenance: fixtureProvenance(source, bytes, json) };
+      return { bytes, provenance: fixtureProvenance(source, bytes, json, retrievedAt) };
     },
   });
   await coordinator.refreshAll();
@@ -518,17 +648,6 @@ async function loadRegularFixture(fixtureRoot: string) {
   });
 }
 
-async function loadSupplementedFixture(fixtureRoot: string) {
-  return loadStaticGtfsArchive(await readFile(join(fixtureRoot, 'gtfs', 'supplemented.zip')), {
-    source: 'supplemented-gtfs',
-    retrievedAt: new Date('2026-08-08T10:00:00.000Z'),
-    publishedAt: new Date('2026-08-08T09:00:00.000Z'),
-    sourceOrder: 2,
-    coverage: [scheduleCoverage('weekend-supplement')],
-    wrapper: { filename: 'supplemented.zip' },
-  });
-}
-
 function scheduleCoverage(id: string) {
   return {
     id,
@@ -540,14 +659,19 @@ function scheduleCoverage(id: string) {
   };
 }
 
-function fixtureProvenance(source: RemoteSource, bytes: Uint8Array, json: boolean): SourceProvenance {
+function fixtureProvenance(
+  source: RemoteSource,
+  bytes: Uint8Array,
+  json: boolean,
+  retrievedAt = NORMAL_BASE.toISOString(),
+): SourceProvenance {
   const mediaType = json ? 'application/json' : 'application/x-protobuf';
   return Object.freeze({
     sourceId: source.id,
     sourceAuthority: source.authority,
     sourceRole: source.role,
     sourceUrl: source.url,
-    retrievedAt: '2026-08-04T06:01:00.000Z',
+    retrievedAt,
     finalUrl: source.url,
     redirectCount: 0,
     declaredContentType: mediaType,
@@ -564,132 +688,361 @@ function requiredRemote(registry: ReturnType<typeof createSourceRegistry>, id: s
   return source;
 }
 
-function serviceClaim(input: ServiceClaimScope): ServiceClaimScope {
-  return input;
-}
-
-function emptyServiceDecision(claim: ServiceClaimScope, at: Date): ServiceChangeDecision {
-  return evaluateServiceChanges({
-    snapshot: classifyAlertSnapshot({ status: 'accepted', feedTimestamp: at, retrievedAt: at, alerts: [] }, at),
-    claim,
+function deriveRealtimeArrivalFixture(
+  realtime: RealtimeSnapshot,
+  alerts: AlertSnapshot,
+  decisionAt: Date,
+  health: FeedHealthDecision,
+): {
+  readonly update: NormalizedTripUpdate;
+  readonly target: NormalizedStopCall;
+  readonly destinationStopId: string;
+  readonly claim: ServiceClaimScope;
+  readonly gate: ServiceChangeDecision;
+  readonly candidate: ArrivalAdmissionCandidate;
+  readonly scope: ArrivalBoardScope;
+  readonly bindingComplete: boolean;
+} {
+  const candidates = realtime.tripUpdates.flatMap((update) => {
+    const direction = directionFromTrip(update);
+    const movement = update.vehicleProgress;
+    if (!direction || !update.trip.routeId || !update.trip.tripId || !movement?.movementTimestamp) return [];
+    return update.remainingStopCalls
+      .filter((call) => {
+        const event = stopEvent(call);
+        return event !== null && event.getTime() > decisionAt.getTime()
+          && call.scheduledTrack !== null && call.actualTrack === call.scheduledTrack
+          && movement.stopId === call.stopId
+          && movement.movementTimestamp!.getTime() <= decisionAt.getTime()
+          && decisionAt.getTime() - movement.movementTimestamp!.getTime() <= 90_000;
+      })
+      .map((target) => ({ update, target, direction }));
   });
-}
-
-function hardServiceDecision(
-  claim: ServiceClaimScope,
-  at: Date,
-  alert: ServiceAlertEvidence,
-): ServiceChangeDecision {
-  return evaluateServiceChanges({
-    snapshot: classifyAlertSnapshot({ status: 'accepted', feedTimestamp: at, retrievedAt: at, alerts: [alert] }, at),
-    claim,
-  });
-}
-
-function arrivalCandidate(input: {
-  readonly at: Date;
-  readonly routeId: string;
-  readonly feedGroupId: string;
-  readonly exactStopId: string;
-  readonly destination: string;
-  readonly stableTrainIdentity: string;
-  readonly publishedTripId: string;
-  readonly serviceClaimId: string;
-  readonly serviceChangeGate: ServiceChangeDecision;
-}): ArrivalAdmissionCandidate {
-  return {
-    stableTrainIdentity: input.stableTrainIdentity,
-    publishedTripId: input.publishedTripId,
-    patternIdentity: `${input.exactStopId}:1`,
-    feedGroupId: input.feedGroupId,
-    route: { id: input.routeId, label: input.routeId },
-    routeOrderKind: /^\d/.test(input.routeId) ? 'numbered' : 'lettered',
-    direction: 'northbound',
-    destination: input.destination,
-    remainingStopCalls: [{
-      stopId: input.exactStopId,
-      sourceStopSequence: 1,
-      arrivalAt: plusSeconds(input.at, 180),
-      departureAt: plusSeconds(input.at, 190),
-      scheduleRelationship: 'SCHEDULED',
-    }],
-    serviceChangeGate: input.serviceChangeGate,
-    serviceClaimId: input.serviceClaimId,
-    serviceDisposition: 'eligible',
-    trackDisposition: 'eligible',
-    freshness: 'current',
+  if (candidates.length !== 1) throw new Error('Normalized realtime fixture must own exactly one admissible claim');
+  const { update, target, direction } = candidates[0];
+  const destinationStopId = update.remainingStopCalls.at(-1)?.stopId;
+  const eventAt = stopEvent(target);
+  if (!destinationStopId || !eventAt) throw new Error('Normalized realtime fixture has no exact terminal or event');
+  const claimId = `fixture-claim:${sha256Hex(stableJson([
+    realtime.contentHash, update.trainInstanceId, update.trip.tripId, target.stopId, direction,
+  ]))}`;
+  const claim: ServiceClaimScope = {
+    claimId,
+    routeId: update.trip.routeId!,
+    exactDirectionalStopId: target.stopId,
+    constituentStopId: target.stopId.replace(/[NSEW]$/u, ''),
+    direction,
+    tripId: update.trip.tripId,
+    trainId: update.trainInstanceId,
+  };
+  const gate = evaluateServiceChanges({ snapshot: classifiedAlertFixture(alerts, decisionAt), claim });
+  const candidate: ArrivalAdmissionCandidate = {
+    stableTrainIdentity: update.trainInstanceId,
+    publishedTripId: update.trip.tripId,
+    patternIdentity: `fixture-pattern:${sha256Hex(stableJson(update.remainingStopCalls.map((call) => ({
+      stopId: call.stopId, remainingOrder: call.remainingOrder, sourceStopSequence: call.sourceStopSequence,
+    }))))}`,
+    feedGroupId: realtime.feedGroupId,
+    route: { id: update.trip.routeId!, label: update.trip.routeId! },
+    routeOrderKind: /^\d/u.test(update.trip.routeId!) ? 'numbered' : 'lettered',
+    direction,
+    destination: destinationStopId,
+    remainingStopCalls: update.remainingStopCalls.map((call) => ({
+      stopId: call.stopId,
+      sourceStopSequence: call.sourceStopSequence,
+      occurrenceId: call.sourceStopSequence === null ? `${update.entityId}:${call.remainingOrder}` : null,
+      arrivalAt: call.arrivalTime,
+      departureAt: call.departureTime,
+      scheduleRelationship: call.scheduleRelationship,
+    })),
+    serviceChangeGate: gate,
+    serviceClaimId: claimId,
+    serviceDisposition: gate.disposition,
+    trackDisposition: target.actualTrack === target.scheduledTrack && target.actualTrack !== null ? 'eligible' : 'quarantined',
+    freshness: health.kind,
     identityDisposition: 'coherent',
     recoveryDisposition: 'live-continuity',
     movementDisposition: 'plausible',
-    confidence: {
-      kind: 'live',
-      supportedRange: { startsAt: plusSeconds(input.at, 160), endsAt: plusSeconds(input.at, 200) },
-    },
+    confidence: { kind: 'live', supportedRange: { startsAt: eventAt, endsAt: eventAt } },
     provenance: {
-      source: 'gtfs-rt', sourceId: input.feedGroupId,
-      observedAt: plusSeconds(input.at, -30), retrievedAt: input.at,
+      source: 'gtfs-rt', sourceId: realtime.sourceId,
+      observedAt: realtime.feedTimestamp, retrievedAt: realtime.retrievedAt,
+      version: realtime.contentHash,
     },
   };
-}
-
-function scopeFor(
-  gate: ServiceChangeDecision,
-  input: { readonly at: Date; readonly feedGroupId: string; readonly exactStopId: string; readonly destination: string },
-): ArrivalBoardScope {
-  return {
-    feedGroupId: input.feedGroupId,
-    exactStopId: input.exactStopId,
-    direction: 'northbound',
-    destination: input.destination,
-    comparisonAt: input.at,
-    serviceAssessmentAt: input.at,
+  const scope: ArrivalBoardScope = {
+    feedGroupId: realtime.feedGroupId,
+    exactStopId: target.stopId,
+    direction,
+    destination: destinationStopId,
+    comparisonAt: decisionAt,
+    serviceAssessmentAt: decisionAt,
     serviceAlertContextIdentity: gate.alertContextIdentity,
   };
+  const bindingComplete = update.evidenceId === realtime.rawEvidence.evidenceId
+    && realtime.contentHash === realtime.rawEvidence.evidenceId
+    && alerts.contentHash === alerts.rawEvidence.evidenceId
+    && claim.routeId === candidate.route.id
+    && claim.exactDirectionalStopId === scope.exactStopId
+    && claim.direction === candidate.direction
+    && claim.tripId === candidate.publishedTripId
+    && claim.trainId === candidate.stableTrainIdentity
+    && target.stopId === update.vehicleProgress?.stopId
+    && target.actualTrack !== null && target.actualTrack === target.scheduledTrack
+    && gate.evaluatedClaim.claimId === claimId;
+  return { update, target, destinationStopId, claim, gate, candidate, scope, bindingComplete };
 }
 
-function plannedWeekendReroute(): RerouteClaimInput {
+function classifiedAlertFixture(snapshot: AlertSnapshot, assessedAt: Date) {
+  if (snapshot.sourceId !== 'subway-alerts' || snapshot.contentHash !== snapshot.rawEvidence.evidenceId
+    || snapshot.provenance.sha256 !== snapshot.contentHash.replace(/^sha256:/u, '')) {
+    throw new Error('Normalized alert fixture provenance join failed');
+  }
+  return classifyAlertSnapshot({
+    status: 'accepted',
+    feedTimestamp: snapshot.feedTimestamp,
+    retrievedAt: snapshot.retrievedAt,
+    alerts: snapshot.alerts.map(serviceAlertFromNormalized),
+  }, assessedAt);
+}
+
+function serviceAlertFromNormalized(alert: NormalizedAlert): ServiceAlertEvidence {
   return {
-    changeKind: 'reroute',
-    planned: true,
-    assessedAt: WEEKEND_BASE,
-    alertScope: 'match',
-    originalRoute: { id: 'F', label: 'F' },
-    direction: 'northbound',
-    targetExactDirectionalStopId: 'D17N',
-    originalDirectionalStopIds: ['B02N', 'D15N', 'D16N', 'D17N', 'D18N'],
-    effectiveSupplementedPattern: {
-      sourceId: 'weekend-supplement-20260808',
-      routeId: 'F',
-      direction: 'northbound',
-      orderedDirectionalStopIds: ['B02N', 'F14N', 'A24N', 'A25N', 'A27N'],
-      provenance: {
-        source: 'supplemented-gtfs',
-        acceptance: 'accepted',
-        currency: 'current',
-        editionId: 'supplemented-gtfs:weekend-20260808',
-        canonicalContentId: 'weekend-20260808',
-        publishedAt: plusSeconds(WEEKEND_BASE, -3_600),
-        firstAcceptedRetrievedAt: plusSeconds(WEEKEND_BASE, -3_590),
-        observedAt: plusSeconds(WEEKEND_BASE, -60),
-        acceptedAt: plusSeconds(WEEKEND_BASE, -30),
-        sourceOrder: 2,
-        priorAcceptedEdition: {
-          editionId: 'supplemented-gtfs:weekend-20260801',
-          canonicalContentId: 'weekend-20260801',
-          publishedAt: plusSeconds(WEEKEND_BASE, -7_200),
-          firstAcceptedRetrievedAt: plusSeconds(WEEKEND_BASE, -7_190),
-          observedAt: plusSeconds(WEEKEND_BASE, -3_700),
-          acceptedAt: plusSeconds(WEEKEND_BASE, -3_650),
-          sourceOrder: 1,
-        },
-      },
-    },
-    liveRemainingStopIds: ['F14N', 'A24N', 'A25N', 'A27N'],
-    pathEvidence: [{
-      evidenceId: 'weekend-alert-path-1', routeId: 'F', direction: 'northbound',
-      orderedDirectionalStopIds: ['F14N', 'A24N', 'A25N', 'A27N'], supportedViaLabel: 'Via E',
-    }],
+    alertId: alert.id,
+    activePeriods: alert.activePeriods,
+    selectors: alert.informedEntities.map((entity, index) => ({
+      selectorId: `${alert.id}:${index}`,
+      ...(entity.routeId === null ? {} : { routeId: entity.routeId }),
+      ...(entity.stopId === null ? {} : { exactDirectionalStopId: entity.stopId }),
+      ...(entity.directionId === null ? {} : { direction: directionFromId(entity.directionId) }),
+      ...(entity.trip?.tripId ? { tripId: entity.trip.tripId } : {}),
+      ...(entity.trip?.nyct.trainId ? { trainId: entity.trip.nyct.trainId } : {}),
+    })),
+    structuredEffect: structuredEffectFromNormalized(alert.effect),
+    declaredConsequence: declaredConsequenceFromNormalized(alert.effect),
+    official: { headerRaw: alert.rawOfficialText, descriptionRaw: alert.rawDescription ?? '' },
   };
+}
+
+function structuredEffectFromNormalized(effect: string | null): StructuredAlertEffect {
+  return ['NO_SERVICE', 'MODIFIED_SERVICE', 'SIGNIFICANT_DELAYS', 'ACCESSIBILITY_ISSUE', 'UNKNOWN_EFFECT']
+    .includes(String(effect)) ? effect as StructuredAlertEffect : 'OTHER_EFFECT';
+}
+
+function declaredConsequenceFromNormalized(effect: string | null): DeclaredServiceConsequence {
+  if (effect === 'NO_SERVICE') return 'full-suspension';
+  if (effect === 'SIGNIFICANT_DELAYS') return 'delay-only';
+  if (effect === 'ACCESSIBILITY_ISSUE') return 'entrance-equipment';
+  return 'generic-affected';
+}
+
+function directionFromTrip(update: NormalizedTripUpdate): 'northbound' | 'southbound' | null {
+  if (update.trip.nyct.direction === 'NORTH') return 'northbound';
+  if (update.trip.nyct.direction === 'SOUTH') return 'southbound';
+  return directionFromId(update.trip.directionId) ?? null;
+}
+
+function directionFromId(value: number | null): 'northbound' | 'southbound' | undefined {
+  return value === 0 ? 'northbound' : value === 1 ? 'southbound' : undefined;
+}
+
+function directionId(value: ServiceClaimScope['direction']): number {
+  if (value === 'northbound') return 0;
+  if (value === 'southbound') return 1;
+  throw new Error('Fixture requires a northbound or southbound direction');
+}
+
+function stopEvent(call: NormalizedStopCall): Date | null {
+  return call.departureTime ?? call.arrivalTime;
+}
+
+function findAlertFor(
+  snapshot: AlertSnapshot,
+  expected: { readonly routeId: string; readonly stopId: string; readonly directionId: number; readonly effect: string },
+): NormalizedAlert | null {
+  const matches = snapshot.alerts.filter((alert) => alert.effect === expected.effect
+    && alert.informedEntities.some((entity) => entity.routeId === expected.routeId
+      && entity.stopId === expected.stopId && entity.directionId === expected.directionId));
+  return matches.length === 1 ? matches[0] : null;
+}
+
+function exactAlertFor(
+  snapshot: AlertSnapshot,
+  expected: { readonly routeId: string; readonly stopId: string; readonly directionId: number; readonly effect: string },
+  label: string,
+): NormalizedAlert {
+  const alert = findAlertFor(snapshot, expected);
+  if (!alert) throw new Error(`${label} alert scope and consequence join failed`);
+  return alert;
+}
+
+function decodeFixtureAlerts(bytes: Uint8Array, retrievedAt: Date): AlertSnapshot {
+  const source = requiredRemote(createSourceRegistry({}), 'subway-alerts');
+  return decodeAlertSnapshotJson(bytes, {
+    provenance: fixtureProvenance(source, bytes, true, retrievedAt.toISOString()),
+  });
+}
+
+function majorDisruptionAlertBytes(): Uint8Array {
+  return alertFixtureBytes({
+    id: 'major-a-suspension', feedTimestamp: plusSeconds(NORMAL_BASE, -60), routeId: 'A', stopId: 'A24S',
+    directionId: 1, effect: 'NO_SERVICE', header: 'A service is suspended', description: 'No A trains are running.',
+  });
+}
+
+function falseBypassAlertBytes(): Uint8Array {
+  return alertFixtureBytes({
+    id: 'false-bypass-a24s', feedTimestamp: NORMAL_BASE, routeId: 'A', stopId: 'A24S', directionId: 1,
+    effect: 'NO_SERVICE', header: 'A service is suspended', description: 'No A trains are running.',
+  });
+}
+
+function weekendAlertBytes(): Uint8Array {
+  return alertFixtureBytes({
+    id: 'weekend-f-reroute', feedTimestamp: plusSeconds(WEEKEND_BASE, -60), routeId: 'F', stopId: 'D17N',
+    directionId: 0, effect: 'MODIFIED_SERVICE', header: 'F trains are rerouted',
+    description: 'F trains follow the supplemented stopping pattern.',
+  });
+}
+
+function alertFixtureBytes(input: {
+  readonly id: string;
+  readonly feedTimestamp: Date;
+  readonly routeId: string;
+  readonly stopId: string;
+  readonly directionId: number;
+  readonly effect: string;
+  readonly header: string;
+  readonly description: string;
+}): Uint8Array {
+  const timestamp = Math.trunc(input.feedTimestamp.getTime() / 1_000);
+  return new TextEncoder().encode(JSON.stringify({
+    header: { gtfsRealtimeVersion: '2.0', incrementality: 'FULL_DATASET', timestamp },
+    entity: [{
+      id: input.id,
+      alert: {
+        activePeriod: [{ start: timestamp - 300, end: timestamp + 3_600 }],
+        informedEntity: [{ routeId: input.routeId, stopId: input.stopId, directionId: input.directionId }],
+        cause: 'CONSTRUCTION',
+        effect: input.effect,
+        headerText: { translation: [{ text: input.header, language: 'en' }] },
+        descriptionText: { translation: [{ text: input.description, language: 'en' }] },
+      },
+    }],
+  }));
+}
+
+function exactPattern(
+  patterns: readonly ServicePattern[],
+  label: string,
+): ServicePattern {
+  if (patterns.length !== 1 || patterns[0].stopIds.length === 0) {
+    throw new Error(`${label} fixture requires one exact nonempty pattern`);
+  }
+  return patterns[0];
+}
+
+function weekendCoverage() {
+  return {
+    id: 'weekend-f-20260808',
+    routeIds: ['F'],
+    serviceDates: ['20260808'],
+    effectiveFrom: '2026-08-08T04:00:00.000Z',
+    effectiveUntil: '2026-08-09T04:00:00.000Z',
+    directions: ['northbound'] as const,
+  };
+}
+
+function weekendGtfsBytes(kind: 'regular' | 'supplemented'): Uint8Array {
+  const tripId = kind === 'regular' ? 'f-weekend-regular' : 'f-weekend-supplemented';
+  const calls = kind === 'regular'
+    ? [
+        `${tripId},10:00:00,10:00:00,D15N,1`,
+        `${tripId},10:05:00,10:05:00,D17N,2`,
+        `${tripId},10:10:00,10:10:00,D18N,3`,
+      ]
+    : [
+        `${tripId},10:00:00,10:00:00,D15N,1`,
+        `${tripId},10:10:00,10:10:00,D18N,2`,
+      ];
+  return buildStoredZip(Object.entries({
+    'agency.txt': 'agency_id,agency_name,agency_url,agency_timezone\nMTA,Fixture Transit,https://example.test,America/New_York\n',
+    'stops.txt': [
+      'stop_id,stop_name,stop_lat,stop_lon,location_type,parent_station',
+      'D15,Origin,40.70,-74.00,1,', 'D15N,Origin northbound,40.70,-74.00,0,D15',
+      'D17,Bypassed,40.71,-73.99,1,', 'D17N,Bypassed northbound,40.71,-73.99,0,D17',
+      'D18,Destination,40.72,-73.98,1,', 'D18N,Destination northbound,40.72,-73.98,0,D18', '',
+    ].join('\n'),
+    'routes.txt': 'route_id,agency_id,route_short_name,route_long_name,route_type\nF,MTA,F,Weekend fixture,1\n',
+    'trips.txt': `route_id,service_id,trip_id,trip_headsign,direction_id,shape_id\nF,WKND,${tripId},Uptown,0,\n`,
+    'stop_times.txt': ['trip_id,arrival_time,departure_time,stop_id,stop_sequence', ...calls, ''].join('\n'),
+    'calendar.txt': 'service_id,monday,tuesday,wednesday,thursday,friday,saturday,sunday,start_date,end_date\nWKND,0,0,0,0,0,1,0,20260801,20260831\n',
+  }));
+}
+
+function buildStoredZip(entries: ReadonlyArray<readonly [string, string]>): Uint8Array {
+  const encoder = new TextEncoder();
+  const localParts: Uint8Array[] = [];
+  const centralParts: Uint8Array[] = [];
+  let offset = 0;
+  for (const [name, value] of entries) {
+    const nameBytes = encoder.encode(name);
+    const data = encoder.encode(value);
+    const crc = crc32(data);
+    const local = new Uint8Array(30 + nameBytes.length + data.length);
+    const localView = new DataView(local.buffer);
+    localView.setUint32(0, 0x04034b50, true);
+    localView.setUint16(4, 20, true);
+    localView.setUint16(6, 0x0800, true);
+    localView.setUint16(8, 0, true);
+    localView.setUint32(14, crc, true);
+    localView.setUint32(18, data.length, true);
+    localView.setUint32(22, data.length, true);
+    localView.setUint16(26, nameBytes.length, true);
+    local.set(nameBytes, 30);
+    local.set(data, 30 + nameBytes.length);
+    localParts.push(local);
+    const central = new Uint8Array(46 + nameBytes.length);
+    const centralView = new DataView(central.buffer);
+    centralView.setUint32(0, 0x02014b50, true);
+    centralView.setUint16(4, 20, true);
+    centralView.setUint16(6, 20, true);
+    centralView.setUint16(8, 0x0800, true);
+    centralView.setUint16(10, 0, true);
+    centralView.setUint32(16, crc, true);
+    centralView.setUint32(20, data.length, true);
+    centralView.setUint32(24, data.length, true);
+    centralView.setUint16(28, nameBytes.length, true);
+    centralView.setUint32(42, offset, true);
+    central.set(nameBytes, 46);
+    centralParts.push(central);
+    offset += local.length;
+  }
+  const centralSize = centralParts.reduce((sum, part) => sum + part.length, 0);
+  const end = new Uint8Array(22);
+  const endView = new DataView(end.buffer);
+  endView.setUint32(0, 0x06054b50, true);
+  endView.setUint16(8, entries.length, true);
+  endView.setUint16(10, entries.length, true);
+  endView.setUint32(12, centralSize, true);
+  endView.setUint32(16, offset, true);
+  return concatBytes([...localParts, ...centralParts, end]);
+}
+
+function concatBytes(parts: readonly Uint8Array[]): Uint8Array {
+  const output = new Uint8Array(parts.reduce((sum, part) => sum + part.length, 0));
+  let offset = 0;
+  for (const part of parts) { output.set(part, offset); offset += part.length; }
+  return output;
+}
+
+function crc32(bytes: Uint8Array): number {
+  let crc = 0xffffffff;
+  for (const byte of bytes) {
+    crc ^= byte;
+    for (let bit = 0; bit < 8; bit += 1) crc = (crc >>> 1) ^ (0xedb88320 & -(crc & 1));
+  }
+  return (crc ^ 0xffffffff) >>> 0;
 }
 
 function shadowRecord(recordId: string, observedAt: string, claim: ShadowProgressClaim): ShadowProgressRecord {

@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
 import { describe, expect, test } from 'vitest';
@@ -14,15 +15,17 @@ import {
 const expectedChecks = {
   'normal-weekday': [
     'coordinated-fixture-sources',
+    'realtime-claim-binding',
     'operating-service-date',
     'current-feed-health',
     'governed-arrival-admission',
     'public-exposure-locks',
   ],
   'weekend-planned-work': [
-    'supplemented-edition',
+    'weekend-fixture-binding',
+    'supplemented-owner',
     'planned-stop-exclusion',
-    'service-veto-precedence',
+    'omitted-stop-board-empty',
     'public-exposure-locks',
   ],
   'late-night-midnight': [
@@ -32,6 +35,7 @@ const expectedChecks = {
     'public-exposure-locks',
   ],
   'major-disruption': [
+    'disruption-fixture-binding',
     'resolved-service-suppression',
     'dependent-product-containment',
     'arrival-claim-suppression',
@@ -56,6 +60,7 @@ const expectedChecks = {
     'public-exposure-locks',
   ],
   'false-bypass-incident-drill': [
+    'incident-fixture-binding',
     'original-admission-reconstruction',
     'current-bypass-veto',
     'containment-product-scope',
@@ -132,6 +137,38 @@ describe('bounded deterministic truth validation', () => {
       id: 'current-bypass-veto', reasonCode: 'RESOLVED_SERVICE_VETO_BLOCKED_ARRIVAL',
     }));
     expect(serialized).not.toMatch(/"gate0Decision":"PASS"|"incidentDisposition":"CLOSED"|zero incidents/i);
+  });
+
+  test('fails closed when the normalized weekday realtime fixture bytes are corrupted', async () => {
+    const source = new Uint8Array(await readFile(resolve('tests', 'fixtures', 'realtime', 'current.pb')));
+    const bytes = source.slice(0, Math.floor(source.byteLength / 2));
+
+    await expect(runTruthValidationScenario('normal-weekday', {
+      fixtureOverrides: { weekdayRealtime: bytes },
+    })).rejects.toThrow(/fixture|source|validation|decode|join/i);
+  });
+
+  test('fails closed when the weekend supplement does not own the exact loaded route and omitted stop', async () => {
+    const wrongSupplement = new Uint8Array(await readFile(resolve('tests', 'fixtures', 'gtfs', 'regular.zip')));
+
+    await expect(runTruthValidationScenario('weekend-planned-work', {
+      fixtureOverrides: { weekendSupplementedGtfs: wrongSupplement },
+    })).rejects.toThrow(/weekend|supplement|pattern|omitted|join/i);
+  });
+
+  test('fails the disruption receipt when substituted normalized alerts do not support its consequence', async () => {
+    const ordinaryAlerts = new Uint8Array(await readFile(resolve('tests', 'fixtures', 'alerts', 'subway-alerts.json')));
+    const receipt = await runTruthValidationScenario('major-disruption', {
+      fixtureOverrides: { majorDisruptionAlerts: ordinaryAlerts },
+    });
+
+    expect(receipt).toMatchObject({
+      outcome: 'FAIL', gate0Decision: 'NO-GO', riderExposure: false, boardsExposed: false,
+    });
+    expect(receipt.checks).toContainEqual(expect.objectContaining({
+      id: 'disruption-fixture-binding', result: 'fail',
+    }));
+    expect(receipt.publicLocks.every((lock) => lock.exposed === false)).toBe(true);
   });
 });
 

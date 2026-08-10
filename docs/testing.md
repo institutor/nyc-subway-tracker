@@ -73,13 +73,13 @@ The scenario-specific passing evidence is:
 
 | Command | What the receipt proves for the fixture only |
 |---|---|
-| `truth:replay:weekday` | The real static and realtime fixture sources normalize through the coordinator, the operating service date is active, feed health is Current, and the governed candidate is admitted. |
-| `truth:replay:weekend` | A supplemented edition is accepted, an original-line stop omitted by the effective planned pattern is suppressed, and the exact service veto defeats an otherwise fresh candidate. |
+| `truth:replay:weekday` | The real static, realtime, and alert fixture sources normalize through the coordinator; the route, trip, train, direction, stop, destination, service date, event time, and provenance in the admitted claim are derived from that normalized evidence. |
+| `truth:replay:weekend` | Exact Saturday regular and supplemented F patterns normalize through the static loader, the supplement owns the matching scope, and the normalized planned-work alert suppresses the regular-only stop so its governed board is empty. |
 | `truth:replay:late-night` | `25:10:30` remains bound to its operating service date across midnight, while realtime train identity retains the source service date. |
-| `truth:replay:disruption` | A current full-suspension decision suppresses the arrival and all dependent Live, Expected, Holding, Scheduled fallback, countdown, and guidance products. |
+| `truth:replay:disruption` | A realtime claim and normalized full-suspension alert are joined on their derived route, stop, and direction identities; the alert suppresses the arrival and all dependent Live, Expected, Holding, Scheduled fallback, countdown, and guidance products. |
 | `truth:compare:later-stop` | An exact earlier record and strictly later record bind within two minutes; the real comparator records `NEXT_STOP_ADVANCED` and the disposition transition. |
 | `truth:validate:bulk-drop` | Every one of the seven required subway realtime groups independently quarantines an exact 40% entity loss while unrelated groups remain Current. |
-| `truth:drill:false-bypass` | The original decision is reconstructable, a newly current exact-stop veto contains the claim and every dependent product, and the incident path remains zero-exposure and open for governed review. |
+| `truth:drill:false-bypass` | The same normalized realtime claim is reconstructed across the original and incident snapshots; a newly normalized exact-scope veto contains that fixture-bound claim and every dependent product while the incident path remains zero-exposure and open for governed review. |
 
 `PASS` means only that the deterministic command behaved as specified against its committed fixture. These receipts are useful Task 16 implementation evidence, but they are not the preregistered, fixed-version cohort census, current-MTA shadow duration, reviewer decisions, source revalidation, or binary exit record required by Gate 0. They do not close a false-bypass incident and must not be described as zero incidents.
 
