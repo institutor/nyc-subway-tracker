@@ -272,3 +272,49 @@ Round 3 changes only the isolated server-side shadow composition, exact parser/c
 Persisted shadow records contain bounded non-personal operational evidence only. They contain no full `ArrivalAdmissionDecision`, raw service/audit/rider arrays, official alert text, coordinate, rider record/label, active trip/cursor, permission state, push credential, private key, secret, joinable personal identifier, or crowding construct. No public board path is called and no release gate is mutated.
 
 Concern: the current official-source attempt accepted 0 of 8 sources, so real-network admission and bound two-record comparison could not be observed here. This is a truthful external-source outcome, not a weakened test. Deterministic tests prove authentic suppression-to-admission through the existing structured service/admission boundaries, but operators must capture two accepted official observations within 15 minutes before treating live comparison evidence as available. No stage may open from this result.
+
+## Fix round 4 (2026-08-10)
+
+### Outcome and files
+
+Round 4 is implemented in `c5f4e040c198d8f0c6ed0795fcb0c1a03eee93d4` (`seal shadow admission proof`). An admitted serialized claim now requires an exact compact proof owned by an exact earlier-record comparison. The proof binds the earlier record and claim, prior observation and ordered path, fresh current movement, a future target event, eligible equal track evidence, canonical trip/start-date/start-time/train service ownership, the issued service decision/claim/assessment/context, and the exact admitted stop-call identity. All identities and decision digests are recomputed from bounded constituents. A null comparison context can never carry an admitted claim.
+
+The exact comparison validator now reconstructs the complete deterministic comparison partition and final encoded-size loop from the full recomputed comparison set, the currently retained claims, and the record envelope. It requires exact stored rows, exact canonical ordering, and exact comparison truncation fields; it no longer accepts an arbitrary stored prefix or false omitted-row metadata. Claims must be ordered by claim key and comparisons by earlier claim key.
+
+Implementation/docs files: `src/shared/domain/alert-scope.ts`, `src/server/services/shadow-progress.ts`, `src/server/services/shadow-validation.ts`, `docs/data-sources.md`, and `docs/testing.md`. Governing tests: `tests/server/shadow-progress.test.ts`, `tests/server/shadow-round3.test.ts`, and `tests/server/shadow-validation.test.ts`. The controller-owned `progress.md` already contained four Task 15 ledger lines; it was neither edited nor staged by this round and remains outside both commits.
+
+### Normalized RED evidence
+
+1. `npm test -- --run tests/server/shadow-round3.test.ts tests/server/shadow-validation.test.ts` — 2 files, 31 tests: 8 failed, 23 passed. The parser accepted a standalone admitted claim without comparison context, arbitrary valid-hex service and alert-context identities, eligible service from an accepted-but-stale alert, unsorted claims, false comparison omission metadata, and incomplete source alert state/identity. Projection did not serialize the exact shared ten-minute current/stale boundary.
+2. The same governing additions also covered missing/mismatched compact admission proof, earlier/current claim ownership, movement chronology and freshness, future target, track equality, service constituents and digest, prior-key/path suffix, alert-context currentness at exactly ten minutes versus ten minutes plus one millisecond, shuffled comparisons, and exact recomputation of comparison truncation. These assertions were added against the prior production implementation before round-4 production edits.
+3. Self-review RED after the first focused pass: `npm test -- --run tests/server/shadow-round3.test.ts -t "binds compact admitted evidence"` ran the 25-test file and produced 1 failed, 24 passed. Changing the serialized future target instant was still accepted. The same governing tamper table also contained simultaneous scheduled/actual track mutation; execution stopped at the preceding target assertion. Target and track evidence identities were then added together and recomputed from source/train/target-call/value constituents.
+
+### GREEN progression
+
+- The shared alert-current maximum is exported once from `alert-scope.ts` and reused by projection and structural parsing. Accepted alert context persists exact `current`/`stale` state and an identity recomputed from the canonical accepted alert source row; failed or stale context cannot be service-eligible or admitted.
+- Canonical service ownership persists the bounded trip ID, real Gregorian start date, start time, and train identity and recomputes the service-instance digest. Arbitrary valid-hex service and alert identities are rejected.
+- Admitted claims persist exact compact `admissionEvidence`; suppressed claims do not. Structural validation recomputes movement, future-target, equal-track, service-claim, issued-context, and service-decision identities and rejects missing fields, nested extras, stale movement, non-future events, mismatched admitted stop-call, claim ID, assessment time, source context, or decision digest.
+- Binding validation loads the exact earlier bytes, verifies its SHA-256 context, locates the exact prior claim key, requires the same source/train/service/route/direction/destination/target call, proves exact suffix progress and movement order/freshness, and then exact-matches the full reconstructed comparison output and truncation metadata.
+- The production projection continues to invoke the existing issued `ServiceChangeDecision` and `admitArrivalCandidate` boundary. Only an authentic recent prior suffix plus current movement, future target, current alert, eligible service/feed/track, and exact admission result can produce `admitted`; one-snapshot and unavailable-evidence paths remain suppressed.
+- Focused final GREEN: `npm test -- --run tests/server/shadow-round3.test.ts tests/server/shadow-progress.test.ts tests/server/shadow-validation.test.ts tests/server/live-shadow.test.ts tests/server/shadow-record.test.ts` — 5 files, 66/66 passed. `npm run typecheck` passed with no diagnostics.
+
+### Full verification and live shadow
+
+- `npm test -- --run`: 74 files, 1,129/1,129 passed.
+- `npm run typecheck`: passed with no diagnostics.
+- `npm run build`: passed; 70 modules transformed, CSS 29.09 kB and JS 421.71 kB before gzip.
+- Installed Chrome (`C:\Program Files\Google\Chrome\Application\chrome.exe`), `npm run test:e2e`: 5/5 passed.
+- `npm run shadow:dry-run` and documented `pnpm run shadow:dry-run`: both passed with exact `shadow-v2`, eight not-run official sources, nine closed gates, null comparison context, zero claims/comparisons, exact zero truncation, and no network.
+- `npm run shadow:live`: exited 0 and atomically wrote ignored artifact `.data/shadow/shadow-2026-08-10T09-18-45.306Z-dad8a866-ffa8-4327-9aa5-2e5e928a9459.json`, 3,026 bytes. Outcome was truthfully `COMPLETED_WITH_SOURCE_FAILURES`: 0 accepted and 8 failed official sources, 0 claims/comparisons, 9/9 gates closed, `riderExposure=false`, and `boardsExposed=false`.
+- `git diff --check` and staged diff hygiene passed. Runtime `.data` remained ignored. The inspected live artifact and implementation surface contained no coordinate, saved-record, rider-label, active-trip/cursor, permission, push endpoint/token/key, VAPID private key, secret, joinable personal identifier, or crowding construct.
+
+### Visual, React, accessibility, privacy, commits, and concerns
+
+Round 4 changes no rider-facing React component, layout, navigation, storage, effect, event listener, focus behavior, zoom handling, reduced motion, or CSS. The approved dark platform-spine Settings/Data Status surfaces remain unchanged; the installed-Chrome flow and full client regression stay green. All nine independent exposure gates remain immutable and closed.
+
+The serialized proof is deliberately compact and bounded. It contains no full `ArrivalAdmissionDecision`, full `ServiceChangeDecision`, official alert content, raw/audit/rider array, location, rider record, notification credential, or personal join. Target, track, movement, service, alert, and decision evidence is persisted only as bounded operational constituents and recomputable digests. No public board path is invoked and no gate can be opened by shadow output.
+
+- Fix round 4 implementation/tests/docs: `c5f4e040c198d8f0c6ed0795fcb0c1a03eee93d4` (`seal shadow admission proof`).
+- This report update is committed separately so the implementation hash and verification evidence remain independently inspectable.
+
+Concern: the official network attempt again returned eight bounded source failures, so a real admitted claim and two-record live comparison could not be produced in this environment. This is recorded as an external-source limitation, not converted into synthetic evidence or a weaker test. Operators still need two exact accepted official observations within fifteen minutes before live admission/comparison evidence exists, and no public stage may open from deterministic coverage alone.
