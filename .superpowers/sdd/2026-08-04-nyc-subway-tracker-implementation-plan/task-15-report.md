@@ -153,3 +153,74 @@ The controller appended one ledger line to `progress.md` before this fix round. 
 - This updated report is committed separately so the implementation hash can be exact.
 
 Concern: the official feeds produced eight source failures in this environment, so no authentic live station claim was available for a later-record comparison. This is a truthful live-shadow outcome, not a weakened test. Deterministic tests exercise admitted and suppressed per-stop claims, exact target-call identity, path progression, reroute inconclusiveness, and whole-record invalidation. A future operator should rerun two accepted live observations before treating comparison evidence as available. No public stage may open from either result.
+
+## Fix round 2 (2026-08-10)
+
+### Outcome and files
+
+Reviewer round 2 is implemented in `724df22f99e8e5e98fe665d3f9f643c8ae222996` (`close shadow evidence gaps`). It closes the remaining authentic-evidence, exact-record/comparison, notification aggregation, bounded-record, and atomic-ownership findings without opening a rider surface or release stage.
+
+Round-2 implementation files are `scripts/live-shadow.ts`, `src/server/services/shadow-progress.ts`, `src/server/services/shadow-record.ts`, `src/server/services/shadow-validation.ts`, and `src/client/hooks/use-notifications.ts`. Governing tests are `tests/server/shadow-progress.test.ts`, `tests/server/shadow-record.test.ts`, `tests/server/shadow-validation.test.ts`, and `tests/client/notification-environment.test.ts`. Operator truth was updated in `docs/data-sources.md` and `docs/testing.md`.
+
+The controller had appended two Task 15 ledger lines to `progress.md` before this round. That file was not edited, staged, or committed by this implementation and remains the sole unstaged change.
+
+### Normalized RED evidence
+
+1. `npm test -- --run tests/client/notification-environment.test.ts tests/server/shadow-record.test.ts` — 2 files, 9 tests: 3 failed, 6 passed. Remote `removed:false` plus successful local deletion was falsely aggregated as Failed; an exclusive-open collision unlinked an unowned temporary path; and an oversized payload reached `open` instead of failing before filesystem work.
+2. `npm test -- --run tests/server/shadow-validation.test.ts` — 1 file, 4 tests: 4 failed, 0 passed. A one-snapshot station claim was admitted with manufactured identity/recovery/movement/range evidence and used the intermediate target as destination; stale movement was upgraded from mere presence; an unowned source row was accepted; and the persisted admission decision contained the full nested audit instead of a three-field bounded summary.
+3. `npm test -- --run tests/server/shadow-progress.test.ts` — 1 file, 20 tests: 19 failed, 1 passed. The parser rejected the new canonical fixture while retaining legacy permissiveness; suppressed claims were filtered out; exact stop-call occurrences, disposition transitions, canonical source rows/gates/claims, duplicate rejection, and whole-record ownership were absent.
+4. Combined normalized governing command, `npm test -- --run tests/client/notification-environment.test.ts tests/server/shadow-record.test.ts tests/server/shadow-validation.test.ts tests/server/shadow-progress.test.ts` — 4 files, 33 tests: 26 failed, 7 passed. This is the aggregate RED for all round-2 findings before production changes.
+5. Reviewer-directed exactness expansion, `npm test -- --run tests/server/shadow-progress.test.ts` — 1 file, 24 tests: 4 failed, 20 passed. The exact parser still accepted a zero stop-call sequence, a current feed mislabeled `FEED_NOT_CURRENT`, eligible service mislabeled `SERVICE_CHANGE_NOT_ELIGIBLE`, and a `progressed` row paired with `NEXT_STOP_UNCHANGED`. These cases were added before their parser changes and then made green without weakening other assertions.
+
+### GREEN progression
+
+- Notification deletion now uses local subscription removal as the aggregate deletion fact after an exact successful remote response: false/true and true/true are Deleted; false/false and true/false are Failed; no device subscription remains Not present. Exact remote/local subresults and the existing Pending timeout remain unchanged.
+- The atomic writer rejects encoded records above 1,000,000 bytes before generating or opening a temp path. It validates the bounded temporary identity and removes the temp only after this invocation successfully owns an exclusive handle. Flush/close/rename ordering and failure cleanup remain exact.
+- Station projection exact-joins the snapshot to one canonical accepted realtime source row across source ID, feed group, observation, retrieval, and SHA-256. Every eligible remaining stop becomes a distinct station claim with an exact canonical stop-call identity, while every intermediate claim retains the train's actual terminal destination.
+- The one-snapshot composition no longer calls arrival admission with invented coherent identity, live continuity, movement plausibility, or a synthetic ±15-second range. It fails closed with a compact exact `{kind, disposition, reasonCode}` admission summary. Stale movement receives `STALE_MOVEMENT_EVIDENCE`; otherwise absent trusted history remains `TRUSTED_HISTORY_UNAVAILABLE`. Existing feed-health and service-change decisions are still distilled and recorded.
+- A maximal alert fixture and 250 two-stop trains produce exactly 500 compact claims under the fixed encoded ceiling, without official alert text or a full service/rider/raw audit.
+- `shadow-v2` parsing now owns the whole exact record: one of three consistent outcomes; exactly eight registry-ordered source rows; exactly nine production shadow-exposure gates; unique claim IDs and canonical claim keys; exact source ownership; exact ordered stop-call identities; compact feed/service/admission schemas; cross-field reason/disposition consistency; exact comparison rows; bounded nested strings/arrays; and total bytes. Any malformed or duplicate row invalidates the whole record; the legacy candidate form is gone.
+- Comparison accepts whole earlier/later records, rejects identical record IDs and duplicate keys, includes both admitted and suppressed claims, matches source/train/target stop-call, keeps repeated stop occurrences distinct, owns target stop-call identity in output, records each disposition transition, and reports reroutes or missing target calls as inconclusive. The governing suppressed-to-admitted case advances from A12 to A14 and records `suppressed-to-admitted` plus `NEXT_STOP_ADVANCED`.
+- Live composition validates the base and final records before writing, emits canonical dry/accepted/failed source rows, never filters suppressed claims from comparison, and gives accepted-source retrieval time a decision timestamp taken after refresh. A missing `--compare` value still exits 2; a malformed prior file now fails rather than creating a permissive comparison row.
+- Round-2 focused GREEN: 5 files, 35/35 tests. The expanded exact parser reached 24/24 after its four-case micro-RED. The documented nine-file diagnostics command reached 60/60.
+
+### Full verification
+
+- Final `npm test -- --run`: 73 files, 1,097/1,097 passed. An earlier full run before the four additional exact parser cases was 73 files, 1,093/1,093.
+- Documented focus, `pnpm test --run tests/server/status.test.ts tests/client/status-client.test.ts tests/client/data-status-view.test.tsx tests/client/settings-view.test.tsx tests/client/notification-environment.test.ts tests/server/live-shadow.test.ts tests/server/shadow-validation.test.ts tests/server/shadow-progress.test.ts tests/server/shadow-record.test.ts`: 9 files, 60/60 passed.
+- `npm run typecheck`: passed with no diagnostics after the final writer and parser changes.
+- `npm run build`: passed; 70 modules transformed, CSS 29.09 kB and JS 421.71 kB before gzip.
+- Installed Chrome at `C:\Program Files\Google\Chrome\Application\chrome.exe`, `npm run test:e2e`: 5/5 passed.
+- `npm run shadow:dry-run` and documented `pnpm run shadow:dry-run`: passed with exact `shadow-v2`, eight `not-run` source rows, nine closed gates, zero claims/comparisons, and no network.
+- `git diff --check` and implementation `git diff --cached --check`: passed. `.data/shadow` remains ignored; only the controller-owned `progress.md` change remained outside the implementation commit.
+
+### Live shadow result
+
+`npm run shadow:live` exited 0 and atomically wrote ignored record `.data/shadow/shadow-2026-08-10T08-21-23.581Z-c26a6c15-985c-4464-a56f-7e60b8db5b1f.json`.
+
+- Encoded size: 2,791 bytes, below the fixed ceiling.
+- Outcome: `COMPLETED_WITH_SOURCE_FAILURES`; eight official sources attempted, zero accepted, eight failed with exact bounded reason `SOURCE_RETRIEVAL_OR_VALIDATION_FAILED`.
+- Claims/comparisons: 0/0 because no canonical source snapshot was accepted; no arrival evidence was fabricated.
+- Gates: 9/9 closed; `riderExposure=false`; `boardsExposed=false`.
+- A prohibited-field scan found no coordinate, saved record, rider label, active-trip/cursor, permission, endpoint/token/key, private key, secret, or crowding match.
+
+This external failure is truthful shadow evidence, not a test weakening. The deterministic exact-record tests govern suppressed/admitted comparison and repeated stop-call behavior until two accepted official observations are available.
+
+### Visual, React, accessibility, and privacy self-review
+
+- Round 2 changes no rider layout, styling, navigation, motion, zoom behavior, focus flow, or global listener. The approved dark platform-spine UI, bottom-third controls, Data Status signature, Settings confirmation focus management, and all previous installed-Chrome/accessibility checks remain intact.
+- The only client production change is the exact notification aggregate truth inside the existing environment boundary. It adds no effect, component, storage, listener, dependency, log, or endpoint exposure.
+- Shadow projection persists only bounded operational identifiers, stop-call identities, exact accepted-source provenance, distilled decisions, immutable gate records, and bounded outcome codes. Full `ArrivalAdmissionDecision`, service/rider/raw audit arrays, official alert text, and synthetic confidence/range/continuity data are absent.
+- No coordinate, saved record, rider label, active-trip detail, cursor, permission state, push endpoint/token/key, VAPID private key, joinable personal identifier, or secret is emitted or logged. No crowding field/type/module/shell/badge/placeholder/proxy/legend was introduced.
+- Public arrival, Nearby, accessibility, guidance, maps/rights, and all four commute stages remain independently locked. Shadow execution never calls public board projection and cannot mutate exposure decisions.
+
+### Commits and concerns
+
+- Original implementation: `284fb8af9550f0be071987cb4510093b284c0f82`.
+- Original report: `c23c7bb7612c674d7f3df82afc46f3491ef19057`.
+- Fix round 1 implementation: `661059284f5de2a45fa78bbaf7636677207b47df`.
+- Fix round 1 report: `d5f55bbde0f36bd7cc53c140c42e7fc23ecc07ba`.
+- Fix round 2 implementation/tests/docs: `724df22f99e8e5e98fe665d3f9f643c8ae222996` (`close shadow evidence gaps`).
+- This report update is committed separately so the round-2 implementation hash is exact.
+
+Concern: the official live attempt again accepted no complete source snapshot, so the new authentic projection and later physical comparison could not be exercised against current MTA content in this environment. No stage may open from deterministic tests alone. Operators should rerun two accepted observations and inspect exact suppressed/admitted transitions before treating shadow comparison as release evidence.
