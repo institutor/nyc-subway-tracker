@@ -7,11 +7,14 @@ import { fetchSource, type SourceProvenance } from '../src/server/data/fetch-sou
 import { evaluateExposure } from '../src/server/release/exposure-gates';
 import { createSourceCoordinator, type SourceCoordinator } from '../src/server/services/source-coordinator';
 import {
+  buildBoundedShadowRecord,
   compareShadowProgress,
+  createShadowComparisonContext,
   parseShadowProgressRecord,
+  validateShadowComparisonBinding,
   type ShadowProgressRecord,
 } from '../src/server/services/shadow-progress';
-import { projectShadowClaims, type AcceptedShadowRealtimeSource, type ShadowClaim } from '../src/server/services/shadow-validation';
+import { projectShadowClaims, type AcceptedShadowRealtimeSource, type ShadowAlertSource, type ShadowClaim } from '../src/server/services/shadow-validation';
 import { writeShadowRecordAtomic } from '../src/server/services/shadow-record';
 
 const SHADOW_SCHEMA = 'shadow-v2' as const;
@@ -25,13 +28,14 @@ async function main(): Promise<void> {
     return;
   }
   const compareArgument = strictCompareArgument();
+  const comparisonInput = compareArgument ? await loadComparisonInput(compareArgument) : undefined;
   const sources = shadowSources();
   const gates = gateRecords();
   const invocationTime = new Date();
   const invocationRecordedAt = invocationTime.toISOString();
   const invocationRecordId = `shadow-${invocationRecordedAt.replaceAll(':', '-')}-${randomUUID()}`;
   if (dryRun) {
-    const record = parseShadowProgressRecord({
+    const record = buildBoundedShadowRecord({
       schemaVersion: SHADOW_SCHEMA,
       recordId: invocationRecordId,
       mode: 'shadow',
@@ -42,6 +46,7 @@ async function main(): Promise<void> {
       outcome: 'DRY_RUN_NO_NETWORK',
       sources: sources.map(({ id: sourceId, role }) => ({ sourceId, role, outcome: 'not-run', reasonCode: 'DRY_RUN_NO_NETWORK' })),
       gates,
+      comparisonContext: null,
       claims: [],
       progressComparisons: [],
     });
@@ -71,17 +76,19 @@ async function main(): Promise<void> {
   const sourceRecords = liveSourceRecords(sources, coordinator, provenance);
   const claims: ShadowClaim[] = [];
   const alertSnapshot = coordinator.getAlertSnapshot();
+  const alertSourceRecord = sourceRecords.find((record): record is ShadowAlertSource => record.sourceId === 'subway-alerts')!;
   for (const source of sources.filter((candidate) => candidate.role === 'subway-realtime')) {
     const snapshot = coordinator.getRealtimeSnapshot(source.id);
     const sourceRecord = sourceRecords.find((record): record is AcceptedShadowRealtimeSource => record.sourceId === source.id
       && record.role === 'subway-realtime' && record.outcome === 'accepted');
     if (!snapshot || !sourceRecord) continue;
-    claims.push(...projectShadowClaims({ snapshot, sourceRecord, alertSnapshot, decisionTime }).slice(0, 500 - claims.length));
+    claims.push(...projectShadowClaims({ snapshot, sourceRecord, alertSnapshot, alertSourceRecord,
+      priorRecord: comparisonInput?.record, decisionTime }).slice(0, 500 - claims.length));
     if (claims.length >= 500) break;
   }
   const outcome = sourceRecords.some((source) => source.outcome === 'failed')
     ? 'COMPLETED_WITH_SOURCE_FAILURES' as const : 'COMPLETED' as const;
-  const baseRecord = parseShadowProgressRecord({
+  const baseRecord = {
     schemaVersion: SHADOW_SCHEMA,
     recordId,
     mode: 'shadow',
@@ -92,11 +99,20 @@ async function main(): Promise<void> {
     outcome,
     sources: sourceRecords,
     gates,
+    comparisonContext: null,
     claims,
     progressComparisons: [],
-  });
-  const comparisons = compareArgument ? await compareProgress(compareArgument, baseRecord) : [];
-  const record = parseShadowProgressRecord({ ...baseRecord, progressComparisons: comparisons });
+  } as unknown as ShadowProgressRecord;
+  let record: ShadowProgressRecord;
+  if (comparisonInput) {
+    const context = createShadowComparisonContext({ earlier: comparisonInput.record, earlierBytes: comparisonInput.bytes, later: baseRecord });
+    const provisional = buildBoundedShadowRecord({ ...baseRecord, comparisonContext: context, progressComparisons: [] });
+    const comparisons = compareShadowProgress(comparisonInput.record, provisional);
+    record = buildBoundedShadowRecord({ ...baseRecord, comparisonContext: context, progressComparisons: comparisons });
+    validateShadowComparisonBinding(record, comparisonInput.bytes);
+  } else {
+    record = buildBoundedShadowRecord(baseRecord);
+  }
   const outputPath = join(outputDirectory, `${record.recordId}.json`);
   await writeShadowRecordAtomic(outputPath, `${JSON.stringify(record)}\n`);
   process.stdout.write(`${JSON.stringify({ outcome: record.outcome, outputPath, sourceCount: sources.length })}\n`);
@@ -138,9 +154,9 @@ function gateRecords() {
   return Object.entries(evaluateExposure({ mode: 'shadow' }).public).map(([stage, gate]) => ({ stage, ...gate }));
 }
 
-async function compareProgress(path: string, current: ShadowProgressRecord) {
-  const previous = JSON.parse(await readFile(resolve(path), 'utf8')) as unknown;
-  return compareShadowProgress(parseShadowProgressRecord(previous), current);
+async function loadComparisonInput(path: string) {
+  const bytes = await readFile(resolve(path), 'utf8');
+  return { bytes, record: parseShadowProgressRecord(JSON.parse(bytes) as unknown) };
 }
 
 function strictCompareArgument(): string | undefined {

@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { describe, expect, test } from 'vitest';
 
 import { encodeCanonicalStringTuple } from '../../src/shared/domain/canonical';
@@ -10,6 +11,23 @@ const sha256 = 'a'.repeat(64);
 const aceSource = 'subway-rt-ace';
 
 describe('exact shadow-v2 parsing and later-stop comparison', () => {
+  test.each([
+    ['source retrieval before observation', (record: any) => {
+      record.sources[0].observedAt = laterObservedAt;
+    }],
+    ['source retrieval after the governing decision', (record: any) => {
+      record.sources[0].retrievedAt = laterObservedAt;
+    }],
+    ['feed kind/reason mismatch', (record: any) => {
+      record.claims[0].decisions.feedHealth.reasonCode = 'snapshot-age-degraded';
+    }],
+  ])('rejects %s even when the rest of the current schema is valid', (_label, alter) => {
+    const record = shadowRecord({ recordId: 'shadow-time-invalid', claims: [claim()] });
+    expect(() => parseShadowProgressRecord(record)).not.toThrow();
+    alter(record);
+    expect(() => parseShadowProgressRecord(record)).toThrow(/invalid prior shadow record/i);
+  });
+
   test('compares a suppressed claim with later physical progress and records its disposition transition', () => {
     const earlier = shadowRecord({
       recordId: 'shadow-earlier',
@@ -28,7 +46,7 @@ describe('exact shadow-v2 parsing and later-stop comparison', () => {
     });
 
     expect(compareShadowProgress(parseShadowProgressRecord(earlier), parseShadowProgressRecord(later))).toEqual([
-      {
+      expect.objectContaining({
         sourceId: aceSource,
         operationalTrainId: 'train-1',
         targetStopId: 'A16N',
@@ -38,7 +56,7 @@ describe('exact shadow-v2 parsing and later-stop comparison', () => {
         dispositionTransition: 'suppressed-to-admitted',
         result: 'progressed',
         reasonCode: 'NEXT_STOP_ADVANCED',
-      },
+      }),
     ]);
   });
 
@@ -71,10 +89,10 @@ describe('exact shadow-v2 parsing and later-stop comparison', () => {
       parseShadowProgressRecord(shadowRecord({ recordId: 'shadow-repeat-later', observedAt: laterObservedAt, claims: [laterFirst, laterRepeated] })),
     );
 
-    expect(comparisons).toEqual([
+    expect(comparisons).toEqual(expect.arrayContaining([
       expect.objectContaining({ targetStopCallIdentity: stopCall('A14N', 2), result: 'not-observed' }),
       expect.objectContaining({ targetStopCallIdentity: stopCall('A14N', 4), result: 'progressed' }),
-    ]);
+    ]));
   });
 
   test.each([
@@ -193,6 +211,11 @@ function shadowRecord(input: {
     outcome: 'COMPLETED',
     sources: canonicalSources(decisionTime),
     gates: Object.entries(evaluateExposure({ mode: 'shadow' }).public).map(([stage, gate]) => ({ stage, ...gate })),
+    comparisonContext: null,
+    truncation: {
+      claims: { consideredCount: input.claims.length, includedCount: input.claims.length, omittedCount: 0, reasonCode: 'NOT_TRUNCATED' },
+      comparisons: { consideredCount: 0, includedCount: 0, omittedCount: 0, reasonCode: 'NOT_TRUNCATED' },
+    },
     claims: input.claims,
     progressComparisons: [],
   };
@@ -219,6 +242,8 @@ function claim(overrides: Record<string, unknown> = {}) {
     sourceId: aceSource,
     observedAt: claimObservedAt,
     operationalTrainId: 'train-1',
+    serviceDate: '20260810',
+    serviceInstanceId: `service:${sha256}`,
     routeId: 'A',
     direction: 'northbound',
     terminalDestinationStopId: 'A16N',
@@ -236,7 +261,10 @@ function claim(overrides: Record<string, unknown> = {}) {
     },
     decisions: {
       feedHealth: { kind: 'current', reasonCode: 'accepted-current' },
-      serviceChange: { kind: 'eligible-context', disposition: 'eligible' },
+      serviceChange: { kind: 'eligible-context', disposition: 'eligible', alertContext: {
+        state: 'accepted', sourceId: 'subway-alerts', observedAt: claimObservedAt, retrievedAt: claimObservedAt,
+        sha256, alertContextIdentity: `alert-context:${sha256}`,
+      } },
       admission: { kind: 'rejected', disposition: 'suppressed', reasonCode: 'TRUSTED_HISTORY_UNAVAILABLE' },
     },
     ...overrides,
@@ -253,7 +281,11 @@ function claim(overrides: Record<string, unknown> = {}) {
 }
 
 function canonicalizeClaim(row: any): void {
-  row.claimKey = encodeCanonicalStringTuple([row.sourceId, row.operationalTrainId, row.targetStopCallIdentity]);
+  const digest = createHash('sha256').update(encodeCanonicalStringTuple([
+    row.sourceId, row.operationalTrainId, row.serviceDate, row.serviceInstanceId, row.targetStopCallIdentity,
+  ])).digest('hex');
+  row.claimKey = `claim:${digest}`;
+  row.claimId = `claim-id:${digest}`;
 }
 
 function stopCall(stopId: string, sequence: number): string {

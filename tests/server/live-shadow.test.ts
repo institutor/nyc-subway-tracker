@@ -16,7 +16,11 @@ describe('isolated live shadow composition', () => {
     const record = JSON.parse(result.stdout);
     expect(record).toMatchObject({
       schemaVersion: 'shadow-v2', mode: 'shadow', riderExposure: false,
-      boardsExposed: false, outcome: 'DRY_RUN_NO_NETWORK',
+      boardsExposed: false, outcome: 'DRY_RUN_NO_NETWORK', comparisonContext: null,
+      truncation: {
+        claims: { consideredCount: 0, includedCount: 0, omittedCount: 0, reasonCode: 'NOT_TRUNCATED' },
+        comparisons: { consideredCount: 0, includedCount: 0, omittedCount: 0, reasonCode: 'NOT_TRUNCATED' },
+      },
     });
     expect(record.recordId).toMatch(/^shadow-/);
     expect(new Date(record.recordedAt).toISOString()).toBe(record.recordedAt);
@@ -27,8 +31,8 @@ describe('isolated live shadow composition', () => {
     expect(record.gates.every((gate: any) => gate.exposed === false)).toBe(true);
     expect(record.claims).toEqual([]);
     expect(Object.keys(record).sort()).toEqual([
-      'boardsExposed', 'claims', 'decisionTime', 'gates', 'mode', 'outcome', 'progressComparisons',
-      'recordId', 'recordedAt', 'riderExposure', 'schemaVersion', 'sources',
+      'boardsExposed', 'claims', 'comparisonContext', 'decisionTime', 'gates', 'mode', 'outcome', 'progressComparisons',
+      'recordId', 'recordedAt', 'riderExposure', 'schemaVersion', 'sources', 'truncation',
     ]);
     expect(JSON.stringify(record)).not.toMatch(/latitude|longitude|coordinate|saved|riderLabel|activeTrip|cursor|permission|endpoint|token|privateKey|secret/i);
   });
