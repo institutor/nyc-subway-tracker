@@ -213,3 +213,133 @@ Round two closes findings 1–7 and 9. Finding 8 was already closed by the contr
 ### Release posture
 
 This remains a deterministic validation candidate, not public accessibility evidence or a release approval. Public accessibility and platform guidance stay unavailable until real, reviewed, exact-scope, same-version evidence satisfies their independent app-owned gates.
+
+---
+
+## Fix round 3 — complete-journey and live-lifecycle repairs (2026-08-10)
+
+### Outcome
+
+All accepted round-three findings are repaired. A reviewed accessible path is now a complete, canonical street-to-street journey rather than a station/platform fragment. Equipment decisions remain bound to append-only live ledgers, alternatives cannot reuse the selected path or assert nearby eligibility, and an underway warning remains visible after its former positive path evidence expires or goes offline. Last-decision-point results are derived only from opaque app-owned journey progress, and expired replacement labels are removed from active warning copy.
+
+Production accessibility and platform-guidance registries remain empty. Their independent public exposure locks remain closed. No public activation, fixture exposure, or crowding surface was added.
+
+### Phase 1 — live equipment ledger ownership
+
+Commit `041ce65` (`bind equipment decisions to live ledgers`) established the round-three equipment foundation:
+
+- Accepted equipment streams are append-only ledgers. Only a same-history, exact-prefix extension can add observations; relabelled, shortened, or rewritten history is rejected.
+- Equipment decisions retain opaque ledger ownership and stop authorizing use when a later accepted observation supersedes the decision snapshot.
+- Current, degraded, and unavailable latest adverse evidence remains available for fail-closed impact classification until exact accepted restoration evidence clears it.
+- Population-collapse detection compares exact accepted record and equipment identity sets, preserving the exact 50% boundary and degrading only above it.
+- Inventory, history, snapshot, outage, and restoration fixed schemas require exact own keys; inherited required keys and symbol/extra-key substitutions fail closed.
+- Path decisions are revoked when any owned equipment ledger advances, and warning owner reevaluation cannot clear an adverse warning with equipment observations that predate the trigger.
+
+### Phase 2 — complete street-to-street journey reconstruction
+
+Commit `33d9efc` (`reconstruct complete accessible journeys`) replaced the station-only package with exact structured journey evidence:
+
+- Coverage now owns exact origin entrance/street and boarding endpoints, exact destination alighting/exit/street endpoints, ordered ride receipts, ordered transfer receipts, and an ordered `access-edge | ride` journey-chain union.
+- Physical access edges retain the governed movement enum and bind exact station complex, constituent station, route, direction, platform, ride segment, and optional transfer identity.
+- Ride receipts bind exact origin and destination station, constituent, platform, boarding-area, and physical endpoint identities. Transfer receipts bind the exact incoming/outgoing ride IDs plus their ordered access-edge and equipment IDs.
+- Admission reconstructs and compares the one canonical chain. Every edge and ride must be consumed exactly once and in order; every transfer must occupy the exact interval between its incoming and outgoing rides.
+- Endpoint continuity is checked across access edges and train rides, including the exact first origin-street and final destination-street endpoints.
+- Origin, transfer, destination, and global equipment sets must each collapse exactly to their governed elevator edges.
+- Assessment requests carry the full structured journey. A different entrance, exit, station, platform, ride endpoint, route, direction, or transfer set fails closed.
+- Resolved decisions own a recursively frozen full journey scope and journey chain while retaining derived reviewed labels for downstream impact, warning, and presentation decisions.
+
+### Phase 3 — owned alternatives and persistent warnings
+
+Commit `02958c8` (`preserve owned accessibility warnings`) repaired the remaining lifecycle findings:
+
+- An alternative path cannot share either the selected path evaluation or canonical path identity.
+- `nearby-station` eligibility requires opaque, exact-scope, app-owned nearby-station evidence linked to both resolved paths, both intents, station identities, and a validity interval. A copied token or caller tier assertion cannot qualify it.
+- App-owned journey-progress evidence binds the selected evaluation, exact journey-chain bounds, affected order, and ordered safe-action points. The last still-available point is derived from those owned facts; copied evidence and former caller booleans are rejected.
+- Warning/path matching no longer requires the old positive path receipt to remain current. An active warning therefore remains first and visible while its displayed path becomes Unknown, including offline preservation.
+- When impact/alternative validity expires, the active warning stays visible but replaces the expired alternative label with: `No current verified replacement is available; wait for a fresh accessible route.`
+- Clearing rules remain unchanged and fail closed: only a fresh exact offered replacement or exact owner reevaluation with post-trigger equipment evidence can resolve the warning.
+
+### RED/GREEN evidence
+
+Phase 1 focused ledger invocation over `tests/domain/equipment-status.test.ts`, `tests/domain/accessible-path.test.ts`, `tests/domain/path-impact.test.ts`, and `tests/domain/underway-warning.test.ts` (the controller record preserves the exact four Vitest targets but not the npm/pnpm wrapper):
+
+- Governing RED #1: **4 files, 146 tests; 14 failed and 132 passed**. Breakdown: equipment **10/52 failed**, accessible path **2/68 failed**, path impact **1/9 failed**, underway warning **1/17 failed**.
+- Controller-expansion RED #2: **4 files, 149 tests; 3 failed and 146 passed**. Breakdown: unavailable-but-unrestored adverse evidence at 15 minutes + 1 ms **1/53 equipment failure**; revoked opaque selected path and 15 minutes + 1 ms adverse impact **2/11 path-impact failures**; accessible path **68/68 passed** and underway warning **17/17 passed**.
+- GREEN: **4 files, 149/149 tests passed**.
+- Phase 1 controller dependency matrix: **13 files, 314/314 tests passed**.
+- Phase 1 controller full Vitest: **58 files, 972/972 tests passed**; type checking and diff checking passed.
+
+Complete-journey governing RED:
+
+`npm test -- --run tests/domain/accessible-path.test.ts`
+
+- Initial reconstruction RED: **34 failed / 78 tests**. All failures collapsed at the obsolete origin-only coverage schema.
+- Normalized RED after separating fixture contradictions: **4 failed / 78 tests**, independently identifying transfer unsupported-scope inheritance and alternate-destination origin-edge ownership before production reconstruction was complete.
+- GREEN: **78/78 passed**.
+
+Complete-journey dependent GREEN:
+
+`npm test -- --run tests/domain/accessible-path.test.ts tests/domain/path-impact.test.ts tests/domain/accessibility-alternatives.test.ts tests/domain/underway-warning.test.ts tests/client/accessibility-panel.test.tsx`
+
+- **5 files, 125/125 tests passed**.
+
+Alternative ownership RED/GREEN:
+
+`npm test -- --run tests/domain/accessibility-alternatives.test.ts`
+
+- RED: **4 failed / 11 tests**. Two failures were the governing selected-path-reuse and caller-asserted-nearby defects; two existing nearby cases failed against the explicit no-behavior evidence scaffold.
+- GREEN: **11/11 passed** after exact opaque nearby evidence and selected-path exclusion were implemented.
+
+Warning persistence and expired-copy RED/GREEN:
+
+`npm test -- --run tests/domain/underway-warning.test.ts tests/client/accessibility-panel.test.tsx`
+
+- RED: **2 failed / 29 tests**: the expired replacement label remained in active copy, and the offline warning disappeared after the positive selected-path receipt expired.
+- GREEN: **29/29 passed**.
+
+Owned last-decision-point RED/GREEN:
+
+`npm test -- --run tests/domain/underway-warning.test.ts tests/client/accessibility-panel.test.tsx`
+
+- RED: **2 failed / 30 tests** against an opaque no-derivation scaffold: the latest owned safe point returned Unknown and the known-point warning fell back to immediate.
+- GREEN: **30/30 passed** after canonical app-owned progress reconstruction.
+
+### Full Task 13 dependency matrix
+
+Command:
+
+`npm test -- --run tests/domain/exposure-decision.test.ts tests/domain/equipment-status.test.ts tests/domain/accessible-path.test.ts tests/domain/path-impact.test.ts tests/domain/accessibility-alternatives.test.ts tests/domain/underway-warning.test.ts tests/domain/platform-guidance.test.ts tests/client/accessibility-panel.test.tsx tests/client/active-trip-store.test.ts tests/client/app-reconnection-loader.test.ts tests/client/reconnection-flow.test.tsx tests/server/api.test.ts tests/server/exposure-gates.test.ts`
+
+- **13 files, 315/315 tests passed**.
+- Coverage includes exposure ownership, live equipment ledgers, complete paths, impact, alternatives, warnings, platform guidance, warning-first UI, active-trip/reconnection boundaries, API allowlists, production exposure gates, and crowding-negative public boundaries.
+
+### Final verification
+
+- Full Vitest regression: `npm test -- --run` — **58 files, 987/987 tests passed**.
+- TypeScript: `npm run typecheck` — passed with zero diagnostics.
+- Production build: `npm run build` — Vite transformed **66 modules** and completed successfully.
+- Browser acceptance in installed Google Chrome: `npm run test:e2e -- --project=chromium` with `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=C:\Program Files\Google\Chrome\Application\chrome.exe` — **4/4 passed**, covering the recursive no-crowding public boundary, device-held offline references, historical cached-board treatment, and ordered owner restoration.
+- Diff hygiene: `git diff --check` passed; only repository line-ending notices were emitted.
+
+### Fix commits
+
+| Commit | Lowercase subject | Review area |
+|---|---|---|
+| `041ce65` | `bind equipment decisions to live ledgers` | append-only equipment ownership, supersession, adverse persistence, exact identity collapse, own-key schemas |
+| `33d9efc` | `reconstruct complete accessible journeys` | street-to-street endpoints, rides, transfers, chain consumption, equipment ownership, structured assessment |
+| `02958c8` | `preserve owned accessibility warnings` | selected-path exclusion, owned nearby/progress evidence, warning persistence, expired-label removal |
+
+### Strict self-review
+
+- Complete path: origin street, origin access, every ride and transfer, destination access, and destination street are all present, continuous, exact-scope, and consumed once in canonical order.
+- Equipment: decisions remain opaque and ledger-owned; supersession, stale adverse rechecking, exact identity-set collapse, restoration chronology, and dependency clearing from Phase 1 are preserved.
+- Alternatives: every offered path is independently resolved, cannot be the selected path, and nearby classification has app-owned evidence rather than a caller Boolean or tier label.
+- Underway safety: active warnings survive acknowledgement, navigation, progress, reconnect, offline state, positive-path expiry, and lower-priority recovery; only exact fresh owner evidence clears them.
+- Decision point: no caller-supplied reachability, possibly-passed, or safe-action Boolean remains at the derivation boundary.
+- Copy honesty: an expired offer label is never retained as current rider instruction.
+- Release governance: production registries stay empty, public accessibility/guidance exposure stays locked, and no validation fixture is mounted.
+- Scope discipline: no crowding schema, proxy, placeholder, control, or public field was introduced.
+
+### Concerns
+
+None. This remains a validation candidate, not reviewed production accessibility truth. Real same-version path, equipment, nearby, progress, guidance, five-role review, and release records are still required before either independent public gate can open.
