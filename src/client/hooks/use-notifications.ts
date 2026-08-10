@@ -152,7 +152,7 @@ export function browserNotificationEnvironment(): NotificationEnvironment {
       const localRemoved = await subscription.unsubscribe();
       const remote = body.removed ? 'Deleted' : 'Not present';
       const local = localRemoved ? 'Deleted' : 'Failed';
-      return { state: body.removed && localRemoved ? 'Deleted' : 'Failed', remote, local };
+      return { state: localRemoved ? 'Deleted' : 'Failed', remote, local };
     },
   };
 }

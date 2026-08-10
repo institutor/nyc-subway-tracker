@@ -16,9 +16,11 @@ describe('browser notification deletion truth', () => {
   });
 
   test.each([
-    [false, true, { state: 'Failed', remote: 'Not present', local: 'Deleted' }],
+    [false, true, { state: 'Deleted', remote: 'Not present', local: 'Deleted' }],
+    [true, true, { state: 'Deleted', remote: 'Deleted', local: 'Deleted' }],
+    [false, false, { state: 'Failed', remote: 'Not present', local: 'Failed' }],
     [true, false, { state: 'Failed', remote: 'Deleted', local: 'Failed' }],
-  ])('never reports Deleted when remote removed=%s and local unsubscribe=%s', async (removed, local, expected) => {
+  ])('aggregates remote removed=%s and local unsubscribe=%s exactly', async (removed, local, expected) => {
     const subscription = { endpoint: 'https://push.example/a', unsubscribe: vi.fn(async () => local) };
     installBrowserNotification(subscription, vi.fn(async () => new Response(JSON.stringify({ subscribed: false, removed }), {
       status: 200, headers: { 'content-type': 'application/json' },

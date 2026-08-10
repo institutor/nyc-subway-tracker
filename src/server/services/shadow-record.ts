@@ -8,6 +8,8 @@ interface ShadowFileHandle {
   close(): Promise<void>;
 }
 
+export const MAX_SHADOW_RECORD_BYTES = 1_000_000;
+
 export interface ShadowRecordDependencies {
   readonly randomId?: () => string;
   readonly open?: (path: string, flags: 'wx') => Promise<ShadowFileHandle>;
@@ -20,7 +22,12 @@ export async function writeShadowRecordAtomic(
   contents: string,
   dependencies: ShadowRecordDependencies = {},
 ): Promise<void> {
-  const temporaryPath = join(dirname(finalPath), `.${basename(finalPath)}.${(dependencies.randomId ?? randomUUID)()}.tmp`);
+  if (Buffer.byteLength(contents, 'utf8') > MAX_SHADOW_RECORD_BYTES) {
+    throw new Error('Shadow record is too large');
+  }
+  const randomId = (dependencies.randomId ?? randomUUID)();
+  if (!/^[A-Za-z0-9-]{1,64}$/u.test(randomId)) throw new Error('Invalid shadow temporary identity');
+  const temporaryPath = join(dirname(finalPath), `.${basename(finalPath)}.${randomId}.tmp`);
   const openFile = dependencies.open ?? open;
   const moveFile = dependencies.rename ?? rename;
   const removeFile = dependencies.unlink ?? unlink;
@@ -37,7 +44,9 @@ export async function writeShadowRecordAtomic(
     if (handle && !closed) {
       try { await handle.close(); } catch { /* Preserve the governing write failure. */ }
     }
-    try { await removeFile(temporaryPath); } catch { /* The exact temp may not have been created. */ }
+    if (handle) {
+      try { await removeFile(temporaryPath); } catch { /* Preserve the governing write failure. */ }
+    }
     throw error;
   }
 }

@@ -18,7 +18,7 @@ The browser suite uses Playwright. To use an installed Chrome/Chromium binary in
 ## Focused diagnostics checks
 
 ```sh
-pnpm test --run tests/server/status.test.ts tests/client/status-client.test.ts tests/client/data-status-view.test.tsx tests/client/settings-view.test.tsx tests/server/live-shadow.test.ts
+pnpm test --run tests/server/status.test.ts tests/client/status-client.test.ts tests/client/data-status-view.test.tsx tests/client/settings-view.test.tsx tests/client/notification-environment.test.ts tests/server/live-shadow.test.ts tests/server/shadow-validation.test.ts tests/server/shadow-progress.test.ts tests/server/shadow-record.test.ts
 pnpm run shadow:dry-run
 ```
 
@@ -36,4 +36,4 @@ To compare a later live run with one earlier shadow record:
 pnpm exec tsx scripts/live-shadow.ts --live --compare .data/shadow/shadow-PRIOR.json
 ```
 
-Comparison can report progressed, not observed, or inconclusive. It never opens a rider surface or release gate.
+The earlier file must be an exact bounded `shadow-v2` record; a malformed record or missing `--compare` value fails the command without writing a final artifact. Comparison includes admitted and suppressed claims, records the disposition transition, and can report progressed, not observed, or inconclusive. It never opens a rider surface or release gate.
