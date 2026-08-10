@@ -48,3 +48,8 @@ Task 13: fix round 2/5 (8 addressed, 0 open — exposure lifetime, recovery owne
 Task 13: fix round 3/5 (7 addressed, 2 open — expired replacement copy still required a later event and candidate-path revocation was not revalidated; commits 041ce65..952fa6f)
 Task 13: fix round 4/5 (2 addressed, 0 open — decision-time warning copy and live candidate-path ownership/replay closure; commits 4e32f3f..5a08249)
 Task 13: complete (commits 3ad18f8..5a08249, review clean; 318 Task 13 dependency tests, 990 full-project tests, typecheck, production build, and 4 Chrome journeys clean)
+Task 14: minor (deferred): SubscriptionStore.all exposes an unscoped all-subscriptions read when no commute-window identity is supplied.
+Task 14: minor (deferred): the monitor correction-only test title does not exercise a correction-only input and misses the stateful transition it names.
+Task 14: fix round 1/5 (7 addressed, 3 open — paused lifecycle was lost at the server boundary, actual train destination was replaced by station identity, and scheduler rejections could escape; commits 42e9b7e..8817984)
+Task 14: fix round 2/5 (3 addressed, 0 open — exact lifecycle/authorization, distinct bounded train destination, and validated contained scheduler ticks; commits 693e1c7..d244da2)
+Task 14: complete (commits 4f99494..d244da2, review clean; 67 notification regression tests, 1,035 full-project tests, typecheck, production build, 5 Chrome journeys, and closed/authorized/error production smoke clean)
