@@ -3,23 +3,28 @@ import { RouteToken } from '../components/RouteToken';
 import { StatusBanner } from '../components/StatusBanner';
 import { useNotifications, type NotificationEnvironment } from '../hooks/use-notifications';
 import type { CatalogComplexDto } from '../api/client';
+import type { CommuteRuntimeWindow } from '../../shared/domain/commute-window';
 
 export function CommuteView({
   records,
   stage,
-  gateOpen,
+  deliveryAuthorized,
   notificationEnvironment,
   catalog = [],
+  runtimeWindows = [],
 }: {
   readonly records: readonly SavedRecord[];
   readonly stage: CommuteStage;
-  readonly gateOpen: boolean;
+  readonly deliveryAuthorized: boolean;
   readonly notificationEnvironment?: NotificationEnvironment;
   readonly catalog?: readonly CatalogComplexDto[];
+  readonly runtimeWindows?: readonly CommuteRuntimeWindow[];
 }) {
-  const windows = records.filter((record) => record.timeWindow && record.commonDestination && record.preferredRide);
-  const commuteWindowIds = windows.map(({ id }) => id);
-  const notifications = useNotifications({ stage, gateOpen, commuteWindowIds, environment: notificationEnvironment });
+  const savedWindows = records.filter((record) => record.timeWindow && record.commonDestination && record.preferredRide);
+  const exactWindows = runtimeWindows.filter((window) => savedWindows.some((record) => exactRuntimeMatch(record, window, stage)));
+  const notifications = useNotifications({
+    stage, gateOpen: deliveryAuthorized, windows: exactWindows, environment: notificationEnvironment,
+  });
 
   return (
     <section className="surface surface--commute" aria-labelledby="commute-heading">
@@ -31,15 +36,17 @@ export function CommuteView({
       </div>
       <p className="quiet-copy">Disruption-only alerts use the route, direction, stations, and times you explicitly saved. Silence is not an all-clear.</p>
 
-      {windows.length > 0 ? (
+      {exactWindows.length > 0 ? (
         <Capability capability={notifications.capability} onEnable={notifications.enable} onDisable={notifications.disable} />
+      ) : savedWindows.length > 0 ? (
+        <StatusBanner tone="locked"><p>Commute alerts remain locked until an exact route segment is saved for this window.</p></StatusBanner>
       ) : null}
 
-      {windows.length === 0 ? (
+      {savedWindows.length === 0 ? (
         <StatusBanner tone="locked"><p>No complete commute window is saved yet. Add a destination, ride direction, and time window in Saved.</p></StatusBanner>
       ) : (
         <div className="commute-window-stack">
-          {windows.map((record) => <WindowBand record={record} catalog={catalog} key={record.id} />)}
+          {savedWindows.map((record) => <WindowBand record={record} catalog={catalog} key={record.id} />)}
         </div>
       )}
     </section>
@@ -63,6 +70,9 @@ function Capability({
       <p>Background alerts aren’t supported in this browser. You can still review your saved commute here.</p>
     </StatusBanner>
   );
+  if (capability === 'checking') return (
+    <StatusBanner tone="locked"><p>Checking this browser’s disruption alert setting.</p></StatusBanner>
+  );
   if (capability === 'denied') return (
     <StatusBanner tone="locked"><p>Notifications are blocked in your browser settings. Your saved commute remains available.</p></StatusBanner>
   );
@@ -72,12 +82,15 @@ function Capability({
       <button type="button" onClick={() => void onDisable()}>Turn off disruption alerts</button>
     </StatusBanner>
   );
+  const stale = capability === 'stale';
   return (
     <StatusBanner tone={capability === 'error' ? 'warning' : undefined}>
       <p>{capability === 'error'
         ? 'Background alerts could not be enabled. Your saved commute is unchanged.'
-        : 'Enable alerts only for material disruptions that overlap a saved commute window.'}</p>
-      <button type="button" onClick={() => void onEnable()}>Enable disruption alerts</button>
+        : stale
+          ? 'Your saved commute scope changed. Update alerts to use only the current exact route segment.'
+          : 'Enable alerts only for material disruptions that overlap a saved commute window.'}</p>
+      <button type="button" onClick={() => void onEnable()}>{stale ? 'Update disruption alerts' : 'Enable disruption alerts'}</button>
     </StatusBanner>
   );
 }
@@ -119,4 +132,27 @@ function weekdayLabel(values: readonly number[]): string {
 
 function directionLabel(value: Direction): string {
   return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+function exactRuntimeMatch(record: SavedRecord, window: CommuteRuntimeWindow, stage: CommuteStage): boolean {
+  const time = record.timeWindow;
+  const ride = record.preferredRide;
+  const destination = record.commonDestination;
+  if (!time || !ride || !destination || ride.direction === 'unknown' || record.routeFilters.length === 0) return false;
+  const weekdays = [...time.weekdays].sort((left, right) => left - right);
+  return window.savedRecordId === record.id
+    && window.stage === stage
+    && window.notificationEnabled
+    && window.lifecycle === record.state
+    && window.startsAt === time.startsAt
+    && window.endsAt === time.endsAt
+    && window.weekdays.length === weekdays.length
+    && window.weekdays.every((value, index) => value === weekdays[index])
+    && record.routeFilters.includes(window.scope.routeId)
+    && window.scope.direction === ride.direction
+    && window.scope.originStationId === record.constituentId
+    && window.scope.destinationStationId === destination.constituentId
+    && window.scope.segmentStationIds.length >= 2
+    && window.scope.segmentStationIds.includes(window.scope.originStationId)
+    && window.scope.segmentStationIds.includes(window.scope.destinationStationId);
 }

@@ -1,16 +1,25 @@
 import { compareCanonicalIdentity, normalizeBoundedIdentity } from '../../shared/domain/canonical';
+import {
+  createCommuteWindowRegistration,
+  runtimeWindowFromRegistration,
+  type CommuteRuntimeWindow,
+  type CommuteWindowRegistration,
+} from '../../shared/domain/commute-window';
+import type { CommuteStage } from '../../shared/domain/types';
 
 export interface PushSubscriptionRecord {
   readonly endpoint: string;
   readonly keys: { readonly p256dh: string; readonly auth: string };
-  readonly commuteWindowIds: readonly string[];
+  readonly commuteWindows: readonly CommuteWindowRegistration[];
 }
 
 export interface SubscriptionStore {
   readonly size: number;
   upsert(value: PushSubscriptionRecord): void;
   delete(endpoint: string): boolean;
+  get(endpoint: string): PushSubscriptionRecord | undefined;
   all(commuteWindowId?: string): readonly PushSubscriptionRecord[];
+  windows(stage: CommuteStage): readonly CommuteRuntimeWindow[];
 }
 
 export function createSubscriptionStore(maximum = 512): SubscriptionStore {
@@ -26,15 +35,35 @@ export function createSubscriptionStore(maximum = 512): SubscriptionStore {
     delete(endpoint: string): boolean {
       return records.delete(endpointValue(endpoint));
     },
+    get(endpoint: string): PushSubscriptionRecord | undefined {
+      const value = records.get(endpointValue(endpoint));
+      return value ? clone(value) : undefined;
+    },
     all(commuteWindowId?: string): readonly PushSubscriptionRecord[] {
       const normalizedWindowId = commuteWindowId === undefined
         ? undefined
         : normalizeBoundedIdentity(commuteWindowId, 'commute window');
       return Object.freeze([...records.values()]
-        .filter(({ commuteWindowIds }) => normalizedWindowId === undefined
-          || commuteWindowIds.includes(normalizedWindowId))
+        .filter(({ commuteWindows }) => normalizedWindowId === undefined
+          || commuteWindows.some(({ id }) => id === normalizedWindowId))
         .sort((left, right) => compareCanonicalIdentity(left.endpoint, right.endpoint))
         .map(clone));
+    },
+    windows(stage: CommuteStage): readonly CommuteRuntimeWindow[] {
+      const registrations = new Map<string, { serialized: string; value: CommuteWindowRegistration }>();
+      const conflicted = new Set<string>();
+      for (const subscription of records.values()) {
+        for (const registration of subscription.commuteWindows) {
+          const serialized = JSON.stringify(registration);
+          const existing = registrations.get(registration.id);
+          if (existing && existing.serialized !== serialized) conflicted.add(registration.id);
+          else if (!existing) registrations.set(registration.id, { serialized, value: registration });
+        }
+      }
+      return Object.freeze([...registrations.values()]
+        .filter(({ value }) => !conflicted.has(value.id))
+        .sort((left, right) => compareCanonicalIdentity(left.value.id, right.value.id))
+        .map(({ value }) => runtimeWindowFromRegistration(value, stage)));
     },
   });
 }
@@ -44,12 +73,13 @@ function capture(value: PushSubscriptionRecord): PushSubscriptionRecord {
   const endpoint = endpointValue(value.endpoint);
   const p256dh = token(value.keys.p256dh, 'p256dh', 1_024);
   const auth = token(value.keys.auth, 'auth', 512);
-  if (!Array.isArray(value.commuteWindowIds)) throw new Error('Invalid commute window subscriptions');
-  const commuteWindowIds = value.commuteWindowIds.map((id) => normalizeBoundedIdentity(id, 'commute window'));
-  if (commuteWindowIds.length < 1 || commuteWindowIds.length > 128 || new Set(commuteWindowIds).size !== commuteWindowIds.length) {
+  if (!Array.isArray(value.commuteWindows)) throw new Error('Invalid commute window subscriptions');
+  const commuteWindows = value.commuteWindows.map(createCommuteWindowRegistration);
+  const ids = commuteWindows.map(({ id }) => id);
+  if (commuteWindows.length < 1 || commuteWindows.length > 128 || new Set(ids).size !== ids.length) {
     throw new Error('Invalid commute window subscriptions');
   }
-  return deepFreeze({ endpoint, keys: { p256dh, auth }, commuteWindowIds });
+  return deepFreeze({ endpoint, keys: { p256dh, auth }, commuteWindows });
 }
 
 function endpointValue(value: string): string {
@@ -68,7 +98,11 @@ function token(value: string, label: string, maximum: number): string {
 }
 
 function clone(value: PushSubscriptionRecord): PushSubscriptionRecord {
-  return deepFreeze({ endpoint: value.endpoint, keys: { ...value.keys }, commuteWindowIds: [...value.commuteWindowIds] });
+  return deepFreeze({
+    endpoint: value.endpoint,
+    keys: { ...value.keys },
+    commuteWindows: value.commuteWindows.map((window) => ({ ...window, weekdays: [...window.weekdays], scope: { ...window.scope, segmentStationIds: [...window.scope.segmentStationIds] } })),
+  });
 }
 
 function deepFreeze<T>(value: T): T {

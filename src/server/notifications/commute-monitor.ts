@@ -7,6 +7,12 @@ import {
 } from '../../shared/domain/notification-decision';
 import type { CommuteStage } from '../../shared/domain/types';
 import type { ExposureStage } from '../release/exposure-gates';
+import {
+  authorizesDelivery,
+  authorizesEvaluation,
+  type CommuteDeliveryAuthorization,
+  type CommuteEvaluationAuthorization,
+} from './notification-authorization';
 import type { PushSubscriptionRecord, SubscriptionStore } from './subscription-store';
 
 export type PushDeliveryResult =
@@ -50,17 +56,19 @@ export function commuteExposureKey(stage: CommuteStage): ExposureStage | null {
 
 export function createCommuteMonitor(input: {
   readonly stage: CommuteStage;
-  readonly gateOpen: boolean;
+  readonly evaluationAuthorization?: CommuteEvaluationAuthorization;
+  readonly deliveryAuthorization?: CommuteDeliveryAuthorization;
   readonly capture: (window: CommuteRuntimeWindow, at: Date) => readonly NotificationImpact[];
   readonly sender: WebPushSender;
   readonly subscriptions: SubscriptionStore;
 }): CommuteMonitor {
-  const observed = new Set<string>();
+  const attempted = new Set<string>();
+  const missed = new Set<string>();
   const delivered: DeliveredNotificationBaseline[] = [];
 
   return Object.freeze({
     async evaluate(request: Parameters<CommuteMonitor['evaluate']>[0]) {
-      if (input.stage === 'disabled' || !input.gateOpen) return { kind: 'locked' } as const;
+      if (!authorizesEvaluation(input.evaluationAuthorization, input.stage)) return { kind: 'locked' } as const;
       let evaluated = 0;
       let candidates = 0;
       let deliveredCount = 0;
@@ -73,20 +81,23 @@ export function createCommuteMonitor(input: {
         const impacts = input.capture(window, request.at);
         evaluated += impacts.length;
         for (const impact of impacts) {
-          const observationKey = `${window.id}:${occurrence.occurrenceId}:${impact.episodeId}`;
-          if (observed.has(observationKey)) continue;
+          const deliveryGroup = `${window.id}:${occurrence.occurrenceId}:${impact.episodeId}`;
+          const attemptKey = `${deliveryGroup}:${impactStateKey(impact)}`;
+          if (missed.has(deliveryGroup) || attempted.has(attemptKey)) continue;
           const decision = materialNotificationDecision({ window, occurrence, impact, delivered });
-          if (decision.outcome !== 'send') {
-            if (mutateOperationalState) observed.add(observationKey);
+          if (decision.outcome !== 'send') continue;
+          candidates += 1;
+          const deliveryStage = authorizesDelivery(input.deliveryAuthorization, input.stage);
+          const capable = request.connected !== false && request.permissionGranted !== false;
+          if (!deliveryStage) continue;
+          if (!capable) {
+            if (mutateOperationalState) missed.add(deliveryGroup);
             continue;
           }
-          candidates += 1;
-          if (mutateOperationalState) observed.add(observationKey);
-          const deliveryStage = input.stage === 'pilot' || input.stage === 'delivery';
-          const capable = request.connected !== false && request.permissionGranted !== false;
-          if (!deliveryStage || !capable) continue;
 
           const payload = renderPush(window, occurrence, impact, decision.action?.label);
+          if (!isCommutePushPayload(payload)) continue;
+          if (mutateOperationalState) attempted.add(attemptKey);
           let successful = false;
           for (const subscription of input.subscriptions.all(window.id)) {
             const result = await input.sender.send(subscription, payload);
@@ -132,7 +143,43 @@ function renderPush(
       : impact.kind === 'delay'
         ? { title: `Delay affects ${trip}`, body: `${trip} service is delayed on ${station} during ${during}. ${safeAction} Open current details.` }
         : { title: `Update for ${trip}`, body: `${impact.kind} now affects ${station} during ${during}. ${safeAction} Open current details.` };
-  return Object.freeze({ ...content, url: '/?surface=commute', episodeId: impact.episodeId });
+  return Object.freeze({
+    title: boundedText(content.title, 160),
+    body: boundedText(content.body, 1_024),
+    url: '/?surface=commute' as const,
+    episodeId: impact.episodeId,
+  });
+}
+
+export function isCommutePushPayload(value: unknown): value is CommutePushPayload {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  const keys = Object.keys(record);
+  return keys.length === 4 && ['title', 'body', 'url', 'episodeId'].every((key) => keys.includes(key))
+    && typeof record.title === 'string' && record.title.length > 0 && record.title.length <= 160
+    && typeof record.body === 'string' && record.body.length > 0 && record.body.length <= 1_024
+    && record.url === '/?surface=commute'
+    && typeof record.episodeId === 'string' && /^[A-Za-z0-9._:-]{1,128}$/u.test(record.episodeId);
+}
+
+function boundedText(value: string, maximum: number): string {
+  return value.length <= maximum ? value : value.slice(0, maximum);
+}
+
+function impactStateKey(impact: NotificationImpact): string {
+  return JSON.stringify([
+    impact.kind,
+    impact.routeId,
+    impact.direction,
+    [...impact.affectedStationIds].sort(),
+    impact.activeFrom.toISOString(),
+    impact.activeUntil.toISOString(),
+    impact.addedJourneySeconds ?? null,
+    impact.correctionOnly,
+    impact.decisionChanging,
+    impact.acceptedActionRankingChange ?? false,
+    impact.recommendedActions.map(({ id, tier, riderRank }) => [id, tier, riderRank]),
+  ]);
 }
 
 function directionLabel(value: string): string {

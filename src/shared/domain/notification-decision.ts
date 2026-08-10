@@ -77,18 +77,18 @@ export function materialNotificationDecision(input: {
   if (impact.direction !== window.scope.direction) return suppress('direction-irrelevant');
   if (!impact.affectedStationIds.some((stationId) => window.scope.segmentStationIds.includes(stationId))) return suppress('segment-irrelevant');
   if (!impact.decisionChanging) return suppress('not-decision-changing');
+  if (impact.correctionOnly) return suppress('correction-only');
 
   const actions = rankRecommendedActions(impact.recommendedActions);
   const baseline = [...input.delivered]
     .filter(({ episodeId }) => episodeId === impact.episodeId)
     .sort((left, right) => right.deliveredAt.getTime() - left.deliveredAt.getTime())[0];
   if (!baseline) {
-    if (impact.correctionOnly) return suppress('correction-only');
     return { outcome: 'send', kind: 'initial', ...(actions[0] ? { action: actions[0] } : {}) };
   }
 
   const material = materialEscalation(impact, baseline, occurrence, actions[0]);
-  if (!material) return suppress(impact.correctionOnly ? 'correction-only' : 'equivalent-delivered');
+  if (!material) return suppress('equivalent-delivered');
   return { outcome: 'send', kind: 'escalation', ...(actions[0] ? { action: actions[0] } : {}) };
 }
 

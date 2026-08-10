@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 
 import type { Direction, SavedRecord } from '../shared/domain/types';
+import type { CommuteRuntimeWindow } from '../shared/domain/commute-window';
 import {
   bindJourneyCapturePackage,
   type JourneyCaptureClaimScope,
@@ -62,6 +63,7 @@ import {
 import { createBrowserStructuralStore } from './storage/structural-store';
 import { MapView, type MapContext } from './views/MapView';
 import { CommuteView } from './views/CommuteView';
+import type { NotificationEnvironment } from './hooks/use-notifications';
 import { NearbyView } from './views/NearbyView';
 import { SavedView } from './views/SavedView';
 import { StationView } from './views/StationView';
@@ -80,6 +82,12 @@ export interface AppProps {
   readonly recoveryNow?: () => Date;
   readonly onReconnectionTransition?: (transition: ReconnectionTransition) => void;
   readonly initialSurface?: AppState['surface'];
+  readonly commuteNotifications?: {
+    readonly stage: 'disabled' | 'deterministic-test' | 'silent-evaluation' | 'pilot' | 'delivery';
+    readonly deliveryAuthorized: boolean;
+    readonly runtimeWindows: readonly CommuteRuntimeWindow[];
+    readonly environment?: NotificationEnvironment;
+  };
 }
 
 interface SelectedBoardState {
@@ -102,6 +110,7 @@ export function App({
   recoveryNow,
   onReconnectionTransition,
   initialSurface,
+  commuteNotifications,
 }: AppProps = {}) {
   const apiClient = useMemo(() => api ?? createTransitApiClient(), [api]);
   const storage = useMemo(() => providedStorage ?? browserStorage(), [providedStorage]);
@@ -681,7 +690,14 @@ export function App({
               onDelete={deleteSaved}
             />
           ) : (
-            <CommuteView records={savedRecords} catalog={catalog?.data.complexes} stage="disabled" gateOpen={false} />
+            <CommuteView
+              records={savedRecords}
+              catalog={catalog?.data.complexes}
+              stage={commuteNotifications?.stage ?? 'disabled'}
+              deliveryAuthorized={commuteNotifications?.deliveryAuthorized ?? false}
+              runtimeWindows={commuteNotifications?.runtimeWindows ?? []}
+              notificationEnvironment={commuteNotifications?.environment}
+            />
           )}
         </div>
       </div>

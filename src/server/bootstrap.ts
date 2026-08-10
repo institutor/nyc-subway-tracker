@@ -69,7 +69,7 @@ export function createProductionDependencies(
     maps: createMapService(overrides.mapReferences ?? emptyMapReferences()),
     logger: overrides.logger ?? Object.freeze({ log: (_event: SafeLogEvent) => undefined }),
     notifications: overrides.notifications ?? Object.freeze({
-      stage: 'disabled', gateOpen: false, subscriptions: createSubscriptionStore(),
+      stage: 'disabled', subscriptions: createSubscriptionStore(),
     }),
   });
 }

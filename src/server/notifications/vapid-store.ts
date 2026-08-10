@@ -1,5 +1,5 @@
 import { generateKeyPairSync, randomUUID } from 'node:crypto';
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { link, mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 
 export interface VapidKeyPair {
@@ -34,11 +34,13 @@ async function readOrCreate(path: string): Promise<VapidKeyPair> {
   await mkdir(dirname(path), { recursive: true });
   try {
     await writeFile(temporary, `${JSON.stringify({ version: 1, ...keys })}\n`, { encoding: 'utf8', mode: 0o600, flag: 'wx' });
-    await rename(temporary, path);
+    try { await link(temporary, path); } catch (error) { if (!isExists(error)) throw error; }
+    return parse(await readFile(path, 'utf8'));
   } catch {
     try { return parse(await readFile(path, 'utf8')); } catch { throw new Error('VAPID key store could not be persisted'); }
+  } finally {
+    try { await unlink(temporary); } catch (error) { if (!isMissing(error)) throw error; }
   }
-  return keys;
 }
 
 function generate(): VapidKeyPair {
@@ -65,4 +67,8 @@ function parse(raw: string): VapidKeyPair {
 
 function isMissing(error: unknown): boolean {
   return Boolean(error && typeof error === 'object' && (error as { code?: unknown }).code === 'ENOENT');
+}
+
+function isExists(error: unknown): boolean {
+  return Boolean(error && typeof error === 'object' && (error as { code?: unknown }).code === 'EEXIST');
 }

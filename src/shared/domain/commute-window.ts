@@ -31,6 +31,15 @@ export interface CommuteRuntimeWindow {
   readonly scope: CommuteTransitScope;
 }
 
+export interface CommuteWindowRegistration {
+  readonly id: string;
+  readonly weekdays: readonly CommuteWeekday[];
+  readonly startsAt: string;
+  readonly endsAt: string;
+  readonly preparationLeadMinutes: number;
+  readonly scope: Omit<CommuteTransitScope, 'actualDestination'>;
+}
+
 export interface WatchingCommuteOccurrence {
   readonly kind: 'watching';
   readonly occurrenceId: string;
@@ -67,6 +76,46 @@ export function createCommuteRuntimeWindow(input: CommuteRuntimeWindow): Commute
     stage: input.stage,
     notificationEnabled: input.notificationEnabled,
     scope,
+  });
+}
+
+export function createCommuteWindowRegistration(input: CommuteWindowRegistration): CommuteWindowRegistration {
+  const runtime = createCommuteRuntimeWindow({
+    ...input,
+    savedRecordId: input.id,
+    lifecycle: 'active',
+    stage: 'deterministic-test',
+    notificationEnabled: true,
+    scope: { ...input.scope, actualDestination: input.scope.destinationStationId },
+  });
+  return deepFreeze({
+    id: runtime.id,
+    weekdays: [...runtime.weekdays],
+    startsAt: runtime.startsAt,
+    endsAt: runtime.endsAt,
+    preparationLeadMinutes: runtime.preparationLeadMinutes,
+    scope: {
+      routeId: runtime.scope.routeId,
+      direction: runtime.scope.direction,
+      originStationId: runtime.scope.originStationId,
+      destinationStationId: runtime.scope.destinationStationId,
+      segmentStationIds: [...runtime.scope.segmentStationIds],
+    },
+  });
+}
+
+export function runtimeWindowFromRegistration(
+  input: CommuteWindowRegistration,
+  stage: CommuteStage,
+): CommuteRuntimeWindow {
+  const registration = createCommuteWindowRegistration(input);
+  return createCommuteRuntimeWindow({
+    ...registration,
+    savedRecordId: registration.id,
+    lifecycle: 'active',
+    stage,
+    notificationEnabled: true,
+    scope: { ...registration.scope, actualDestination: registration.scope.destinationStationId },
   });
 }
 

@@ -79,6 +79,9 @@ describe('material notification decisions', () => {
 
   test('never sends correction wording without an independent material change', () => {
     expect(decide({ ...impact(), correctionOnly: true })).toEqual({ outcome: 'suppress', reason: 'correction-only' });
+    expect(decide({ ...impact(), correctionOnly: true, addedJourneySeconds: 900 }, [baseline()])).toEqual({
+      outcome: 'suppress', reason: 'correction-only',
+    });
   });
 
   test('keeps the canonical first action stable when fully tied inputs are shuffled', () => {
