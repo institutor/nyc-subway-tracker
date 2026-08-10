@@ -343,3 +343,77 @@ Command:
 ### Concerns
 
 None. This remains a validation candidate, not reviewed production accessibility truth. Real same-version path, equipment, nearby, progress, guidance, five-role review, and release records are still required before either independent public gate can open.
+
+---
+
+## Fix round 4 — live replacement lifecycle ownership (2026-08-10)
+
+### Governing RED evidence
+
+Before any production edit, the focused command was:
+
+`npm test -- --run tests/domain/accessibility-alternatives.test.ts tests/client/accessibility-panel.test.tsx`
+
+- **2 files, 23 tests; 2 failed and 21 passed.**
+- The alternative-domain RED failed because a resolved selection remained usable after a later accepted exact-prefix equipment-ledger observation superseded its owned candidate path, even though the selection's former time interval had not ended.
+- The component RED failed because an active warning rendered its stored expired replacement label at a later decision instant without a later transition; the action button was already omitted, but the stale instruction remained in the warning facts.
+
+The failures independently identify the missing ownership boundaries: resolved selections did not retain live candidate-path evidence for later validation, and warnings did not retain their originating selection for decision-time copy evaluation.
+
+### Repairs
+
+- A resolved alternative selection now privately owns the exact candidate path decisions behind its visible offers. Later-use validation rechecks each owned candidate's status, complete offer/path scope, validity, exposure, and live equipment-ledger dependencies instead of trusting the selection interval.
+- An accessibility warning now privately owns the exact alternative selection from which its replacement identifiers and label were derived. A separately resolved same-ID lookalike cannot be replayed for rendering or replacement selection.
+- Decision-time warning evaluation preserves the active warning, identity, state, acknowledgement, and last transition while deriving fail-closed copy whenever the warning interval expires or the owned replacement is revoked. No unrelated lifecycle event is required.
+- Rendering evaluates the warning at the current decision instant before presenting facts or an action. Transitions use the same evaluator, so the event and presentation paths cannot disagree about replacement freshness.
+- All new ownership remains private in app-owned weak maps; public decisions and nested arrays remain recursively frozen. Complete journey evidence, public exposure locks, empty production registries, and no-crowding boundaries were unchanged.
+
+### Additional RED/GREEN audit
+
+Self-review added an exact opaque-ownership test after the governing repair:
+
+`npm test -- --run tests/client/accessibility-panel.test.tsx`
+
+- RED: **1 file, 12 tests; 1 failed and 11 passed.** A separately resolved selection with the same public decision identity could replay its button against a warning that owned another selection object.
+- GREEN: warning presentation and replacement transitions now require the exact privately owned selection.
+
+Final focused lifecycle command:
+
+`npm test -- --run tests/client/accessibility-panel.test.tsx tests/domain/underway-warning.test.ts tests/domain/accessibility-alternatives.test.ts`
+
+- **3 files, 44/44 tests passed.**
+- Coverage includes expiry without a later event, candidate-ledger revocation before interval end, persistent fail-closed warning evaluation, and opaque same-ID replay rejection.
+
+### Full Task 13 dependency matrix
+
+Command:
+
+`npm test -- --run tests/domain/exposure-decision.test.ts tests/domain/equipment-status.test.ts tests/domain/accessible-path.test.ts tests/domain/path-impact.test.ts tests/domain/accessibility-alternatives.test.ts tests/domain/underway-warning.test.ts tests/domain/platform-guidance.test.ts tests/client/accessibility-panel.test.tsx tests/client/active-trip-store.test.ts tests/client/app-reconnection-loader.test.ts tests/client/reconnection-flow.test.tsx tests/server/api.test.ts tests/server/exposure-gates.test.ts`
+
+- **13 files, 318/318 tests passed.**
+
+### Final verification
+
+- Full Vitest regression: `npm test -- --run` — **58 files, 990/990 tests passed**.
+- TypeScript: `npm run typecheck` — passed with zero diagnostics.
+- Production build: `npm run build` — Vite transformed **66 modules** and completed successfully.
+- Browser acceptance in installed Google Chrome: `npm run test:e2e -- --project=chromium` with `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=C:\Program Files\Google\Chrome\Application\chrome.exe` — **4/4 passed**, including the recursive no-crowding boundary and all existing offline/recovery flows.
+- Diff hygiene: `git diff --check` passed with only repository line-ending notices; the production diff crowding scan returned zero matches.
+- Independent read-only review: **Ready**, with no Critical, Important, or Minor findings.
+
+### Fix commits
+
+| Commit | Lowercase subject | Review area |
+|---|---|---|
+| `4e32f3f` | `revalidate owned accessibility replacements` | live candidate-path ownership, decision-time warning copy, and exact selection replay closure |
+
+### Strict self-review
+
+- Later use follows owned evidence rather than copied timestamps or scalar fields: the candidate's live path decision and equipment ledger must still pass.
+- Expiry or revocation changes only evaluated replacement copy; the active warning is not cleared, silently downgraded, or made dependent on a navigation/progress event.
+- The exact warning-owned selection is required at both the component and transition boundaries, closing genuine same-ID replay without exposing private evidence.
+- Street-to-street journey reconstruction, live adverse equipment behavior, warning clearing rules, production locks, and empty registries remain covered by the 318-test dependency matrix.
+
+### Concerns
+
+None. Public accessibility and guidance remain locked pending real reviewed same-version production evidence.
