@@ -1,6 +1,6 @@
 # SDD ledger — plan: docs/superpowers/plans/2026-08-04-nyc-subway-tracker-implementation-plan.md
 
-Task 1: minor (deferred): smoke assertions are document-scoped rather than explicitly scoped within main; consider packageManager and Node engine pins for fresh-tool selection.
+Task 1: minor (partially resolved): exact `pnpm@10.34.5` selection and Node 22.12 minimum guidance are now documented; a manifest `engines.node` constraint and document-scoped smoke assertions remain deferred cleanups.
 Task 1: complete (commits dfe61f4..1cd3834, review clean)
 Task 2: fix round 1/5 (6 addressed, 0 open — DST fold order; service-date identity; invalid Gregorian rejection; discriminated decision types; canonical duplicate/Unicode rejection; route contrast; commits b4fe95f..3bc4e4b)
 Task 2: complete (commits 1cd3834..3bc4e4b, review clean)
@@ -60,3 +60,8 @@ Task 15: fix round 3/5 (round-2 findings addressed, 2 important exact-evidence b
 Task 15: fix round 4/5 (comparison reconstruction/truncation addressed, 4 admitted-proof joins open — exact issued service-alert context digest, actual vehicle stop-call ownership, canonical cross-train/service-time validation, and positive bounded later-observation chronology; commits c5f4e04..87256cf)
 Task 15: fix round 5/5 (4 addressed, 0 open — exact issued service-context commitment, vehicle stop-call ownership, canonical train/time ownership, and positive bounded later-observation chronology; commits 9d10bd8..745a179)
 Task 15: complete (commits f6651c1..745a179, final review clean; 84 focused shadow tests, 1,147 full-project tests, typecheck, production build, 5 Chrome journeys, npm and pnpm dry shadow, and truthful locked live-shadow failure evidence clean)
+Task 16: initial validation implementation (commits fbae141..617e398 — complete six-story browser suite, deterministic truth replays, authentic fixture bindings, real-App reconnection, public rider board timeline, responsive/privacy/asset closure, production smoke, and explicit validation-startup evidence)
+Task 16: review round 1 (6 important findings addressed — underlying GTFS-RT snapshot ownership, useful ordinary validation composition, transient location coordinates, stale request invalidation, current-source-owned Actual maps, and canonical A15→A34 accessibility/equipment/guidance evidence; commits 3a56c47..6c6af2a)
+Task 16: review round 2 (3 important findings addressed — live/shadow journey reference and plan locks, exact post-epoch reconnection alert/supplement owners, and process-local response-bound validation branding that persistence cannot recreate; commits f841e03..5334760)
+Task 16: final test-integrity repair (all 14 registered public operations independently governed in live and shadow; notification deletion intentionally preserved as cleanup; exact Corepack pnpm 10.34.5 pin; commits 4410da7..9811f59)
+Task 16: complete (final independent reviews READY for validation-build completion with no Critical or Important findings; 78 files and 1,260 tests; typecheck; 82-module production build; 40/40 installed-Chrome rider tests; 2/2 ordinary production-validation tests; 7/7 truth receipts; dry shadow closed; live shadow truthfully 0/8 accepted with 0 claims/comparisons and 9/9 locks; Gate 0 remains NO-GO)

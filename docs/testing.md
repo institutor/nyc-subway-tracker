@@ -11,9 +11,10 @@ pnpm test --run
 pnpm run typecheck
 pnpm run build
 pnpm run test:e2e
+pnpm run test:e2e:production-validation
 ```
 
-The browser suite uses Playwright. To use an installed Chrome/Chromium binary instead of a downloaded browser, set `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` to its absolute path before running `pnpm run test:e2e`.
+The browser suites use Playwright. To use an installed Chrome/Chromium binary instead of a downloaded browser, set `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` to its absolute path before either Playwright command. The regular suite builds and serves the deployed client through its closed fixture boundary. The production-validation suite exercises the ordinary app and API in validation mode through Vite's development server; the production build and built-preview smoke remain separate checks.
 
 ## Focused diagnostics checks
 
@@ -91,50 +92,52 @@ A successful current fetch also remains shadow-only. Gate 0 stays **NO-GO** unti
 
 ## Task 16 final validation record — 2026-08-10
 
-This record covers package `nyc-subway-tracker@0.1.0` at verified implementation baseline `6ef9288`. Later evidence-only commits do not change the tested product files.
+This record covers package `nyc-subway-tracker@0.1.0` at verified implementation and test baseline `9811f59`. The baseline includes the final product repairs, the exhaustive public-route policy matrix, and the exact package-manager pin.
 
 ### Reproducible dependency installation
 
-The lockfile was exercised without mutating the working checkout. A temporary project contained only `package.json`, `pnpm-lock.yaml`, `pnpm-workspace.yaml`, and `.npmrc`. Its own isolated pnpm store was hydrated with the frozen lockfile (301 packages), then a true `pnpm install --frozen-lockfile --offline` completed successfully against that store. The temporary project and store were removed after their resolved paths were checked.
+`package.json` pins `pnpm@10.34.5`; `corepack pnpm --version` resolved exactly `10.34.5`. At the final baseline, `corepack pnpm install --lockfile-only --frozen-lockfile --offline` accepted the unchanged lockfile without touching installed dependencies.
 
-The first offline attempt against the machine's pre-existing store failed honestly because the `express-5.2.1.tgz` archive was absent; it was not reported as a pass. Hydrating the separate temporary store closed that environmental precondition. The checkout's existing `node_modules/.modules.yaml` remained byte-identical before and after the proof, with SHA-256 `3AACC2FDDE464FC12FE57196F91016368C4157A9E1A2C807350973528EA05D24`.
+An earlier dependency-equivalent baseline also completed a true isolated offline install: a temporary project and isolated store used only the checkout manifests, hydrated 301 frozen packages, then ran `pnpm install --frozen-lockfile --offline`. The first attempt against the machine's incomplete pre-existing store failed honestly because `express-5.2.1.tgz` was absent; it was not reported as a pass. No dependency declaration or lockfile entry changed between that proof and `9811f59`.
 
 ### Clean verification results
 
 | Check | Exact result |
 |---|---|
-| `pnpm test --run` | PASS — 75 files, 1,168 tests |
-| `pnpm run typecheck` | PASS — zero TypeScript errors |
-| `pnpm run build` | PASS — Vite 7.3.6, 71 modules; client JavaScript 427.11 kB and CSS 30.18 kB |
-| Installed-Chrome six-file E2E run | PASS — 35/35 tests in 25.6 seconds, using `C:\Program Files\Google\Chrome\Application\chrome.exe` |
-| `pnpm run truth:all` | PASS — 7/7 zero-exposure replay/drill receipts; bundle digest `sha256:8a904eaf6cc6f844047e944140f2fd69c8778997058b418aa82a80daaa9d1a5b` |
-| `pnpm run shadow:dry-run` | PASS — `DRY_RUN_NO_NETWORK`; 8/8 sources not run by design, 9/9 public locks closed |
-| `pnpm run shadow:live` | Recorded external-source failure — `COMPLETED_WITH_SOURCE_FAILURES`; 0/8 sources accepted, 8/8 `SOURCE_RETRIEVAL_OR_VALIDATION_FAILED`, 0 claims, 0 comparisons, 9/9 public locks closed |
+| `corepack pnpm test --run` | PASS — 78 files, 1,260 tests |
+| `corepack pnpm run typecheck` | PASS — zero TypeScript errors |
+| `corepack pnpm run build` | PASS — Vite 7.3.6, 82 modules; client JavaScript 528.97 kB and CSS 30.18 kB before gzip |
+| Installed-Chrome regular E2E run | PASS — 40/40 tests in 32.4 seconds, using `C:\Program Files\Google\Chrome\Application\chrome.exe` |
+| Installed-Chrome production-validation E2E | PASS — 2/2 tests in 5.6 seconds |
+| `corepack pnpm run truth:all` | PASS — 7/7 zero-exposure replay/drill receipts; bundle digest `sha256:8a904eaf6cc6f844047e944140f2fd69c8778997058b418aa82a80daaa9d1a5b` |
+| `corepack pnpm run shadow:dry-run` | PASS — `DRY_RUN_NO_NETWORK`; 8/8 sources not run by design, 9/9 public locks closed |
+| `corepack pnpm run shadow:live` | Honest external-source record — `COMPLETED_WITH_SOURCE_FAILURES`; 0/8 sources accepted, 8/8 failed, 0 claims, 0 comparisons, 9/9 public locks closed; artifact 3,026 bytes |
 
-The installed-Chrome run used exactly the six required files: `zero-tap.spec.ts`, `service-change.spec.ts`, `offline.spec.ts`, `accessibility.spec.ts`, `commute.spec.ts`, and `responsive.spec.ts`. It covered real browser location allow/deny and saved precedence; practical-walk and picker fallbacks; continuously governed Live/Scheduled/Expected/Holding and service-change timelines; saved/map/active-trip/offline controls; every reconnection owner stage; accessible-route warnings and explicit replacement; commute locks and materiality; keyboard-only operation; reduced motion; 200% text; 320-pixel reflow; and populated privacy, crowding, coordinate, service-worker, and asset boundaries. The final privacy review added adversarial proofs for exact and snake/kebab crowding keys, neutral train-car shells, embedded image or inline-SVG payloads, protected-brand coupling, all runtime image-bearing elements, and every visible computed image property.
+The 40-test regular browser run spanned seven files: the six rider-story files `zero-tap.spec.ts`, `service-change.spec.ts`, `offline.spec.ts`, `accessibility.spec.ts`, `commute.spec.ts`, and `responsive.spec.ts`, plus the five-test `offline-pwa.spec.ts` regression file. It covered real browser location allow/deny and saved precedence; request-scoped coordinates and stale-result invalidation; practical-walk and picker fallbacks; continuously governed Live/Scheduled/Expected/Holding and service-change timelines; source-owned Actual maps; saved/map/active-trip/offline controls; all five reconnection stages; exact source-snapshot train recovery; accessible-route warnings and explicit replacement; commute locks and materiality; keyboard-only operation; reduced motion; 200% text; 320-pixel reflow; and populated privacy, crowding, service-worker, and asset boundaries.
 
-### Production and visual smoke
+The separate two-test production-validation run used the ordinary application and real API rather than the fixture route. It proved a useful labeled validation startup, the canonical A15/A34 accessibility-constrained journey, reload behavior, and offline degradation. Focused client tests additionally prove tamper rejection and offline-to-online/reconnection behavior. Together they keep accessibility, elevator, and platform-guidance branding bound to the current response owner; without recapture, the device-held trip remains historical/unverified.
 
-The built API and client preview were started as separate hidden processes from a clean app start, after creating the checkout-local `.env` from `.env.example` exactly as the README requires. `GET /api/v1/bootstrap` and the preview root both returned HTTP 200. The bootstrap reported schema `2026-08-04`, runtime mode `validation`, runtime surface `demonstration`, nine gates, and zero exposed gates. The built HTML contained the app root and no validation-deck, test-route, or notification-receipt payload. Installed Chrome rendered the standard production picker without console errors or horizontal overflow; synthetic receipt surfaces remained absent. The temporary ignored `.env` was removed after the smoke.
+### Exhaustive public-route policy matrix
 
-A separate no-`.env` diagnostic started successfully in the default `live/public` runtime while still reporting nine gates and zero exposed gates. That is the intentional configuration default, not validation-mode evidence; the documented `.env.example` step is required for the local demonstration view and remains the startup used for the result above.
+The test inventory independently derives and matches all 14 registered operations in both live and shadow: bootstrap; station catalog; station search; station board; nearby; status; map reference; map overlay; journey reference; journey plan; VAPID public key; subscription creation; subscription deletion; and subscription status.
 
-Representative screens were inspected at 1280×900 desktop and 390×844 phone sizes. Both retained high-contrast content, readable station-choice messaging, reachable refresh/station controls, and an unobscured bottom navigation dock. After the phone context completed service-worker registration and was switched offline, reload rendered the device-held subway tools, the explicit statement that live arrivals, alerts, and elevator status were unavailable, and no invented current station data. The full offline E2E additionally preserved and advanced a populated active trip in both directions, including its claim timestamps and historical status.
+- Bootstrap returns bounded structural metadata with `200`, `no-store`, and all nine gates false.
+- Catalog and search remain canonical, empty, and non-demonstration; catalog is immutable structural content and search is `no-store`.
+- Operational board, nearby, status, map, and journey responses are no-store locked envelopes with `data: null` and no operational marker leakage.
+- VAPID key, subscription creation, and subscription status return `423`, `no-store`, expose no key, and cannot mutate the subscription store.
+- Subscription deletion deliberately remains available under locks for cleanup. It returns `200`, `no-store`, can remove an existing record, and cannot create or leak one.
+- A representative unsupported `PUT` on every registered path receives `405`, the exact `Allow` header, and `no-store`.
 
-### Deterministic replay and drill receipts
+### Production smoke
 
-| Scenario | Fixture-bound passing checks |
-|---|---:|
-| Normal weekday | 6/6 |
-| Weekend planned work | 5/5 |
-| Late-night midnight | 4/4 |
-| Major disruption | 5/5 |
-| Later-stop comparison | 4/4 |
-| Route-group bulk drop | 10/10 |
-| False-bypass incident drill | 6/6 |
+The built API and client preview were started as separate local processes after creating `.env` from `.env.example`. Both `GET /api/v1/bootstrap` and the built preview returned HTTP 200. Bootstrap reported schema `2026-08-04`, runtime `validation/demonstration`, availability `available`, nine gates, and zero exposed gates. It returned the canonical validation catalog and journey-graph versions. The built HTML contained the application root and no validation-deck, scenario-receipt, or notification-receipt payload. The temporary ignored `.env` was removed, and the exact smoke listeners were stopped afterward.
 
-Every receipt remained `VALIDATION_ONLY`, with `riderExposure: false`, `boardsExposed: false`, and all nine public exposure stages closed. Independent review findings were normalized into failing regressions before their fixes, including production-default accessible-route ownership, exact stored-departure recovery, real-App board and saved-location timelines, populated coordinate/crowding scans, and a closed app-owned asset inventory.
+The no-`.env` default remains `live/public`, empty, and 9/9 locked. That is a configuration diagnostic, not validation evidence; the documented `.env.example` step is required for the local demonstration.
 
-### Release decision
+### Review closure and release decision
 
-Gate 0 remains **NO-GO**. The live shadow's 0/8 accepted-source result is an external-source failure record, not a successful current-source cohort. Task 15's 9/9 lock truth is unchanged, no public board or delivery gate opened, and this Task 16 validation completion does not grant public release approval.
+Post-Task-16 repairs bound recovery to underlying GTFS-RT snapshots (`3a56c47`), added the ordinary deterministic validation flow (`b65bd42`), kept location fixes request-scoped and invalidated stale requests (`9d0f981`, `6dbe8f9`), bound Actual maps to current source owners (`ddac31c`), corrected validation API expectations (`462b4ed`), bound canonical A15→A34 rider evidence (`6c6af2a`), locked live/shadow journey references (`f841e03`), required exact reconnection service owners (`bb7e8a2`), kept validation branding response-bound (`5334760`), covered all public operations (`4410da7`), and pinned the toolchain (`9811f59`).
+
+Independent final acceptance review is **READY for validation-build completion**, with no Critical or Important findings. The Node guidance was tightened to the dependency-compatible minimum. The production-validation browser configuration's use of Vite development mode is a non-blocking Minor; the built bundle is independently covered by the production build, regular deployed-client browser suite, and built-preview smoke above.
+
+Gate 0 remains **NO-GO**. Validation readiness is not public-release approval: the fixed-package public cohorts, current-source duration, release-specific accessibility/guidance/map/commute approvals, rights evidence, and binary release record remain incomplete. The live shadow's 0/8 accepted-source result is an external-source failure record, not a successful current-source cohort. No public board or delivery gate opened; all nine public exposure gates remain closed.
