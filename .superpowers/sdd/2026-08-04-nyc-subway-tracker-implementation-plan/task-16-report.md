@@ -67,7 +67,9 @@ Test harness or fixture corrections were not treated as product success. Asserti
 
 ## Production smoke and visual inspection
 
-The production API and built preview started as separate hidden processes. Both bootstrap and preview returned HTTP 200. Bootstrap schema was `2026-08-04`, runtime was `validation/demonstration`, and all 9 gates reported closed with 0 exposed. The built HTML contained the root and no fixture route, validation deck, scenario receipt, or notification-materiality receipt.
+The production API and built preview started as separate hidden processes after the checkout-local `.env` was created from `.env.example`, exactly following the README. Both bootstrap and preview returned HTTP 200. Bootstrap schema was `2026-08-04`, runtime was `validation/demonstration`, and all 9 gates reported closed with 0 exposed. The built HTML contained the root and no fixture route, validation deck, scenario receipt, or notification-materiality receipt. The temporary ignored `.env` was removed afterward.
+
+For configuration exactness, a separate no-`.env` diagnostic also started successfully and reported the intended default `live/public` runtime with 9/9 gates still closed and 0 exposed. It is not counted as validation-mode evidence; local demonstration startup requires the documented `.env.example` copy.
 
 Installed Chrome rendered the ordinary production picker without console errors or horizontal overflow. The 1280×900 desktop and 390×844 phone screens retained the high-contrast platform-spine hierarchy, readable station choice, reachable refresh/station actions, and an unobscured bottom dock. A service-worker-backed offline phone reload visibly stated that arrivals, alerts, and elevator status were unavailable and showed only device-held tools; the populated offline E2E separately proved trip, cursor, timestamps, map, and forward/back navigation.
 
