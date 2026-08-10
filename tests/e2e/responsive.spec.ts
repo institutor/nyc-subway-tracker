@@ -7,6 +7,7 @@ import {
   chooseScenario,
   expectNoCrowdingInEvidence,
   expectNoCrowdingOrPersonalCoordinatesAnywhere,
+  expectNoEmbeddedProtectedAssetInEvidence,
   expectNoHorizontalOverflow,
   FIXTURE_ORIGIN,
   openValidationDeck,
@@ -140,6 +141,34 @@ test('keeps the thumb and board control docks in reach and unobscured on a phone
 
   const primaryDock = page.getByRole('navigation', { name: 'Primary' });
   await assertBottomThirdAndUnobscured(page, primaryDock);
+});
+
+test('rejects evasive crowding schema keys and neutral train-car shells', () => {
+  const forbiddenEvidence: readonly unknown[] = [
+    { occupancy: 'Unknown' },
+    { capacity: null },
+    { occupancy_status: 'unavailable' },
+    { 'car-capacity': 'unknown' },
+    '<div class="train-car">Unknown cars</div>',
+    '<section data-train-car="placeholder"></section>',
+  ];
+  for (const evidence of forbiddenEvidence) {
+    expect(() => expectNoCrowdingInEvidence([evidence])).toThrow();
+  }
+});
+
+test('rejects protected or embedded image payloads inside otherwise allowed bundle files', () => {
+  const forbiddenEvidence = [
+    'background: url(data:image/svg+xml;base64,PHN2Zz4=)',
+    'mask-image: url(blob:http://127.0.0.1:4173/mark)',
+    'background-image: url(https://assets.example.test/subway-logo.png)',
+    '<svg aria-label="transit logo"><path /></svg>',
+    'MTA roundel',
+    'Metropolitan Transportation Authority brand mark',
+  ];
+  for (const evidence of forbiddenEvidence) {
+    expect(() => expectNoEmbeddedProtectedAssetInEvidence([evidence])).toThrow();
+  }
 });
 
 test('keeps crowding and personal coordinates out of populated rider state, APIs, caches, and accessibility surfaces', async ({ context, page, request }) => {
@@ -293,6 +322,9 @@ test('ships only the closed app-owned asset inventory and no validation or prote
   ])));
   expectNoCrowdingInEvidence([contents]);
   const productionAssets = Object.values(contents).join('\n');
+  const bundledCode = [contents[scripts[0]!], contents[styles[0]!]];
+  expect(contents[styles[0]!]).not.toMatch(/\burl\s*\(/iu);
+  expectNoEmbeddedProtectedAssetInEvidence(bundledCode);
   expect(productionAssets).not.toMatch(/Subway rider validation deck|Fixture-only rider evidence|Location allowed · practical walk ranking|Board · live overlap and holding|Reconnect · stage 1 path invalidation|Commute · material bypass|scenario-receipts|fixture-client|fixture-server|__validation|\/__test\//u);
   const htmlRefs = [...contents['index.html']!.matchAll(/(?:src|href)="([^"]+)"/gu)].map((match) => match[1]).sort();
   expect(htmlRefs).toEqual(['/assets/' + scripts[0]!.split('/').at(-1), '/assets/' + styles[0]!.split('/').at(-1), '/icons/app-icon.svg', '/manifest.webmanifest'].sort());
@@ -316,8 +348,20 @@ test('ships only the closed app-owned asset inventory and no validation or prote
   await page.getByRole('button', { name: 'Map', exact: true }).click();
   const map = page.getByTestId('vector-network-map');
   await expect(map.getByText('Unofficial app-owned subway reference geometry', { exact: true })).toBeVisible();
-  await expect(map.locator('svg title')).toHaveText('Original app-owned subway network reference');
-  await expect(map.locator('image, use, foreignObject')).toHaveCount(0);
+  await expect(page.locator('body img, body image, body use, body symbol, body foreignObject')).toHaveCount(0);
+  const renderedVectors = page.locator('body svg');
+  await expect(renderedVectors).toHaveCount(1);
+  await expect(renderedVectors.locator('title')).toHaveText('Original app-owned subway network reference');
+  const computedImages = await page.locator('body *:visible').evaluateAll((elements) => elements.flatMap((element) => {
+    const style = getComputedStyle(element);
+    return [
+      ['background-image', style.backgroundImage],
+      ['mask-image', style.maskImage],
+      ['list-style-image', style.listStyleImage],
+      ['border-image-source', style.borderImageSource],
+    ].flatMap(([property, value]) => value === 'none' ? [] : [{ property, value, tagName: element.tagName }]);
+  }));
+  expect(computedImages).toEqual([]);
   const allowedRuntimePaths = new Set(['/', '/index.html', '/manifest.webmanifest', '/icons/app-icon.svg', `/${scripts[0]}`, `/${styles[0]}`, '/sw.js']);
   const resources = await page.evaluate(() => performance.getEntriesByType('resource').map(({ name }) => name));
   for (const resource of resources) {

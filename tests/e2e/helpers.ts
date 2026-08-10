@@ -4,8 +4,12 @@ export const FIXTURE_ORIGIN = 'http://127.0.0.1:4173';
 
 const CROWDING_UI = /crowding|car(?:riage)?[\s_-]*(?:occupancy|capacity|load|diagram)|standing room|seats? (?:available|likely)|room to stand|very crowded|load factor|passenger (?:load|count)|consist length/i;
 const CROWDING_SCHEMA = /crowdingState|occupancyStatus|carOccupancy|carCapacity|carLoad|loadFactor|passengerLoad|passengerCount|seatsAvailable|standingRoom|consistLength|carCount/i;
+const CROWDING_SCHEMA_KEY = /(?:^|["'{,\s])(?:crowding(?:[_-]?state)?|occupancy(?:[_-]?(?:status|level))?|capacity|car(?:riage)?[_-]?(?:occupancy|capacity|load)|load[_-]?factor|passenger[_-]?(?:load|count)|seats?[_-]?available|standing[_-]?room|consist[_-]?length|car[_-]?count)\s*["']?\s*:/i;
 const CROWDING_PLACEHOLDER = /(?:crowd(?:ing)?|occupancy|car[\s_-]*(?:capacity|load)).{0,60}(?:module|badge|legend|placeholder|unavailable|unknown|coming soon)|(?:module|badge|legend|placeholder|unavailable|unknown|coming soon).{0,60}(?:crowd(?:ing)?|occupancy|car[\s_-]*(?:capacity|load))/i;
 const CROWDING_PROXY = /(?:headway gaps?|bunching|station density|platform density|rider reports?|engagement|schedules?|service conditions?).{0,60}(?:crowd(?:ing)?|occupancy|car[\s_-]*(?:capacity|load))|(?:crowd(?:ing)?|occupancy|car[\s_-]*(?:capacity|load)).{0,60}(?:headway gaps?|bunching|station density|platform density|rider reports?|engagement|schedules?|service conditions?)/i;
+const CROWDING_SHELL = /(?:train|subway)[_ -]?cars?\b|\bcarriages?\b|unknown[_ -]?cars?\b|data-(?:train-car|car-index|carriage)/i;
+const EMBEDDED_IMAGE_PAYLOAD = /data:image\/|blob:|https?:\/\/[^\s"')]+\.(?:avif|gif|jpe?g|png|svg|webp)(?:[?#][^\s"')]*)?|<svg\b/i;
+const PROTECTED_BRAND_ASSET = /(?:\bmta\b|metropolitan transportation authority).{0,48}(?:logo|wordmark|roundel|brand mark)|(?:logo|wordmark|roundel|brand mark).{0,48}(?:\bmta\b|metropolitan transportation authority)/i;
 
 export async function openValidationDeck(page: Page): Promise<void> {
   await page.goto('/__validation/');
@@ -72,8 +76,9 @@ export async function expectNoCrowding(page: Page, scope?: Locator): Promise<voi
   expectNoCrowdingInEvidence([serialized, await root.ariaSnapshot()]);
   await expect(root.locator([
     '[data-crowding]', '[data-occupancy]', '[data-car-load]', '[data-capacity]',
+    '[data-train-car]', '[data-car-index]', '[data-carriage]', '.train-car', '.carriage',
     '[class*="crowd" i]', '[class*="occupancy" i]', '[id*="crowd" i]', '[id*="occupancy" i]',
-    '[aria-label*="crowd" i]', '[aria-label*="occupancy" i]',
+    '[aria-label*="crowd" i]', '[aria-label*="occupancy" i]', '[aria-label*="train car" i]', '[aria-label*="carriage" i]',
   ].join(', '))).toHaveCount(0);
 }
 
@@ -81,8 +86,16 @@ export function expectNoCrowdingInEvidence(evidence: readonly unknown[]): void {
   const serialized = JSON.stringify(evidence);
   expect(serialized).not.toMatch(CROWDING_UI);
   expect(serialized).not.toMatch(CROWDING_SCHEMA);
+  expect(serialized).not.toMatch(CROWDING_SCHEMA_KEY);
   expect(serialized).not.toMatch(CROWDING_PLACEHOLDER);
   expect(serialized).not.toMatch(CROWDING_PROXY);
+  expect(serialized).not.toMatch(CROWDING_SHELL);
+}
+
+export function expectNoEmbeddedProtectedAssetInEvidence(evidence: readonly unknown[]): void {
+  const serialized = JSON.stringify(evidence);
+  expect(serialized).not.toMatch(EMBEDDED_IMAGE_PAYLOAD);
+  expect(serialized).not.toMatch(PROTECTED_BRAND_ASSET);
 }
 
 export interface BrowserRetainedEvidence {
