@@ -85,3 +85,71 @@ The runner uses the official source registry, coordinator, source-fetch/atomic-c
 ## Concerns
 
 The external live-source attempt accepted no complete operational snapshot, so real later-stop comparison could not be exercised in this environment. The isolated comparator and dry composition are governed by deterministic tests, but a future operator should rerun `pnpm run shadow:live` when official endpoints return valid content and use `--compare` against an earlier accepted record. All rider exposure remains locked in the meantime.
+
+## Fix round 1 (2026-08-10)
+
+### Outcome and files
+
+Reviewer round 1 is implemented in `661059284f5de2a45fa78bbaf7636677207b47df` (`tighten task 15 validation truth`). The fix closes all eight Important and two Minor findings without opening a stage. It adds authentic per-station shadow decisions and exact record parsing, atomic shadow persistence, independent and truthful notification deletion, transactionally quiescent broad reset, canonical status-gate parsing, monotonic source age and readable evidence, confirmation focus management, and checkout-root `.env` loading.
+
+Round-1 production/documentation files: `README.md`, `docs/data-sources.md`, `docs/testing.md`, `scripts/live-shadow.ts`, `src/client/App.tsx`, `src/client/api/client.ts`, `src/client/hooks/use-notifications.ts`, `src/client/views/DataStatusView.tsx`, `src/client/views/SettingsView.tsx`, `src/server/index.ts`, `src/server/routes/notifications.ts`, `src/server/services/shadow-progress.ts`, new `src/server/services/shadow-record.ts`, and new `src/server/services/shadow-validation.ts`.
+
+Round-1 governing tests: `tests/client/data-status-view.test.tsx`, new `tests/client/notification-environment.test.ts`, `tests/client/settings-view.test.tsx`, `tests/client/status-client.test.ts`, `tests/server/live-shadow.test.ts`, `tests/server/notifications-api.test.ts`, new `tests/server/server-env.test.ts`, `tests/server/shadow-progress.test.ts`, new `tests/server/shadow-record.test.ts`, and new `tests/server/shadow-validation.test.ts`.
+
+The controller appended one ledger line to `progress.md` before this fix round. That file was never edited or staged by this implementation and remains the sole unstaged worktree change.
+
+### Normalized RED evidence
+
+1. `npm test -- --run tests/client/status-client.test.ts tests/client/data-status-view.test.tsx` — 2 files, 12 tests: 3 failed, 9 passed. Locked `data:null` accepted a malformed gate set; Data Status omitted readable reason/evidence; source age stayed static after 30 seconds.
+2. `npm test -- --run tests/server/notifications-api.test.ts tests/client/notification-environment.test.ts tests/client/settings-view.test.tsx` — 3 files, 15 tests: 7 failed, 8 passed. Locked delivery returned 423 for deletion; browser deletion returned no exact remote/local result in all three cases; broad reset did not disable the separate action before its await; a hanging unsubscribe did not report Pending; confirmation was not a dialog and did not manage focus. The deferred stale-write assertion was behind the first quiescence failure and remained governing in the same test.
+3. `npm test -- --run tests/server/live-shadow.test.ts tests/server/shadow-progress.test.ts tests/server/shadow-validation.test.ts tests/server/shadow-record.test.ts tests/server/server-env.test.ts` — 5 collected files, 10 collected tests plus 2 suites failing resolution: 7 failed, 3 passed. The runner emitted shadow-v1, accepted missing `--compare`, compared changed targets/removed targets/reroutes as progress, lacked an exact whole-record parser, and lacked both authentic claim projection and atomic writer modules. The first environment attempt exposed two test-harness defects (top-level-await/CJS and a Windows path URL); those were corrected without production changes and are not counted as product REDs.
+4. Normalized environment RED after harness correction: `npm test -- --run tests/server/server-env.test.ts` — 1 file, 1 test: 1 failed. A child server started in a fresh checkout directory with validation `.env` still reported `live/public/locked` instead of `validation/demonstration/available`.
+5. Reviewer-directed claim-identity expansion: `npm test -- --run tests/server/shadow-validation.test.ts tests/server/shadow-progress.test.ts` — 2 files, 9 tests: 2 failed, 7 passed. Projection emitted one final-stop claim per train (2 instead of 4 per-stop claims), and the comparator's source/train key allowed the A16 claim to overwrite the A14 claim.
+
+### GREEN progression
+
+- Canonical status parsing and rider diagnostics: 2 files, 12/12 passed. The client now requires the exact ordered nine immutable gates with exact reason and decision before either locked or validation data branching. Age advances monotonically from the response as-of time without a network refetch.
+- Notification and reset boundaries: 3 files, 15/15 passed. DELETE is independent of delivery authorization; the browser reports exact main/remote/local outcomes for no subscription, `removed:false`, and local unsubscribe false; a five-second hang is Pending. Broad reset disables both actions, invalidates the personal store generation before its first await, aborts all personal request owners, clears personal joins/maps/state, deletes exact keys, and performs a second cleanup after remote work.
+- Shadow decisions/comparison/persistence: initially 3 files, 10/10 passed, then 3 files, 11/11 after the claim-identity expansion; the complete malformed-v2 matrix reached 13/13. Projection uses the existing `FeedHealthGovernor`, `evaluateServiceChanges`, and `admitArrivalCandidate` boundaries for every bounded target stop call. Every claim records canonical stop-call identity, target, decision time, exact source/feed provenance, admitted/suppressed disposition, and a bounded suppression reason. The comparator matches source/train/target-call, requires the same route and target to remain in an exact suffix path, and keeps reroutes inconclusive. Any malformed source, gate, metadata, claim, provenance, disposition, admission, path endpoint, or count invalidates the entire prior record.
+- Atomic persistence: same-directory unique temporary file, write, file sync, close, and one rename. Fault injection proves a flush failure closes once, removes only its exact temporary path, performs no rename, and leaves no final record.
+- Checkout environment and CLI: 2 files, 3/3 passed. Missing `--compare` exits 2 with no stdout; checkout `.env` is loaded before port/config resolution. README and testing documentation now identify separate API and production-preview terminals.
+
+### Full verification
+
+- Focused status/Data Status: 12/12.
+- Focused notification/reset: 15/15.
+- Focused shadow projection/comparison/atomic writer: 10/10, followed by claim-specific expansion and full v2 validation at 13/13.
+- Environment/live-shadow CLI: 3/3.
+- Final `npm test -- --run`: 73 files, 1,079/1,079 passed.
+- `npm run typecheck`: passed with no diagnostics.
+- `npm run build`: passed; 70 modules transformed, CSS 29.09 kB and JS 421.73 kB before gzip.
+- Installed Chrome (`C:\Program Files\Google\Chrome\Application\chrome.exe`) `npm run test:e2e`: 5/5 passed.
+- `npm run shadow:dry-run` and the documented `pnpm run shadow:dry-run` both passed with shadow-v2, eight official sources, nine closed gates, no network, no claims, and no rider exposure.
+- Documentation smoke used pnpm 10.6.3. The child-process server test proves a checkout-local `.env` reaches the API process; the preview remains a separately documented terminal.
+- `git diff --check` and `git diff --cached --check`: passed. Runtime `.data` stayed ignored. Prohibited-field and crowding scans found no diagnostic field, type, module, shell, badge, placeholder, legend, or proxy; matches were only deletion implementation/test terms and documentation stating exclusions.
+
+### Live shadow result
+
+`npm run shadow:live` exited 0 and atomically wrote ignored record `.data/shadow/shadow-2026-08-10T07-58-51.622Z.json`.
+
+- `schemaVersion=shadow-v2`; `outcome=COMPLETED_WITH_SOURCE_FAILURES`.
+- Eight official sources attempted; all eight truthfully recorded `failed`; zero accepted claims and zero comparisons.
+- Nine gates stayed closed; `riderExposure=false`; `boardsExposed=false`.
+- A prohibited-field scan of the written JSON returned no match. No release gate, public board, or normal test was changed by the live attempt.
+
+### Visual, React, accessibility, and privacy self-review
+
+- Data Status retains the dark platform-spine design and its single source-signal/age signature. Rider-readable reason, last-accepted time, as-of time, and gate evidence were added inside the existing responsive strip/list; no admin-dashboard visual language was introduced.
+- Settings uses native buttons and a labeled modal dialog. Focus moves to Confirm, Escape/Cancel restores the originating button, status copy is live, and destructive actions remain disabled during either deletion. Existing wrap, focus-visible, forced-color, reduced-motion, and narrow-screen rules remain intact; installed-Chrome E2E and the layout contract pass.
+- Effects have primitive ownership (`api`, connectivity, response identity), one bounded interval with cleanup, no duplicate listener, no inline component, and no new dependency. Personal mutation callbacks fail closed while reset is quiescent; request generations and abort owners prevent stale async acceptance.
+- Diagnostics and shadow records contain no coordinates, saved record, rider label, active-trip/cursor detail, permission state, push endpoint/token/key, VAPID private key, joinable personal identifier, or secret. Notification endpoint use remains confined to the operational deletion request and is never logged or diagnosed.
+- Broad reset retains official/structural offline assets and does not claim to change OS location or notification permission. Accessible Route Only is not silently changed. All capability gates remain immutable and locked.
+
+### Commits and concerns
+
+- Original Task 15 implementation: `284fb8af9550f0be071987cb4510093b284c0f82` (`document and diagnose subway data`).
+- Original Task 15 report: `c23c7bb7612c674d7f3df82afc46f3491ef19057` (`record task 15 verification`).
+- Fix round 1 implementation/tests/docs: `661059284f5de2a45fa78bbaf7636677207b47df` (`tighten task 15 validation truth`).
+- This updated report is committed separately so the implementation hash can be exact.
+
+Concern: the official feeds produced eight source failures in this environment, so no authentic live station claim was available for a later-record comparison. This is a truthful live-shadow outcome, not a weakened test. Deterministic tests exercise admitted and suppressed per-stop claims, exact target-call identity, path progression, reroute inconclusiveness, and whole-record invalidation. A future operator should rerun two accepted live observations before treating comparison evidence as available. No public stage may open from either result.
