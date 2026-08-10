@@ -154,6 +154,41 @@ export function firstAbsenceTimeline(): { readonly before: BoardEnvelopeDto; rea
   };
 }
 
+export type PublicBoardTimelineScenario = 'first-absence' | 'service-recovery';
+
+/**
+ * Fixture-only server boundary for driving the production App. Every visible row
+ * has already crossed the same confidence, service, recovery, and admission
+ * gates used by the validation composition; the bounded step only chooses which
+ * issued receipt is exposed by the next real board request.
+ */
+export function publicBoardTimelineDecision(
+  scenario: PublicBoardTimelineScenario,
+  step: 0 | 1 | 2,
+): BoardDecision {
+  if (scenario === 'first-absence') {
+    const admission = admitTimelineArrival('live', 'train-f-absence', 'F', 170, 190);
+    if (admission.kind !== 'admitted') throw new Error('Initial train for public first-absence timeline was not admitted');
+    const governor = new TrainRecoveryGovernor({
+      feedGroupId: 'subway-rt-bdfm', trainIdentity: 'train-f-1', targetStopId: 'A24N',
+      initialEvidence: evidence('train-initial', 0), movementAt: at(-10),
+    });
+    const absence = governor.observeHealthySnapshot({ provenance: evidence('train-absence-1', 30), entity: { kind: 'absent' } });
+    if (absence.reasonCode !== 'first-healthy-absence' || absence.publicPrecision !== 'none'
+      || absence.staticReplacementAllowed !== false || absence.scheduledFallbackTriggered !== false) {
+      throw new Error('First-absence governor did not issue the required precision-removal receipt');
+    }
+    return step === 0
+      ? serviceBoardDecisionFromAdmissions([admission], 'F train evidence is current before the next healthy snapshot.')
+      : serviceBoardDecisionFromAdmissions([], 'First healthy absence: exact precision removed; no replacement shown.');
+  }
+
+  const recovery = serviceRecoveryDecisions();
+  if (step === 0) return recovery.adverseDecision;
+  if (step === 1) return recovery.oneDecision;
+  return recovery.twoDecision;
+}
+
 export function bypassDecisions(): {
   readonly affected: ServiceChangeDecision;
   readonly sibling: ServiceChangeDecision;
@@ -204,6 +239,9 @@ export function serviceRecoveryDecisions(): {
   readonly adverseBoard: BoardEnvelopeDto;
   readonly oneBoard: BoardEnvelopeDto;
   readonly twoBoard: BoardEnvelopeDto;
+  readonly adverseDecision: BoardDecision;
+  readonly oneDecision: BoardDecision;
+  readonly twoDecision: BoardDecision;
 } {
   const adverseSnapshot = alertSnapshot([bypassAlert()]);
   const adverse = evaluateServiceChanges({ snapshot: adverseSnapshot, claim: serviceClaim('F') });
@@ -221,14 +259,26 @@ export function serviceRecoveryDecisions(): {
   const oneAdmission = admitServiceArrival(one);
   const twoAdmission = admitServiceArrival(two, 'live-readmission-eligible');
   const siblingAdmission = admitServiceArrival(evaluateServiceChanges({ snapshot: clear, claim: serviceClaim('E') }));
+  const adverseDecision = serviceBoardDecisionFromAdmissions(
+    [adverseAdmission, adverseSibling], adverse.riderCopy ?? 'F trains bypass 14 St.',
+  );
+  const oneDecision = serviceBoardDecisionFromAdmissions(
+    [oneAdmission, siblingAdmission], 'One clean update has been accepted; F remains withheld.',
+  );
+  const twoDecision = serviceBoardDecisionFromAdmissions(
+    [twoAdmission, siblingAdmission], 'F trains have resumed making scheduled stops at 14 St.',
+  );
   return {
     one,
     two,
     oneAdmission,
     twoAdmission,
-    adverseBoard: serviceBoardFromAdmissions([adverseAdmission, adverseSibling], adverse.riderCopy ?? 'F trains bypass 14 St.'),
-    oneBoard: serviceBoardFromAdmissions([oneAdmission, siblingAdmission], 'One clean update has been accepted; F remains withheld.'),
-    twoBoard: serviceBoardFromAdmissions([twoAdmission, siblingAdmission], 'F trains have resumed making scheduled stops at 14 St.'),
+    adverseBoard: serviceBoardFromDecision(adverseDecision),
+    oneBoard: serviceBoardFromDecision(oneDecision),
+    twoBoard: serviceBoardFromDecision(twoDecision),
+    adverseDecision,
+    oneDecision,
+    twoDecision,
   };
 }
 
@@ -435,9 +485,16 @@ function admitServiceArrival(
 }
 
 function serviceBoardFromAdmissions(admissions: readonly ArrivalAdmissionDecision[], alertText: string): BoardEnvelopeDto {
+  return serviceBoardFromDecision(serviceBoardDecisionFromAdmissions(admissions, alertText));
+}
+
+function serviceBoardDecisionFromAdmissions(
+  admissions: readonly ArrivalAdmissionDecision[],
+  alertText: string,
+): BoardDecision {
   const admitted = admissions.flatMap((receipt) => receipt.kind === 'admitted' ? [receipt.row.arrival] : []);
   const decidedAt = admitted.reduce((latest, row) => Math.max(latest, row.provenance.retrievedAt.getTime()), BASE.getTime());
-  const decision: BoardDecision = {
+  return {
     responseIdentity: `domain-board-service-${admitted.map(({ id }) => id).join('-') || 'none'}`,
     mode: 'live',
     station: { id: 'A24', name: '14 St', complexId: 'A24', routeIds: ['E', 'F'] },
@@ -451,6 +508,10 @@ function serviceBoardFromAdmissions(admissions: readonly ArrivalAdmissionDecisio
     decidedAt: new Date(decidedAt), explanations: [],
     capabilities: { arrivals: 'available', accessibility: 'locked', guidance: 'locked', commute: 'locked' },
   };
+}
+
+function serviceBoardFromDecision(decision: BoardDecision): BoardEnvelopeDto {
+  const decidedAt = decision.decidedAt.getTime();
   const sourceHealth = [{
     source: 'gtfs-rt', sourceId: 'bdfm-feed', state: 'current' as const,
     assessedAt: new Date(decidedAt).toISOString(), lastAcceptedAt: new Date(decidedAt).toISOString(),

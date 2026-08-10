@@ -13,6 +13,10 @@ import type { JourneyCapturePackage } from '../../src/shared/domain/journey-capt
 import type { BoardDecision } from '../../src/shared/domain/types';
 import { journeyGraphFixture } from '../helpers/journey-graph-fixture';
 import { lockedCommuteReceipt } from './fixture-commute-receipt';
+import {
+  publicBoardTimelineDecision,
+  type PublicBoardTimelineScenario,
+} from './fixture-client/scenario-receipts';
 
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const clientDirectory = resolve(projectRoot, 'dist/client');
@@ -22,12 +26,17 @@ const fixturePort = 4173;
 
 interface FixtureState {
   boardTransport: 'ok' | 'drop';
+  boardScenario: 'default' | PublicBoardTimelineScenario;
+  boardStep: 0 | 1 | 2;
   overlay: 'ready' | 'missing';
   walkTransport: 'available' | 'unavailable';
   walkDelayMs: number;
 }
 
-const state: FixtureState = { boardTransport: 'ok', overlay: 'ready', walkTransport: 'available', walkDelayMs: 0 };
+const state: FixtureState = {
+  boardTransport: 'ok', boardScenario: 'default', boardStep: 0,
+  overlay: 'ready', walkTransport: 'available', walkDelayMs: 0,
+};
 const requestLog: string[] = [];
 const transitionLog: ValidationTransition[] = [];
 let snapshotSequence = 0;
@@ -60,6 +69,12 @@ const catalog = {
       name: '14 St–Union Sq',
       routeIds: ['L'],
       constituents: [{ id: 'L03', name: '14 St–Union Sq', directionalStopIds: ['L03N', 'L03S'] }],
+    },
+    {
+      id: 'A24',
+      name: '14 St',
+      routeIds: ['E', 'F'],
+      constituents: [{ id: 'A24', name: '14 St', directionalStopIds: ['A24N', 'A24S'] }],
     },
   ],
 } as const;
@@ -169,6 +184,8 @@ fixture.use(express.json({ limit: '4kb', strict: true }));
 fixture.get('/__test/health', (_request, response) => response.status(200).json({ ready: true }));
 fixture.post('/__test/reset', (_request, response) => {
   state.boardTransport = 'ok';
+  state.boardScenario = 'default';
+  state.boardStep = 0;
   state.overlay = 'ready';
   state.walkTransport = 'available';
   state.walkDelayMs = 0;
@@ -184,6 +201,22 @@ fixture.post('/__test/state', (request, response) => {
       return;
     }
     state.boardTransport = candidate.boardTransport;
+  }
+  if (candidate.boardScenario !== undefined) {
+    if (candidate.boardScenario !== 'default'
+      && candidate.boardScenario !== 'first-absence'
+      && candidate.boardScenario !== 'service-recovery') {
+      response.status(400).json({ error: 'invalid board scenario' });
+      return;
+    }
+    state.boardScenario = candidate.boardScenario;
+  }
+  if (candidate.boardStep !== undefined) {
+    if (candidate.boardStep !== 0 && candidate.boardStep !== 1 && candidate.boardStep !== 2) {
+      response.status(400).json({ error: 'invalid board step' });
+      return;
+    }
+    state.boardStep = candidate.boardStep;
   }
   if (candidate.overlay !== undefined) {
     if (candidate.overlay !== 'ready' && candidate.overlay !== 'missing') {
@@ -309,7 +342,9 @@ function createSnapshot(): DecisionSnapshot {
   const capturedAt = new Date(lastClockMillisecond || Date.now());
   const observedAt = new Date(capturedAt.getTime() - 2_000);
   const retrievedAt = new Date(capturedAt.getTime() - 1_000);
-  const board = createBoard(capturedAt, observedAt, retrievedAt);
+  const board = state.boardScenario === 'default'
+    ? createBoard(capturedAt, observedAt, retrievedAt)
+    : rebasePublicBoard(publicBoardTimelineDecision(state.boardScenario, state.boardStep), capturedAt);
   return {
     identity: `browser-fixture-snapshot-${snapshotSequence}`,
     sourceHealth: [
@@ -530,5 +565,46 @@ function createBoard(capturedAt: Date, observedAt: Date, retrievedAt: Date): Boa
     decidedAt: capturedAt,
     explanations: [{ code: 'SERVICE_CONTEXT', message: 'Review current service information.' }],
     capabilities: { arrivals: 'available', accessibility: 'locked', guidance: 'locked', commute: 'locked' },
+  };
+}
+
+function rebasePublicBoard(source: BoardDecision, decidedAt: Date): BoardDecision {
+  if (source.mode !== 'live') throw new Error('Public board timeline must remain live-mode evidence');
+  const offset = decidedAt.getTime() - source.decidedAt.getTime();
+  const shift = (value: Date) => new Date(value.getTime() + offset);
+  const provenance = (value: (typeof source.directions)[number]['primary'][number]['provenance']) => ({
+    ...value, observedAt: shift(value.observedAt), retrievedAt: shift(value.retrievedAt),
+  });
+  const primary = (arrival: (typeof source.directions)[number]['primary'][number]) => arrival.kind === 'live'
+    ? { ...arrival, at: shift(arrival.at), provenance: provenance(arrival.provenance) }
+    : {
+      ...arrival,
+      estimateAt: shift(arrival.estimateAt),
+      range: { startsAt: shift(arrival.range.startsAt), endsAt: shift(arrival.range.endsAt) },
+      provenance: provenance(arrival.provenance),
+    };
+  const secondary = (arrival: (typeof source.directions)[number]['secondary'][number]) => arrival.kind === 'holding'
+    ? { ...arrival, lastSupportedAt: shift(arrival.lastSupportedAt), provenance: provenance(arrival.provenance) }
+    : { ...arrival, provenance: provenance(arrival.provenance) };
+  return {
+    ...source,
+    responseIdentity: `${source.responseIdentity}:fixture-${snapshotSequence}`,
+    directions: source.directions.map((direction) => ({
+      ...direction,
+      primary: direction.primary.map(primary),
+      secondary: direction.secondary.map(secondary),
+    })),
+    feedHealth: source.feedHealth.map((health) => ({
+      ...health,
+      assessedAt: shift(health.assessedAt),
+      ...(health.lastAcceptedAt ? { lastAcceptedAt: shift(health.lastAcceptedAt) } : {}),
+    })),
+    alerts: source.alerts.map((alert) => ({
+      ...alert,
+      activeFrom: shift(alert.activeFrom),
+      ...(alert.activeUntil ? { activeUntil: shift(alert.activeUntil) } : {}),
+      provenance: provenance(alert.provenance),
+    })),
+    decidedAt,
   };
 }

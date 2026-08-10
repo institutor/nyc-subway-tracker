@@ -27,6 +27,29 @@ test('uses real browser permission allow, then a cleared-permission denial with 
   await expectNoCrowding(page);
 });
 
+test('moves from the real denied last-used station to an explicit saved choice without opening the keyboard', async ({ context, page }) => {
+  await context.grantPermissions(['geolocation'], { origin: FIXTURE_ORIGIN });
+  await context.setGeolocation({ latitude: 40.811, longitude: -73.952, accuracy: 18 });
+  await page.goto('/');
+  const first = page.getByTestId('nearby-station-card').first();
+  await first.getByRole('button', { name: /Open Uptown \/ Northbound board/ }).click();
+  await page.getByRole('button', { name: 'Save this station' }).click();
+
+  await page.getByRole('navigation', { name: 'Primary' }).getByRole('button', { name: 'Nearby', exact: true }).click();
+  await page.getByRole('toolbar', { name: 'Nearby controls' }).getByRole('button', { name: 'Choose a station' }).click();
+  await page.getByRole('button', { name: 'Canal St', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Canal St', exact: true, level: 2 })).toBeVisible();
+
+  await context.clearPermissions();
+  await page.reload();
+  await expect(page.getByText('Location unavailable. Showing your last station.', { exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Canal St', exact: true, level: 2 })).toBeVisible();
+  await page.getByRole('button', { name: 'Show saved stations' }).click();
+  await expect(page.getByRole('heading', { name: 'Saved stations', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: '125 St saved station' })).toBeVisible();
+  await expect(page.getByRole('textbox')).toHaveCount(0);
+});
+
 test('shows three practical-walk station cards and both directions without search in the bounded validation composition', async ({ page }) => {
   await openValidationDeck(page);
   await chooseScenario(page, 'Location allowed · practical walk ranking');

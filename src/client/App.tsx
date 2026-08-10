@@ -751,6 +751,9 @@ export function App({
                 <StatusBanner tone="warning" actions={(
                   <>
                     {fallback === 'failed' ? <button type="button" onClick={location.retry}>Try location again</button> : null}
+                    {savedRecords.length > 0 ? (
+                      <button type="button" onClick={() => { setStationOpen(false); setPickerOpen(false); }}>Show saved stations</button>
+                    ) : null}
                     <button type="button" onClick={() => { setStationOpen(false); setPickerOpen(true); }}>Choose a station</button>
                   </>
                 )}>

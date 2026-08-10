@@ -168,9 +168,15 @@ h4 {
 .surface-heading,
 .station-card__header {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--space-3);
   align-items: start;
   justify-content: space-between;
+}
+
+.surface-heading > * {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .section-kicker,
@@ -1166,12 +1172,20 @@ select:disabled {
 }
 
 .active-trip-card {
+  min-width: 0;
+  max-width: 100%;
   margin-block-start: var(--space-2);
   padding: var(--space-4);
   border: 1px solid var(--line);
   border-block-start: 0.3rem solid var(--signal);
   background: #081721;
   box-shadow: 0 0.8rem 2rem var(--shadow);
+  overflow-wrap: anywhere;
+}
+
+.active-trip-card :where(div, section, article, header, ol, li, p, h2, h3, h4, h5) {
+  min-width: 0;
+  max-width: 100%;
 }
 
 .active-trip-card__header,
@@ -1261,6 +1275,7 @@ select:disabled {
 }
 
 .active-trip-leg > header {
+  flex-wrap: wrap;
   justify-content: flex-start;
 }
 
@@ -1277,6 +1292,7 @@ select:disabled {
   margin: var(--space-4) 0 0;
   padding: 0;
   list-style: none;
+  overflow-wrap: anywhere;
 }
 
 .trip-points::before {
@@ -1468,6 +1484,7 @@ select:disabled {
   color: var(--steel);
   font-family: var(--utility-face);
   font-size: var(--step--1);
+  overflow-wrap: anywhere;
 }
 
 .saved-intent dd,
@@ -1540,6 +1557,11 @@ select:disabled {
 .surface--map {
   display: grid;
   gap: var(--space-3);
+}
+
+.surface--map > * {
+  min-width: 0;
+  max-width: 100%;
 }
 
 .map-axis-controls {
@@ -1627,11 +1649,20 @@ select:disabled {
 }
 
 .map-context-dock {
+  flex-wrap: wrap;
+  overflow-x: visible;
   margin-block-end: 0;
+}
+
+.map-context-dock > button {
+  flex: 1 1 6rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .journey-planner {
   display: grid;
+  min-width: 0;
   gap: var(--space-3);
   margin-block-start: var(--space-4);
   padding-block-start: var(--space-4);
@@ -1695,16 +1726,25 @@ select:disabled {
 
 .journey-results {
   display: grid;
+  min-width: 0;
   gap: var(--space-3);
+  overflow-wrap: anywhere;
+}
+
+.journey-results :where(article, header, div, dl, ol, li, p, strong, h3, h4) {
+  min-width: 0;
+  max-width: 100%;
 }
 
 .journey-legs {
   display: grid;
+  min-width: 0;
   gap: var(--space-2);
-  padding-inline-start: 1.5rem;
+  padding-inline-start: min(1.5rem, 24px);
 }
 
 .journey-legs li {
+  min-width: 0;
   padding: var(--space-3);
   border: 1px solid var(--line);
   background: #0b202b;
@@ -1712,6 +1752,8 @@ select:disabled {
 
 .journey-leg__route {
   display: flex;
+  flex-wrap: wrap;
+  min-width: 0;
   gap: var(--space-2);
   align-items: center;
 }
@@ -1753,6 +1795,7 @@ select:disabled {
   }
 
   .active-trip-card__header,
+  .active-trip-leg > header,
   .saved-card__header,
   .journey-card > header {
     flex-direction: column;

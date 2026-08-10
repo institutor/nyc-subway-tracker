@@ -8,6 +8,11 @@ import {
   openValidationDeck,
 } from './helpers';
 
+test.beforeEach(async ({ request }) => {
+  const response = await request.post(`${FIXTURE_ORIGIN}/__test/reset`);
+  expect(response.ok()).toBe(true);
+});
+
 test('reflows at 320 pixels and 200% text without hiding thumb controls', async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 720 });
   await openValidationDeck(page);
@@ -30,6 +35,29 @@ test('keeps the production Nearby surface inside the viewport at 200% text', asy
   await page.addStyleTag({ content: 'html { font-size: 200% !important; }' });
   await expectNoHorizontalOverflow(page);
   await expect(page.getByRole('navigation', { name: 'Primary' })).toBeVisible();
+});
+
+test('keeps populated production Saved, Map, and active-trip surfaces reflowed at 200% text', async ({ context, page }) => {
+  await context.clearPermissions();
+  await page.setViewportSize({ width: 320, height: 720 });
+  await page.goto('/');
+  await page.getByRole('button', { name: '125 St', exact: true }).click();
+  await page.getByRole('button', { name: 'Save this station' }).click();
+  await page.getByRole('button', { name: 'Map', exact: true }).click();
+  await page.getByRole('combobox', { name: 'Destination station' }).fill('Canal');
+  await page.getByRole('option', { name: /Canal St/ }).click();
+  await page.getByRole('button', { name: 'Plan current trip' }).click();
+  await page.getByRole('button', { name: 'Use this trip' }).first().click();
+  await page.addStyleTag({ content: 'html { font-size: 200% !important; }' });
+
+  await expect(page.getByRole('heading', { name: '125 St to Canal St' })).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+  await page.getByRole('button', { name: 'Saved', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Saved', exact: true })).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+  await page.getByRole('button', { name: 'Map', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Map', exact: true })).toBeVisible();
+  await expectNoHorizontalOverflow(page);
 });
 
 test('supports a keyboard-only board action and bottom-navigation transition with visible focus', async ({ context, page, request }) => {
@@ -78,14 +106,17 @@ test('respects reduced motion and remains readable at a desktop viewport', async
   await chooseScenario(page, 'Board · loading motion');
   await expectNoHorizontalOverflow(page);
   await expect(page.getByLabel('Station arrivals loading')).toBeVisible();
-  const motion = await page.locator('body *:visible').evaluateAll((elements) => elements.flatMap((element) => {
-    const style = getComputedStyle(element);
-    return [style.animationDuration, style.transitionDuration].flatMap((value) => value.split(',')).map((value) => ({
-      selector: `${element.tagName.toLowerCase()}.${[...element.classList].join('.')}`,
-      milliseconds: value.trim().endsWith('ms') ? Number.parseFloat(value) : Number.parseFloat(value) * 1_000,
-    }));
-  }).filter(({ milliseconds }) => Number.isFinite(milliseconds) && milliseconds > 0.02));
-  expect(motion).toEqual([]);
+  await expectNoVisibleMotion(page);
+});
+
+test('removes animation and transition time from a real production loading state', async ({ context, page, request }) => {
+  await request.post(`${FIXTURE_ORIGIN}/__test/state`, { data: { walkDelayMs: 1_200 } });
+  await context.grantPermissions(['geolocation'], { origin: FIXTURE_ORIGIN });
+  await context.setGeolocation({ latitude: 40.811, longitude: -73.952, accuracy: 18 });
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto('/');
+  await expect(page.getByLabel('Nearby subway stations loading')).toBeVisible();
+  await expectNoVisibleMotion(page);
 });
 
 test('keeps the thumb and board control docks in reach and unobscured on a phone', async ({ context, page }) => {
@@ -119,9 +150,10 @@ test('keeps fixture scenarios, crowding concepts, and personal coordinates out o
   const apiPayloads = [await bootstrap.json(), await board.json()];
   const html = await (await request.get(`${FIXTURE_ORIGIN}/`)).text();
   const assetPaths = [...html.matchAll(/(?:src|href)="([^"]+\.(?:js|css))"/gu)].map((match) => match[1]!);
-  const assets = await Promise.all(assetPaths.map(async (path) => (await request.get(`${FIXTURE_ORIGIN}${path}`)).text()));
+  const emittedPaths = [...assetPaths, '/sw.js', '/manifest.webmanifest', '/icons/app-icon.svg'];
+  const assets = await Promise.all(emittedPaths.map(async (path) => (await request.get(`${FIXTURE_ORIGIN}${path}`)).text()));
   const productionAssets = assets.join('\n');
-  expect(productionAssets).not.toMatch(/Subway rider validation deck|Board · live overlap and holding|scenario-receipts|__validation/);
+  expect(productionAssets).not.toMatch(/Subway rider validation deck|Fixture-only rider evidence|Location allowed · practical walk ranking|Board · live overlap and holding|Reconnect · stage 1 path invalidation|Commute · material bypass|scenario-receipts|fixture-client|fixture-server|__validation|\/__test\//u);
   expect(productionAssets).not.toMatch(/crowding|occupancy|standing room|car.?load|load factor|seats available/i);
   for (const coordinate of personalCoordinates) expect(productionAssets).not.toContain(coordinate);
   await expectNoCrowdingOrPersonalCoordinatesAnywhere(page, apiPayloads, personalCoordinates);
@@ -150,4 +182,15 @@ async function assertBottomThirdAndUnobscured(page: import('@playwright/test').P
     return hit === button || Boolean(hit && button.contains(hit));
   }));
   expect(unobscured).toBe(true);
+}
+
+async function expectNoVisibleMotion(page: import('@playwright/test').Page): Promise<void> {
+  const motion = await page.locator('body *:visible').evaluateAll((elements) => elements.flatMap((element) => {
+    const style = getComputedStyle(element);
+    return [style.animationDuration, style.transitionDuration].flatMap((value) => value.split(',')).map((value) => ({
+      selector: `${element.tagName.toLowerCase()}.${[...element.classList].join('.')}`,
+      milliseconds: value.trim().endsWith('ms') ? Number.parseFloat(value) : Number.parseFloat(value) * 1_000,
+    }));
+  }).filter(({ milliseconds }) => Number.isFinite(milliseconds) && milliseconds > 0.02));
+  expect(motion).toEqual([]);
 }

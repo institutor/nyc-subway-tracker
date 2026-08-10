@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 
-import { chooseScenario, expectNoCrowding, openValidationDeck } from './helpers';
+import { chooseScenario, expectNoCrowding, FIXTURE_ORIGIN, openValidationDeck } from './helpers';
 
 test.beforeEach(async ({ page }) => openValidationDeck(page));
 
@@ -62,5 +62,46 @@ test('vetoes a bypassed train, preserves an unaffected sibling, and recovers onl
   await expect(page.getByText('Two coherent recovery updates', { exact: true })).toBeVisible();
   await expect(page.getByTestId('primary-arrival')).toHaveCount(2);
   await expect(page.getByTestId('primary-arrival').filter({ hasText: 'F' }).getByText('Live', { exact: true })).toBeVisible();
+  await expectNoCrowding(page);
+});
+
+test('carries domain-governed absence and bypass recovery through the real App refresh boundary', async ({ context, page, request }) => {
+  await context.clearPermissions();
+  await request.post(`${FIXTURE_ORIGIN}/__test/reset`);
+  const initial = await request.post(`${FIXTURE_ORIGIN}/__test/state`, {
+    data: { boardScenario: 'first-absence', boardStep: 0 },
+  });
+  expect(initial.ok()).toBe(true);
+  await page.goto('/');
+  await page.getByRole('button', { name: '14 St', exact: true }).click();
+  const board = page.getByRole('region', { name: 'Uptown / Northbound trains' });
+  await expect(board.getByTestId('primary-arrival').filter({ hasText: 'F' })).toHaveCount(1);
+
+  await request.post(`${FIXTURE_ORIGIN}/__test/state`, { data: { boardStep: 1 } });
+  await page.getByRole('button', { name: 'Refresh train times' }).click();
+  await expect(board.getByTestId('primary-arrival')).toHaveCount(0);
+  await expect(page.getByText('First healthy absence: exact precision removed; no replacement shown.', { exact: true })).toBeVisible();
+
+  await request.post(`${FIXTURE_ORIGIN}/__test/state`, {
+    data: { boardScenario: 'service-recovery', boardStep: 0 },
+  });
+  await page.getByRole('button', { name: 'Refresh train times' }).click();
+  await expect(board.getByTestId('primary-arrival')).toHaveCount(1);
+  await expect(board.getByTestId('primary-arrival')).toContainText('E');
+  await expect(board.getByTestId('primary-arrival')).not.toContainText('F');
+  await expect(page.getByText('F trains are bypassing 14 St on the express track.', { exact: true })).toBeVisible();
+
+  await request.post(`${FIXTURE_ORIGIN}/__test/state`, { data: { boardStep: 1 } });
+  await page.getByRole('button', { name: 'Refresh train times' }).click();
+  await expect(board.getByTestId('primary-arrival')).toHaveCount(1);
+  await expect(board.getByTestId('primary-arrival')).toContainText('E');
+  await expect(board.getByTestId('primary-arrival')).not.toContainText('F');
+  await expect(page.getByText('One clean update has been accepted; F remains withheld.', { exact: true })).toBeVisible();
+
+  await request.post(`${FIXTURE_ORIGIN}/__test/state`, { data: { boardStep: 2 } });
+  await page.getByRole('button', { name: 'Refresh train times' }).click();
+  await expect(board.getByTestId('primary-arrival')).toHaveCount(2);
+  await expect(board.getByTestId('primary-arrival').filter({ has: page.getByLabel('E train', { exact: true }) })).toHaveCount(1);
+  await expect(board.getByTestId('primary-arrival').filter({ has: page.getByLabel('F train', { exact: true }) })).toHaveCount(1);
   await expectNoCrowding(page);
 });

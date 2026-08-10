@@ -51,16 +51,18 @@ function renderFeature(
   const state = overlay?.state ?? 'reference';
   if (feature.geometry.type === 'Point') {
     const [x, y] = project(feature.geometry.coordinates);
+    const labelOnLeft = x > 760;
     return (
       <g key={feature.id} data-map-feature={feature.id} data-state={state}>
         <circle cx={x} cy={y} r="13" className={`network-map__station network-map__feature--${state}`} />
-        <text x={x + 19} y={y + 6}>{feature.id}</text>
+        <text x={labelOnLeft ? x - 19 : x + 19} y={y + 6} textAnchor={labelOnLeft ? 'end' : 'start'}>{feature.id}</text>
       </g>
     );
   }
   const projected = feature.geometry.coordinates.map(project);
   const points = projected.map(([x, y]) => `${x},${y}`).join(' ');
   const labelPoint = projected[Math.floor(projected.length / 2)] ?? [500, 500];
+  const labelOnLeft = labelPoint[0] > 760;
   return (
     <g key={feature.id} data-map-feature={feature.id} data-state={state}>
       <polyline
@@ -71,7 +73,12 @@ function renderFeature(
         className={`network-map__line network-map__feature--${state}`}
         aria-label={`${feature.routeIds.join(', ')} route segment, ${state}`}
       />
-      <text x={labelPoint[0] + 18} y={labelPoint[1] - 18} className="network-map__route-label">{feature.routeIds.join(' ')}</text>
+      <text
+        x={labelOnLeft ? labelPoint[0] - 18 : labelPoint[0] + 18}
+        y={labelPoint[1] - 18}
+        textAnchor={labelOnLeft ? 'end' : 'start'}
+        className="network-map__route-label"
+      >{feature.routeIds.join(' ')}</text>
     </g>
   );
 }
