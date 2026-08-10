@@ -98,6 +98,13 @@ describe('material notification decisions', () => {
     expect(decide({ ...impact(), activeUntil: new Date('2026-08-03T12:59:59.000Z') }, [shorter])).toEqual({ outcome: 'suppress', reason: 'equivalent-delivered' });
     expect(decide({ ...impact(), activeUntil: new Date('2026-08-03T13:00:00.000Z') }, [shorter])).toMatchObject({ outcome: 'send', kind: 'escalation' });
   });
+
+  test('keeps the pending severity branch closed even when numeric labels differ', () => {
+    const delivered = { ...baseline(), severityRank: 1 };
+    expect(decide({ ...impact(), severityRank: 2 }, [delivered])).toEqual({
+      outcome: 'suppress', reason: 'equivalent-delivered',
+    });
+  });
 });
 
 function impact(): NotificationImpact {

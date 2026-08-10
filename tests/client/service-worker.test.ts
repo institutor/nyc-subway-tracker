@@ -12,14 +12,14 @@ describe('offline service-worker policy', () => {
     await worker.dispatchPush({
       title: '14 St stop change',
       body: 'F southbound trains are not stopping at 14 St. Open current details.',
-      url: '/commute', episodeId: 'episode-a',
+      url: '/?surface=commute', episodeId: 'episode-a',
     });
     expect(worker.showNotification).toHaveBeenCalledWith('14 St stop change', {
       body: 'F southbound trains are not stopping at 14 St. Open current details.',
-      data: { url: '/commute', episodeId: 'episode-a' }, tag: 'commute:episode-a', renotify: false,
+      data: { url: '/?surface=commute', episodeId: 'episode-a' }, tag: 'commute:episode-a', renotify: false,
     });
-    await worker.dispatchNotificationClick({ url: '/commute', episodeId: 'episode-a' });
-    expect(worker.openWindow).toHaveBeenCalledWith('/commute');
+    await worker.dispatchNotificationClick({ url: '/?surface=commute', episodeId: 'episode-a' });
+    expect(worker.openWindow).toHaveBeenCalledWith('/?surface=commute');
   });
 
   test('precaches the reloadable app shell in its own versioned cohort', async () => {

@@ -2,20 +2,24 @@ import type { CommuteStage, Direction, SavedRecord } from '../../shared/domain/t
 import { RouteToken } from '../components/RouteToken';
 import { StatusBanner } from '../components/StatusBanner';
 import { useNotifications, type NotificationEnvironment } from '../hooks/use-notifications';
+import type { CatalogComplexDto } from '../api/client';
 
 export function CommuteView({
   records,
   stage,
   gateOpen,
   notificationEnvironment,
+  catalog = [],
 }: {
   readonly records: readonly SavedRecord[];
   readonly stage: CommuteStage;
   readonly gateOpen: boolean;
   readonly notificationEnvironment?: NotificationEnvironment;
+  readonly catalog?: readonly CatalogComplexDto[];
 }) {
-  const notifications = useNotifications({ stage, gateOpen, environment: notificationEnvironment });
   const windows = records.filter((record) => record.timeWindow && record.commonDestination && record.preferredRide);
+  const commuteWindowIds = windows.map(({ id }) => id);
+  const notifications = useNotifications({ stage, gateOpen, commuteWindowIds, environment: notificationEnvironment });
 
   return (
     <section className="surface surface--commute" aria-labelledby="commute-heading">
@@ -27,13 +31,15 @@ export function CommuteView({
       </div>
       <p className="quiet-copy">Disruption-only alerts use the route, direction, stations, and times you explicitly saved. Silence is not an all-clear.</p>
 
-      <Capability capability={notifications.capability} onEnable={notifications.enable} onDisable={notifications.disable} />
+      {windows.length > 0 ? (
+        <Capability capability={notifications.capability} onEnable={notifications.enable} onDisable={notifications.disable} />
+      ) : null}
 
       {windows.length === 0 ? (
         <StatusBanner tone="locked"><p>No complete commute window is saved yet. Add a destination, ride direction, and time window in Saved.</p></StatusBanner>
       ) : (
         <div className="commute-window-stack">
-          {windows.map((record) => <WindowBand record={record} key={record.id} />)}
+          {windows.map((record) => <WindowBand record={record} catalog={catalog} key={record.id} />)}
         </div>
       )}
     </section>
@@ -76,18 +82,20 @@ function Capability({
   );
 }
 
-function WindowBand({ record }: { readonly record: SavedRecord }) {
+function WindowBand({ record, catalog }: { readonly record: SavedRecord; readonly catalog: readonly CatalogComplexDto[] }) {
   const timeWindow = record.timeWindow!;
   const ride = record.preferredRide!;
   const destination = record.commonDestination!;
   const routeId = record.routeFilters[0];
+  const originName = catalog.find(({ id }) => id === record.complexId)?.name ?? record.constituentId;
+  const destinationName = catalog.find(({ id }) => id === destination.complexId)?.name ?? destination.constituentId;
   return (
     <article className="commute-window" aria-labelledby={`commute-${record.id}-heading`}>
       <div className="commute-window__spine" aria-hidden="true" />
       <header className="commute-window__header">
         <div>
           <p className="section-kicker">{record.state === 'active' ? 'Saved window' : 'Paused window'}</p>
-          <h3 id={`commute-${record.id}-heading`}>{record.constituentId} to {destination.constituentId}</h3>
+          <h3 id={`commute-${record.id}-heading`}>{originName} to {destinationName}</h3>
         </div>
         {routeId ? <RouteToken route={{ id: routeId, label: routeId }} compact /> : null}
       </header>

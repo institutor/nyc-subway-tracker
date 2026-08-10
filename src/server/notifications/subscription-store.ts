@@ -3,7 +3,7 @@ import { compareCanonicalIdentity, normalizeBoundedIdentity } from '../../shared
 export interface PushSubscriptionRecord {
   readonly endpoint: string;
   readonly keys: { readonly p256dh: string; readonly auth: string };
-  readonly commuteWindowIds?: readonly string[];
+  readonly commuteWindowIds: readonly string[];
 }
 
 export interface SubscriptionStore {
@@ -32,7 +32,6 @@ export function createSubscriptionStore(maximum = 512): SubscriptionStore {
         : normalizeBoundedIdentity(commuteWindowId, 'commute window');
       return Object.freeze([...records.values()]
         .filter(({ commuteWindowIds }) => normalizedWindowId === undefined
-          || commuteWindowIds === undefined
           || commuteWindowIds.includes(normalizedWindowId))
         .sort((left, right) => compareCanonicalIdentity(left.endpoint, right.endpoint))
         .map(clone));
@@ -45,11 +44,12 @@ function capture(value: PushSubscriptionRecord): PushSubscriptionRecord {
   const endpoint = endpointValue(value.endpoint);
   const p256dh = token(value.keys.p256dh, 'p256dh', 1_024);
   const auth = token(value.keys.auth, 'auth', 512);
-  const commuteWindowIds = value.commuteWindowIds?.map((id) => normalizeBoundedIdentity(id, 'commute window'));
-  if (commuteWindowIds && (commuteWindowIds.length > 128 || new Set(commuteWindowIds).size !== commuteWindowIds.length)) {
+  if (!Array.isArray(value.commuteWindowIds)) throw new Error('Invalid commute window subscriptions');
+  const commuteWindowIds = value.commuteWindowIds.map((id) => normalizeBoundedIdentity(id, 'commute window'));
+  if (commuteWindowIds.length < 1 || commuteWindowIds.length > 128 || new Set(commuteWindowIds).size !== commuteWindowIds.length) {
     throw new Error('Invalid commute window subscriptions');
   }
-  return deepFreeze({ endpoint, keys: { p256dh, auth }, ...(commuteWindowIds ? { commuteWindowIds } : {}) });
+  return deepFreeze({ endpoint, keys: { p256dh, auth }, commuteWindowIds });
 }
 
 function endpointValue(value: string): string {
@@ -68,7 +68,7 @@ function token(value: string, label: string, maximum: number): string {
 }
 
 function clone(value: PushSubscriptionRecord): PushSubscriptionRecord {
-  return deepFreeze({ endpoint: value.endpoint, keys: { ...value.keys }, ...(value.commuteWindowIds ? { commuteWindowIds: [...value.commuteWindowIds] } : {}) });
+  return deepFreeze({ endpoint: value.endpoint, keys: { ...value.keys }, commuteWindowIds: [...value.commuteWindowIds] });
 }
 
 function deepFreeze<T>(value: T): T {

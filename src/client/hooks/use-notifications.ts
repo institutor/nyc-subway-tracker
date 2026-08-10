@@ -4,7 +4,7 @@ export interface NotificationEnvironment {
   readonly supported: boolean;
   readonly permission: NotificationPermission;
   requestPermission(): Promise<NotificationPermission>;
-  subscribe(): Promise<void>;
+  subscribe(commuteWindowIds: readonly string[]): Promise<void>;
   unsubscribe(): Promise<void>;
 }
 
@@ -13,13 +13,15 @@ export type NotificationCapability = 'locked' | 'unsupported' | 'ready' | 'denie
 export function useNotifications(input: {
   readonly stage: 'disabled' | 'deterministic-test' | 'silent-evaluation' | 'pilot' | 'delivery';
   readonly gateOpen: boolean;
+  readonly commuteWindowIds: readonly string[];
   readonly environment?: NotificationEnvironment;
 }) {
   const environment = useMemo(() => input.environment ?? browserNotificationEnvironment(), [input.environment]);
   const [permission, setPermission] = useState<NotificationPermission>(environment.permission);
   const [subscribed, setSubscribed] = useState(false);
   const [failed, setFailed] = useState(false);
-  const locked = input.stage === 'disabled' || !input.gateOpen;
+  const deliveryStage = input.stage === 'pilot' || input.stage === 'delivery';
+  const locked = !deliveryStage || !input.gateOpen;
   const capability: NotificationCapability = locked ? 'locked'
     : !environment.supported ? 'unsupported'
       : permission === 'denied' ? 'denied'
@@ -33,12 +35,12 @@ export function useNotifications(input: {
       const nextPermission = permission === 'granted' ? permission : await environment.requestPermission();
       setPermission(nextPermission);
       if (nextPermission !== 'granted') return;
-      await environment.subscribe();
+      await environment.subscribe(input.commuteWindowIds);
       setSubscribed(true);
     } catch {
       setFailed(true);
     }
-  }, [environment, locked, permission]);
+  }, [environment, input.commuteWindowIds, locked, permission]);
 
   const disable = useCallback(async () => {
     if (!environment.supported || !subscribed) return;
@@ -62,7 +64,7 @@ function browserNotificationEnvironment(): NotificationEnvironment {
     supported,
     permission: notification?.permission ?? 'default',
     requestPermission: async () => notification ? notification.requestPermission() : 'denied',
-    subscribe: async () => {
+    subscribe: async (commuteWindowIds) => {
       if (!serviceWorker) throw new Error('Background notifications unsupported');
       const keyResponse = await fetch('/api/v1/notifications/vapid-public-key', { cache: 'no-store' });
       if (!keyResponse.ok) throw new Error('Notification delivery unavailable');
@@ -73,10 +75,15 @@ function browserNotificationEnvironment(): NotificationEnvironment {
         userVisibleOnly: true,
         applicationServerKey: base64UrlBytes(body.publicKey),
       });
+      const serialized = subscription.toJSON();
       const response = await fetch('/api/v1/notifications/subscriptions', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(subscription.toJSON()),
+        body: JSON.stringify({
+          endpoint: subscription.endpoint,
+          keys: serialized.keys,
+          commuteWindowIds,
+        }),
       });
       if (!response.ok) {
         await subscription.unsubscribe();

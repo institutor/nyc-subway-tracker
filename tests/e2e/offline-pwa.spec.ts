@@ -7,6 +7,25 @@ test.beforeEach(async ({ request }) => {
   expect(response.ok()).toBe(true);
 });
 
+test('opens a saved commute deep link as an honest locked recurring-window surface', async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('nyc-subway-tracker:saved:v2', JSON.stringify({ version: 2, records: [{
+      id: 'saved-commute-a', complexId: 'A12', constituentId: 'A12',
+      preferredRide: { direction: 'southbound', actualDestination: 'Far Rockaway' },
+      routeFilters: ['A'], accessibleRouteOnly: false,
+      commonDestination: { complexId: 'R20', constituentId: 'R20' },
+      timeWindow: { weekdays: [1, 2, 3, 4, 5], startsAt: '08:00', endsAt: '09:00' }, state: 'active',
+    }] }));
+  });
+  await page.goto('/?surface=commute');
+  await expect(page.getByRole('heading', { name: 'Commute' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '125 St to Canal St' })).toBeVisible();
+  await expect(page.getByText('Weekdays')).toBeVisible();
+  await expect(page.getByText('08:00–09:00')).toBeVisible();
+  await expect(page.getByText(/alerts remain locked/i)).toBeVisible();
+  await expect(page.getByText(/home|work|good service/i)).toHaveCount(0);
+});
+
 test('omits every crowding field, proxy, placeholder, and control from the public rider flow', async ({ page }) => {
   await openAppWithControlledWorker(page);
   await chooseStation(page, '125 St');

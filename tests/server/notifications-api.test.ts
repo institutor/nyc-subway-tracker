@@ -46,12 +46,34 @@ describe('local notification boundaries', () => {
       expect(await (await request('/api/v1/notifications/vapid-public-key')).json()).toEqual({ publicKey: 'public-key' });
       const response = await request('/api/v1/notifications/subscriptions', {
         method: 'POST', headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ endpoint: 'https://push.example/a', keys: { p256dh: 'p256dh-value', auth: 'auth-value' } }),
+        body: JSON.stringify({
+          endpoint: 'https://push.example/a',
+          keys: { p256dh: 'p256dh-value', auth: 'auth-value' },
+          commuteWindowIds: ['saved-commute-a'],
+        }),
       });
       expect(response.status).toBe(201);
       expect(await response.json()).toEqual({ subscribed: true });
       expect(subscriptions.size).toBe(1);
       expect(JSON.stringify(await (await request('/api/v1/notifications/vapid-public-key')).json())).not.toContain('auth-value');
+      expect(subscriptions.all('saved-commute-a')).toHaveLength(1);
+      expect(subscriptions.all('unrelated-commute')).toHaveLength(0);
+    });
+  });
+
+  test('rejects an unscoped subscription instead of treating it as a wildcard', async () => {
+    const subscriptions = createSubscriptionStore();
+    const dependencies = createProductionDependencies(
+      { dataDirectory: '.data-test-do-not-read', mode: 'validation', sources: {} },
+      { notifications: { stage: 'delivery', gateOpen: true, publicKey: 'public-key', subscriptions } },
+    );
+    await withApi(createApp(dependencies), async ({ request }) => {
+      const response = await request('/api/v1/notifications/subscriptions', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ endpoint: 'https://push.example/a', keys: { p256dh: 'p256dh-value', auth: 'auth-value' } }),
+      });
+      expect(response.status).toBe(400);
+      expect(subscriptions.size).toBe(0);
     });
   });
 });

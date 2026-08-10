@@ -102,14 +102,14 @@ function materialEscalation(
     && impact.addedJourneySeconds - baseline.addedJourneySeconds >= 300;
   const newPlace = impact.affectedStationIds.some((stationId) => !baseline.affectedStationIds.includes(stationId));
   const newDirection = impact.direction !== baseline.direction;
-  const severity = impact.severityRank !== undefined && baseline.severityRank !== undefined
-    && impact.severityRank > baseline.severityRank;
   const oldEnd = Math.min(baseline.activeUntil.getTime(), occurrence.endsAt.getTime());
   const newEnd = Math.min(impact.activeUntil.getTime(), occurrence.endsAt.getTime());
   const extension = newEnd - oldEnd >= 1_800_000;
   const actionChanged = impact.acceptedActionRankingChange === true
     && action?.id !== baseline.recommendedActionId;
-  return addedTime || newPlace || newDirection || severity || extension || actionChanged;
+  // The product contract leaves the ordered severity scale Pending. Numeric
+  // labels are retained for audit only and cannot authorize an escalation.
+  return addedTime || newPlace || newDirection || extension || actionChanged;
 }
 
 function overlaps(leftStart: Date, leftEnd: Date, rightStart: Date, rightEnd: Date): boolean {

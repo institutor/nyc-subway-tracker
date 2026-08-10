@@ -21,7 +21,7 @@ export interface WebPushSender {
 export interface CommutePushPayload {
   readonly title: string;
   readonly body: string;
-  readonly url: '/commute';
+  readonly url: '/?surface=commute';
   readonly episodeId: string;
 }
 
@@ -132,7 +132,7 @@ function renderPush(
       : impact.kind === 'delay'
         ? { title: `Delay affects ${trip}`, body: `${trip} service is delayed on ${station} during ${during}. ${safeAction} Open current details.` }
         : { title: `Update for ${trip}`, body: `${impact.kind} now affects ${station} during ${during}. ${safeAction} Open current details.` };
-  return Object.freeze({ ...content, url: '/commute', episodeId: impact.episodeId });
+  return Object.freeze({ ...content, url: '/?surface=commute', episodeId: impact.episodeId });
 }
 
 function directionLabel(value: string): string {

@@ -31,13 +31,13 @@ export function createSubscriptionHandler(runtime: NotificationRuntime) {
       sendNoStoreJson(response, 423, { availability: 'locked' });
       return;
     }
-    const body = strictRecord(request.body, ['endpoint', 'keys'], ['commuteWindowIds']);
+    const body = strictRecord(request.body, ['endpoint', 'keys', 'commuteWindowIds']);
     const keys = strictRecord(body.keys, ['p256dh', 'auth']);
     try {
       runtime.subscriptions.upsert({
         endpoint: string(body.endpoint),
         keys: { p256dh: string(keys.p256dh), auth: string(keys.auth) },
-        ...(body.commuteWindowIds === undefined ? {} : { commuteWindowIds: identities(body.commuteWindowIds) }),
+        commuteWindowIds: identities(body.commuteWindowIds),
       });
     } catch {
       throw new ApiRequestError(400);
@@ -78,6 +78,6 @@ function string(value: unknown): string {
 }
 
 function identities(value: unknown): readonly string[] {
-  if (!Array.isArray(value) || value.length > 128) throw new ApiRequestError(400);
+  if (!Array.isArray(value) || value.length < 1 || value.length > 128) throw new ApiRequestError(400);
   try { return value.map((entry) => normalizeBoundedIdentity(string(entry), 'commute window')); } catch { throw new ApiRequestError(400); }
 }

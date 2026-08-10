@@ -681,7 +681,7 @@ export function App({
               onDelete={deleteSaved}
             />
           ) : (
-            <CommuteView records={savedRecords} stage="disabled" gateOpen={false} />
+            <CommuteView records={savedRecords} catalog={catalog?.data.complexes} stage="disabled" gateOpen={false} />
           )}
         </div>
       </div>
@@ -698,6 +698,8 @@ export function App({
 
 function browserInitialSurface(): AppState['surface'] {
   if (typeof window !== 'undefined' && window.location.pathname === '/commute') return 'commute';
+  if (typeof window !== 'undefined' && window.location.pathname === '/'
+    && new URLSearchParams(window.location.search).get('surface') === 'commute') return 'commute';
   return 'nearby';
 }
 

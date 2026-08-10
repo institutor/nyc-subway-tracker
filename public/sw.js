@@ -81,23 +81,23 @@ async function showCommuteNotification(data) {
   if (!validPushPayload(payload)) return;
   await self.registration.showNotification(payload.title, {
     body: payload.body,
-    data: { url: '/commute', episodeId: payload.episodeId },
+    data: { url: '/?surface=commute', episodeId: payload.episodeId },
     tag: `commute:${payload.episodeId}`,
     renotify: false,
   });
 }
 
 async function openCommuteSurface(data) {
-  if (!data || data.url !== '/commute' || typeof data.episodeId !== 'string') return;
+  if (!data || data.url !== '/?surface=commute' || typeof data.episodeId !== 'string') return;
   const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
   for (const client of windows) {
     if (typeof client.focus === 'function') {
-      if (typeof client.navigate === 'function') await client.navigate('/commute');
+      if (typeof client.navigate === 'function') await client.navigate('/?surface=commute');
       await client.focus();
       return;
     }
   }
-  await self.clients.openWindow('/commute');
+  await self.clients.openWindow('/?surface=commute');
 }
 
 function validPushPayload(value) {
@@ -106,7 +106,7 @@ function validPushPayload(value) {
   if (keys.length !== 4 || !['title', 'body', 'url', 'episodeId'].every((key) => keys.includes(key))) return false;
   return typeof value.title === 'string' && value.title.length > 0 && value.title.length <= 160
     && typeof value.body === 'string' && value.body.length > 0 && value.body.length <= 1_024
-    && value.url === '/commute'
+    && value.url === '/?surface=commute'
     && typeof value.episodeId === 'string' && /^[A-Za-z0-9._:-]{1,128}$/.test(value.episodeId);
 }
 

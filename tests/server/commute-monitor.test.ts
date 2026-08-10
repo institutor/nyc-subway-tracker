@@ -92,7 +92,11 @@ function impact(): NotificationImpact {
 }
 
 function subscription() {
-  return { endpoint: 'https://push.example/subscription-a', keys: { p256dh: 'p256dh-value', auth: 'auth-value' } };
+  return {
+    endpoint: 'https://push.example/subscription-a',
+    keys: { p256dh: 'p256dh-value', auth: 'auth-value' },
+    commuteWindowIds: ['commute-a'],
+  };
 }
 
 function senderFixture(result: Awaited<ReturnType<WebPushSender['send']>> = { kind: 'delivered' }) {
