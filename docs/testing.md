@@ -88,3 +88,51 @@ The scenario-specific passing evidence is:
 `pnpm run shadow:live` is intentionally separate from deterministic replay. If one or more official sources cannot be retrieved or accepted, the bounded artifact records `COMPLETED_WITH_SOURCE_FAILURES` and source rows use `SOURCE_RETRIEVAL_OR_VALIDATION_FAILED`; that is an honest external-source outcome, not a source pass. If the invocation itself cannot produce a valid bounded artifact, the command exits nonzero and reports that no rider surface or release gate changed. Neither outcome weakens deterministic tests, substitutes static schedule claims for missing live evidence, or opens public boards.
 
 A successful current fetch also remains shadow-only. Gate 0 stays **NO-GO** until its exact fixed-package evidence, required independent reviews, and binary exit record are complete.
+
+## Task 16 final validation record — 2026-08-10
+
+This record covers package `nyc-subway-tracker@0.1.0` at verified implementation baseline `8d2dd80`. Later evidence-only commits do not change the tested product files.
+
+### Reproducible dependency installation
+
+The lockfile was exercised without mutating the working checkout. A temporary project contained only `package.json`, `pnpm-lock.yaml`, `pnpm-workspace.yaml`, and `.npmrc`. Its own isolated pnpm store was hydrated with the frozen lockfile (301 packages), then a true `pnpm install --frozen-lockfile --offline` completed successfully against that store. The temporary project and store were removed after their resolved paths were checked.
+
+The first offline attempt against the machine's pre-existing store failed honestly because the `express-5.2.1.tgz` archive was absent; it was not reported as a pass. Hydrating the separate temporary store closed that environmental precondition. The checkout's existing `node_modules/.modules.yaml` remained byte-identical before and after the proof, with SHA-256 `3AACC2FDDE464FC12FE57196F91016368C4157A9E1A2C807350973528EA05D24`.
+
+### Clean verification results
+
+| Check | Exact result |
+|---|---|
+| `pnpm test --run` | PASS — 75 files, 1,168 tests |
+| `pnpm run typecheck` | PASS — zero TypeScript errors |
+| `pnpm run build` | PASS — Vite 7.3.6, 71 modules; client JavaScript 427.11 kB and CSS 30.33 kB |
+| Installed-Chrome six-file E2E run | PASS — 33/33 tests in 26.1 seconds, using `C:\Program Files\Google\Chrome\Application\chrome.exe` |
+| `pnpm run truth:all` | PASS — 7/7 zero-exposure replay/drill receipts; bundle digest `sha256:8a904eaf6cc6f844047e944140f2fd69c8778997058b418aa82a80daaa9d1a5b` |
+| `pnpm run shadow:dry-run` | PASS — `DRY_RUN_NO_NETWORK`; 8/8 sources not run by design, 9/9 public locks closed |
+| `pnpm run shadow:live` | Recorded external-source failure — `COMPLETED_WITH_SOURCE_FAILURES`; 0/8 sources accepted, 8/8 `SOURCE_RETRIEVAL_OR_VALIDATION_FAILED`, 0 claims, 0 comparisons, 9/9 public locks closed |
+
+The installed-Chrome run used exactly the six required files: `zero-tap.spec.ts`, `service-change.spec.ts`, `offline.spec.ts`, `accessibility.spec.ts`, `commute.spec.ts`, and `responsive.spec.ts`. It covered real browser location allow/deny and saved precedence; practical-walk and picker fallbacks; continuously governed Live/Scheduled/Expected/Holding and service-change timelines; saved/map/active-trip/offline controls; every reconnection owner stage; accessible-route warnings and explicit replacement; commute locks and materiality; keyboard-only operation; reduced motion; 200% text; 320-pixel reflow; and populated privacy, crowding, coordinate, service-worker, and asset boundaries.
+
+### Production and visual smoke
+
+The built API and client preview were started as separate hidden processes from a clean app start. `GET /api/v1/bootstrap` and the preview root both returned HTTP 200. The bootstrap reported schema `2026-08-04`, runtime mode `validation`, runtime surface `demonstration`, nine gates, and zero exposed gates. The built HTML contained the app root and no validation-deck, test-route, or notification-receipt payload. Installed Chrome rendered the standard production picker without console errors or horizontal overflow; synthetic receipt surfaces remained absent.
+
+Representative screens were inspected at 1280×900 desktop and 390×844 phone sizes. Both retained high-contrast content, readable station-choice messaging, reachable refresh/station controls, and an unobscured bottom navigation dock. After the phone context completed service-worker registration and was switched offline, reload rendered the device-held subway tools, the explicit statement that live arrivals, alerts, and elevator status were unavailable, and no invented current station data. The full offline E2E additionally preserved and advanced a populated active trip in both directions, including its claim timestamps and historical status.
+
+### Deterministic replay and drill receipts
+
+| Scenario | Fixture-bound passing checks |
+|---|---:|
+| Normal weekday | 6/6 |
+| Weekend planned work | 5/5 |
+| Late-night midnight | 4/4 |
+| Major disruption | 5/5 |
+| Later-stop comparison | 4/4 |
+| Route-group bulk drop | 10/10 |
+| False-bypass incident drill | 6/6 |
+
+Every receipt remained `VALIDATION_ONLY`, with `riderExposure: false`, `boardsExposed: false`, and all nine public exposure stages closed. Independent review findings were normalized into failing regressions before their fixes, including production-default accessible-route ownership, exact stored-departure recovery, real-App board and saved-location timelines, populated coordinate/crowding scans, and a closed app-owned asset inventory.
+
+### Release decision
+
+Gate 0 remains **NO-GO**. The live shadow's 0/8 accepted-source result is an external-source failure record, not a successful current-source cohort. Task 15's 9/9 lock truth is unchanged, no public board or delivery gate opened, and this Task 16 validation completion does not grant public release approval.
