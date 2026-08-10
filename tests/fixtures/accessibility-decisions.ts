@@ -38,25 +38,68 @@ export function resolvedPath(
   const direction = overrides.direction ?? 'northbound';
   const platformId = overrides.platformId ?? 'A12N';
   const equipmentIds = [...(overrides.equipmentIds ?? [])];
-  const edgeIds = equipmentIds.length ? equipmentIds.map((_, index) => `${pathId}:edge:${index + 1}`) : [`${pathId}:edge`];
-  const edges = equipmentIds.length ? equipmentIds.map((equipmentId, index) => ({
-    id: edgeIds[index], order: index + 1, movementType: 'elevator' as const,
-    start: { id: index === 0 ? 'street' : `${pathId}:node:${index}`, level: index === 0 ? 'street' : 'mezzanine' },
-    end: { id: index === equipmentIds.length - 1 ? 'platform' : `${pathId}:node:${index + 1}`, level: index === equipmentIds.length - 1 ? 'platform' : 'mezzanine' },
-    routeId, direction, platformId, equipmentId, officialAccessiblePath: true, restrictions: ['none'],
+  const originIntent = overrides.originIntent ?? 'origin-street';
+  const destinationIntent = overrides.destinationIntent ?? 'destination-street';
+  const destinationPlatformId = `${platformId}:destination`;
+  const endpoint = (id: string, level: string, scopedPlatformId: string | null) => ({
+    id, level, stationComplexId, constituentStationId, platformId: scopedPlatformId,
+  });
+  const originStreet = endpoint(`${pathId}:origin-street`, 'street', null);
+  const originPlatform = endpoint(`${pathId}:origin-platform`, 'platform', platformId);
+  const destinationPlatform = endpoint(`${pathId}:destination-platform`, 'platform', destinationPlatformId);
+  const destinationStreet = endpoint(`${pathId}:destination-street`, 'street', null);
+  const originEdgeIds = equipmentIds.length ? equipmentIds.map((_, index) => `${pathId}:origin-edge:${index + 1}`) : [`${pathId}:origin-edge`];
+  const destinationEdgeId = `${pathId}:destination-edge`;
+  const edgeIds = [...originEdgeIds, destinationEdgeId];
+  const accessScope = (kind: 'origin-access' | 'destination-access', scopedPlatformId: string) => ({
+    kind, rideSegmentId: `${pathId}:ride`, transferId: null, stationComplexId, constituentStationId,
+    routeId, direction, platformId: scopedPlatformId,
+  });
+  const originEdges = equipmentIds.length ? equipmentIds.map((equipmentId, index) => ({
+    id: originEdgeIds[index], order: index + 1, movementType: 'elevator' as const,
+    start: index === 0 ? originStreet : endpoint(`${pathId}:node:${index}`, 'mezzanine', null),
+    end: index === equipmentIds.length - 1 ? originPlatform : endpoint(`${pathId}:node:${index + 1}`, 'mezzanine', null),
+    journeyScope: accessScope('origin-access', platformId), equipmentId, officialAccessiblePath: true, restrictions: ['none'],
     verificationDate: '2026-07-30', evidenceReference: 'fixture.json', reviewDisposition: 'approved' as const,
     canonicalPathIdentity: pathId,
   })) : [{
-    id: edgeIds[0], order: 1, movementType: 'level-path' as const,
-    start: { id: 'street', level: 'street' }, end: { id: 'platform', level: 'platform' }, routeId, direction,
-    platformId, equipmentId: null, officialAccessiblePath: true, restrictions: ['none'], verificationDate: '2026-07-30',
+    id: originEdgeIds[0], order: 1, movementType: 'level-path' as const, start: originStreet, end: originPlatform,
+    journeyScope: accessScope('origin-access', platformId), equipmentId: null, officialAccessiblePath: true, restrictions: ['none'],
+    verificationDate: '2026-07-30', evidenceReference: 'fixture.json', reviewDisposition: 'approved' as const,
+    canonicalPathIdentity: pathId,
+  }];
+  const edges = [...originEdges, {
+    id: destinationEdgeId, order: originEdges.length + 1, movementType: 'level-path' as const,
+    start: destinationPlatform, end: destinationStreet, journeyScope: accessScope('destination-access', destinationPlatformId),
+    equipmentId: null, officialAccessiblePath: true, restrictions: ['none'], verificationDate: '2026-07-30',
     evidenceReference: 'fixture.json', reviewDisposition: 'approved' as const, canonicalPathIdentity: pathId,
   }];
   const coverage: StationDirectionCoverageRow = {
-    coverageRecordId: `coverage:${pathId}`, coverageRecordVersion: 'coverage-v1', stationComplex: { id: stationComplexId, name: '125 St' },
-    constituentStation: { id: constituentStationId, name: '125 St (8 Av)' }, routeOrLine: routeId, normalizedDirection: direction,
-    accessibleStreetEntrance: { id: 'ENT-A', description: 'Verified entrance' }, streetCorner: 'southwest', directionalPlatform: platformId,
-    boardingArea: 'zone-2', completePathId: pathId, orderedEdgeIds: edgeIds, equipmentIds,
+    coverageRecordId: `coverage:${pathId}`, coverageRecordVersion: 'coverage-v1',
+    origin: {
+      stationComplex: { id: stationComplexId, name: originIntent }, constituentStation: { id: constituentStationId, name: '125 St (8 Av)' },
+      entrance: { id: 'ENT-A', description: 'Verified entrance', streetCorner: 'southwest', streetEndpoint: originStreet },
+      platform: { id: platformId, boardingAreaId: 'zone-2', endpoint: originPlatform },
+      orderedAccessEdgeIds: originEdgeIds, equipmentIds,
+    },
+    destination: {
+      stationComplex: { id: stationComplexId, name: destinationIntent }, constituentStation: { id: constituentStationId, name: 'Destination constituent' },
+      platform: { id: destinationPlatformId, endpoint: destinationPlatform },
+      exit: { id: 'EXIT-A', description: 'Verified exit', streetCorner: 'northeast', streetEndpoint: destinationStreet },
+      orderedAccessEdgeIds: [destinationEdgeId], equipmentIds: [],
+    },
+    rideSegments: [{
+      id: `${pathId}:ride`, routeId, direction,
+      origin: { stationComplexId, constituentStationId, platformId, boardingAreaId: 'zone-2', endpoint: originPlatform },
+      destination: { stationComplexId, constituentStationId, platformId: destinationPlatformId, endpoint: destinationPlatform },
+    }],
+    transfers: [], orderedRideSegmentIds: [`${pathId}:ride`], orderedTransferIds: [],
+    journeyChain: [
+      ...originEdgeIds.map((edgeId) => ({ kind: 'access-edge' as const, edgeId })),
+      { kind: 'ride' as const, rideSegmentId: `${pathId}:ride` },
+      { kind: 'access-edge' as const, edgeId: destinationEdgeId },
+    ],
+    completePathId: pathId, orderedEdgeIds: edgeIds, equipmentIds,
     accessiblePathMembershipByEdge: Object.fromEntries(edgeIds.map((id) => [id, true])), operatingRestrictions: ['none'], evidenceSources: ['fixture'],
     evidenceReferences: ['fixture.json'], verificationDate: '2026-07-30', verifier: { name: 'Fixture', role: 'Accessibility' },
     productDecision: review('Product'), accessibilityDecision: review('Accessibility'), dataQualityDecision: review('Data Quality'),
@@ -83,8 +126,16 @@ export function resolvedPath(
   const equipmentDecisionTime = new Date(overrides.equipmentDecisionTime ?? decisionTime.toISOString());
   const equipment = overrides.equipmentDecisions ?? (equipmentIds.length ? healthyEquipment(equipmentIds, equipmentDecisionTime) : {});
   return assessAccessiblePath(item, {
-    stationId: constituentStationId, routeId, direction, platformId: status === 'eligible' ? platformId : `${platformId}:wrong`,
-    originIntent: overrides.originIntent ?? 'origin-street', destinationIntent: overrides.destinationIntent ?? 'destination-street',
+    journey: {
+      origin: { stationComplexId, constituentStationId, entranceId: 'ENT-A', streetEndpointId: originStreet.id, platformId: status === 'eligible' ? platformId : `${platformId}:wrong`, boardingAreaId: 'zone-2' },
+      destination: { stationComplexId, constituentStationId, platformId: destinationPlatformId, exitId: 'EXIT-A', streetEndpointId: destinationStreet.id },
+      rideSegments: [{
+        id: `${pathId}:ride`, routeId, direction,
+        origin: { stationComplexId, constituentStationId, platformId, boardingAreaId: 'zone-2', endpointId: originPlatform.id },
+        destination: { stationComplexId, constituentStationId, platformId: destinationPlatformId, endpointId: destinationPlatform.id },
+      }],
+      transferIds: [],
+    },
     equipmentSourceScopeId: 'nyc-equipment', equipmentSourceVersion: 'equipment-v1', equipment, exposure, decisionTime,
   });
 }
