@@ -210,6 +210,7 @@ export function boardEnvelope(
 
 export function createClientApi(overrides: Partial<TransitApiClient> = {}): TransitApiClient {
   return {
+    status: overrides.status ?? (async () => { throw new Error('Status fixture is not configured.'); }),
     bootstrap: overrides.bootstrap ?? (async () => bootstrapEnvelope),
     catalog: overrides.catalog ?? (async () => catalogEnvelope),
     nearby: overrides.nearby ?? (async () => nearbyEnvelope),

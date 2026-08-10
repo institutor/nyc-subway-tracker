@@ -12,7 +12,7 @@ export interface StationChoice {
 }
 
 export interface AppState {
-  readonly surface: 'nearby' | 'map' | 'commute' | 'saved';
+  readonly surface: 'nearby' | 'map' | 'commute' | 'saved' | 'data-status' | 'settings';
   readonly selectedStation?: StationChoice;
   readonly selectionOwner?: 'fallback' | 'explicit';
   readonly lastUsedStation?: StationChoice;
@@ -35,6 +35,7 @@ export interface AppState {
 
 export type AppAction =
   | { readonly type: 'surface-changed'; readonly surface: AppState['surface'] }
+  | { readonly type: 'personal-data-reset' }
   | { readonly type: 'location-requested'; readonly requestId: number }
   | { readonly type: 'location-resolved'; readonly requestId: number; readonly fix: LocationFixDto }
   | { readonly type: 'location-denied'; readonly requestId: number }
@@ -73,6 +74,16 @@ export function createInitialAppState(input: {
 
 export function appReducer(state: AppState, action: AppAction): AppState {
   if (action.type === 'surface-changed') return freeze({ ...state, surface: action.surface });
+  if (action.type === 'personal-data-reset') return freeze({
+    ...state,
+    selectedStation: undefined,
+    selectionOwner: undefined,
+    lastUsedStation: undefined,
+    savedStations: [],
+    filters: { routeIds: [] },
+    nearby: { phase: 'idle', requestId: state.nearby.requestId },
+    location: { phase: 'idle', requestId: state.location.requestId },
+  });
   if (action.type === 'location-requested') {
     return freeze({ ...state, location: { phase: 'requesting', requestId: requestId(action.requestId) } });
   }

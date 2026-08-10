@@ -6,6 +6,7 @@ import { sanitizeOfficialText } from '../../shared/domain/alert-scope';
 import { DEMONSTRATION_LABEL } from '../api/contracts';
 import { projectPublicProvenance, toProvenanceDtos, toSourceHealthDtos } from '../api/provenance-dto';
 import type { SnapshotProvenance, SnapshotSourceHealth } from '../api/decision-snapshot';
+import type { ExposureStage, LockedExposureDecision } from '../release/exposure-gates';
 
 export interface BoardFilters {
   readonly routeIds: readonly string[];
@@ -48,6 +49,8 @@ export function buildStatusDto(
   direction: string | undefined,
   sourceHealth: readonly SnapshotSourceHealth[],
   provenance: readonly SnapshotProvenance[],
+  decidedAt: string,
+  gates: Readonly<Record<ExposureStage, LockedExposureDecision>>,
 ) {
   const selected = stationId === undefined ? boards : boards.filter((board) => board.station.id === stationId);
   const scoped = stationId === undefined && routeIds.length > 0
@@ -63,12 +66,32 @@ export function buildStatusDto(
           .filter((alert) => alert.routeIds.length === 0 && alert.stationIds.length === 0)),
       ]
     : selected.flatMap((board) => relevantAlerts(board.alerts, board.station, direction));
+  const publicSourceHealth = toSourceHealthDtos(sourceHealth);
   return deepFreeze({
     alerts: projectAlerts(scoped),
-    sourceHealth: toSourceHealthDtos(sourceHealth),
+    sourceHealth: publicSourceHealth,
     provenance: toProvenanceDtos(provenance),
     explanations: selected.flatMap((board) => board.explanations.map(mapExplanation)),
+    diagnostics: {
+      sourceSignals: publicSourceHealth.map((source) => ({
+        source: source.source,
+        sourceId: source.sourceId,
+        state: source.state,
+        reasonCode: source.reasonCode,
+        ...(source.lastAcceptedAt === undefined ? {} : {
+          ageSeconds: sourceAgeSeconds(decidedAt, source.lastAcceptedAt),
+          lastAcceptedAt: source.lastAcceptedAt,
+        }),
+      })),
+      exposureGates: Object.entries(gates).map(([stage, gate]) => ({ stage, ...gate })),
+    },
   });
+}
+
+function sourceAgeSeconds(decidedAt: string, lastAcceptedAt: string): number {
+  const age = (Date.parse(decidedAt) - Date.parse(lastAcceptedAt)) / 1_000;
+  if (!Number.isSafeInteger(age) || age < 0) throw new Error('Invalid diagnostic source age');
+  return age;
 }
 
 function mapDirection(direction: BoardDirection, validThrough: string, routeIds: readonly string[]) {

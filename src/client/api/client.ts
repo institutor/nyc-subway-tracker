@@ -392,7 +392,36 @@ export interface BoardEnvelopeDto extends DynamicEnvelopeBase {
   readonly receivedAtMonotonicMs?: number;
 }
 
+export interface StatusSourceSignalDto {
+  readonly source: ProvenanceDto['source'];
+  readonly sourceId: string;
+  readonly state: SourceHealthDto['state'];
+  readonly reasonCode: SourceHealthDto['reasonCode'];
+  readonly ageSeconds?: number;
+  readonly lastAcceptedAt?: string;
+}
+
+export interface StatusExposureGateDto extends GateDecisionDto {
+  readonly stage: string;
+}
+
+export interface StatusDataDto {
+  readonly alerts: readonly AlertDto[];
+  readonly sourceHealth: readonly SourceHealthDto[];
+  readonly provenance: readonly ProvenanceDto[];
+  readonly explanations: readonly ExplanationDto[];
+  readonly diagnostics: {
+    readonly sourceSignals: readonly StatusSourceSignalDto[];
+    readonly exposureGates: readonly StatusExposureGateDto[];
+  };
+}
+
+export interface StatusEnvelopeDto extends DynamicEnvelopeBase {
+  readonly data: StatusDataDto | null;
+}
+
 export interface TransitApiClient {
+  status(signal?: AbortSignal): Promise<StatusEnvelopeDto>;
   bootstrap(signal?: AbortSignal): Promise<BootstrapEnvelopeDto>;
   catalog(contentVersion: string, signal?: AbortSignal): Promise<CatalogEnvelopeDto>;
   searchStations(query: string, limit?: number, signal?: AbortSignal): Promise<StationSearchEnvelopeDto>;
@@ -432,6 +461,9 @@ function networkValue(received: ReceivedJson): unknown {
 export function createTransitApiClient(fetcher: Fetcher = globalThis.fetch.bind(globalThis)): TransitApiClient {
   const get = (url: string, signal?: AbortSignal) => requestJson(fetcher, url, { signal });
   return Object.freeze({
+    async status(signal?: AbortSignal) {
+      return parseStatus(networkValue(await get('/api/v1/status', signal)));
+    },
     async bootstrap(signal?: AbortSignal) {
       return parseBootstrap(networkValue(await get('/api/v1/bootstrap', signal)));
     },
@@ -511,6 +543,77 @@ export function createTransitApiClient(fetcher: Fetcher = globalThis.fetch.bind(
       );
     },
   });
+}
+
+const STATUS_STAGES = [
+  'arrival-boards', 'nearby-offline', 'accessibility', 'guidance', 'maps-rights',
+  'commute-evaluation', 'commute-silent', 'commute-limited-pilot', 'commute-delivery',
+] as const;
+
+function parseStatus(value: unknown): StatusEnvelopeDto {
+  const root = dynamicRoot(value, ['data']);
+  const base = dynamicBase(root);
+  if (root.data === null) {
+    if (base.runtime.availability !== 'locked') invalid();
+    return freeze({ ...base, data: null });
+  }
+  if (base.runtime.mode !== 'validation' || base.runtime.surface !== 'demonstration'
+    || base.runtime.availability !== 'available' || base.demonstrationLabel !== DEMONSTRATION_LABEL) invalid();
+  const data = strictRecord(root.data, ['alerts', 'sourceHealth', 'provenance', 'explanations', 'diagnostics']);
+  const sourceHealth = boundedArray(data.sourceHealth, 128).map(parseSourceHealth);
+  const diagnostics = strictRecord(data.diagnostics, ['sourceSignals', 'exposureGates']);
+  const sourceSignals = boundedArray(diagnostics.sourceSignals, 128).map(parseStatusSourceSignal);
+  const signalOwnership = (signal: StatusSourceSignalDto | SourceHealthDto) => ({
+    source: signal.source,
+    sourceId: signal.sourceId,
+    state: signal.state,
+    reasonCode: signal.reasonCode,
+    ...(signal.lastAcceptedAt === undefined ? {} : { lastAcceptedAt: signal.lastAcceptedAt }),
+  });
+  if (JSON.stringify(sourceSignals.map(signalOwnership)) !== JSON.stringify(sourceHealth.map(signalOwnership))) invalid();
+  const exposureGates = boundedArray(diagnostics.exposureGates, STATUS_STAGES.length).map((candidate) => {
+    const row = strictRecord(candidate, ['stage', 'exposed', 'reasonCode', 'decision']);
+    const stage = enumeration(row.stage, STATUS_STAGES);
+    const parsed = parseGate({ exposed: row.exposed, reasonCode: row.reasonCode, decision: row.decision });
+    if (JSON.stringify(parsed) !== JSON.stringify(base.gates[stage])) invalid();
+    return { stage, ...parsed };
+  });
+  if (exposureGates.length !== STATUS_STAGES.length
+    || exposureGates.some(({ stage }, index) => stage !== STATUS_STAGES[index])) invalid();
+  return freeze({
+    ...base,
+    data: {
+      alerts: boundedArray(data.alerts, 256).map(parseAlert),
+      sourceHealth,
+      provenance: boundedArray(data.provenance, 128).map(parseProvenance),
+      explanations: boundedArray(data.explanations, 256).map(parseExplanation),
+      diagnostics: { sourceSignals, exposureGates },
+    },
+  });
+}
+
+function parseStatusSourceSignal(value: unknown): StatusSourceSignalDto {
+  const row = strictRecord(value, ['source', 'sourceId', 'state', 'reasonCode'], ['ageSeconds', 'lastAcceptedAt']);
+  const health = parseSourceHealth({
+    source: row.source,
+    sourceId: row.sourceId,
+    state: row.state,
+    reasonCode: row.reasonCode,
+    assessedAt: '1970-01-01T00:00:00.000Z',
+    ...(row.lastAcceptedAt === undefined ? {} : { lastAcceptedAt: row.lastAcceptedAt }),
+  });
+  if ((row.ageSeconds === undefined) !== (row.lastAcceptedAt === undefined)) invalid();
+  if (row.ageSeconds !== undefined && (!Number.isSafeInteger(row.ageSeconds) || Number(row.ageSeconds) < 0)) invalid();
+  return {
+    source: health.source,
+    sourceId: health.sourceId,
+    state: health.state,
+    reasonCode: health.reasonCode,
+    ...(row.ageSeconds === undefined ? {} : {
+      ageSeconds: Number(row.ageSeconds),
+      lastAcceptedAt: health.lastAcceptedAt!,
+    }),
+  };
 }
 
 async function requestJson(fetcher: Fetcher, url: string, init: RequestInit): Promise<ReceivedJson> {

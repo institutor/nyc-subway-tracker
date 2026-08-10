@@ -5,7 +5,7 @@ import { JOURNEY_CAPTURE_DISCLOSURE } from '../../shared/domain/journey-capture'
 import type { BrowserStorage } from './browser-store';
 
 export const ACTIVE_TRIP_STORE_KEY = 'nyc-subway-tracker:active-trip:v3';
-const LEGACY_ACTIVE_TRIP_STORE_KEY = 'nyc-subway-tracker:active-trip:v2';
+export const LEGACY_ACTIVE_TRIP_STORE_KEY = 'nyc-subway-tracker:active-trip:v2';
 
 const MAX_BYTES = 512 * 1_024;
 const MAX_LEGS = 16;

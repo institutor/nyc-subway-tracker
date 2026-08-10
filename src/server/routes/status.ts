@@ -30,7 +30,16 @@ export function statusHandler(dependencies: AppDependencies) {
     }
     const snapshot = captureDecisionSnapshot(dependencies.snapshotProvider);
     const boards = (snapshot.boards ?? []).map(({ decision }) => decision);
-    const data = buildStatusDto(boards, stationId, routeIds, direction, snapshot.sourceHealth, snapshot.provenance);
+    const data = buildStatusDto(
+      boards,
+      stationId,
+      routeIds,
+      direction,
+      snapshot.sourceHealth,
+      snapshot.provenance,
+      decidedAt,
+      dependencies.exposure.public,
+    );
     sendPublicHistoricalJson(response, 200, {
       apiVersion: API_VERSION,
       schemaVersion: SCHEMA_VERSION,

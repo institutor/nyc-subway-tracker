@@ -46,16 +46,20 @@ import {
 import {
   appReducer,
   createInitialAppState,
+  LAST_USED_STATION_KEY,
   readLastUsedStation,
   writeLastUsedStation,
   type AppState,
   type StationChoice,
 } from './state/app-state';
 import {
+  ACTIVE_TRIP_STORE_KEY,
+  LEGACY_ACTIVE_TRIP_STORE_KEY,
   createBrowserActiveTripStore,
   type ActiveTripRecord,
 } from './storage/active-trip-store';
 import {
+  SAVED_STORE_KEY,
   createBrowserSavedStore,
   type BrowserStorage,
   type BrowserStoreMutation,
@@ -63,10 +67,12 @@ import {
 import { createBrowserStructuralStore } from './storage/structural-store';
 import { MapView, type MapContext } from './views/MapView';
 import { CommuteView } from './views/CommuteView';
-import type { NotificationEnvironment } from './hooks/use-notifications';
+import { browserNotificationEnvironment, type NotificationEnvironment } from './hooks/use-notifications';
 import { NearbyView } from './views/NearbyView';
 import { SavedView } from './views/SavedView';
 import { StationView } from './views/StationView';
+import { SettingsView, type DeletionResult, type DeletionState } from './views/SettingsView';
+import { DataStatusView } from './views/DataStatusView';
 import type {
   PreservedReconnectionContext,
   ReconnectionScopeMembership,
@@ -114,8 +120,9 @@ export function App({
 }: AppProps = {}) {
   const apiClient = useMemo(() => api ?? createTransitApiClient(), [api]);
   const storage = useMemo(() => providedStorage ?? browserStorage(), [providedStorage]);
-  const savedStore = useMemo(() => createBrowserSavedStore(storage as BrowserStorage), [storage]);
-  const activeTripStore = useMemo(() => createBrowserActiveTripStore(storage as BrowserStorage), [storage]);
+  const [personalStoreGeneration, setPersonalStoreGeneration] = useState(0);
+  const savedStore = useMemo(() => createBrowserSavedStore(storage as BrowserStorage), [personalStoreGeneration, storage]);
+  const activeTripStore = useMemo(() => createBrowserActiveTripStore(storage as BrowserStorage), [personalStoreGeneration, storage]);
   const structuralStore = useMemo(() => createBrowserStructuralStore(storage as BrowserStorage), [storage]);
   const local = useMemo(
     () => readLocalState(storage, savedStore, activeTripStore, structuralStore),
@@ -585,6 +592,55 @@ export function App({
     }
   }, [activeTripStore]);
 
+  const notificationEnvironment = useMemo(
+    () => commuteNotifications?.environment ?? browserNotificationEnvironment(),
+    [commuteNotifications?.environment],
+  );
+  const deleteNotificationSubscription = useCallback(async (): Promise<DeletionState> => {
+    if (!notificationEnvironment?.supported) return 'Not present';
+    try {
+      await notificationEnvironment.unsubscribe();
+      return 'Deleted';
+    } catch {
+      return 'Failed';
+    }
+  }, [notificationEnvironment]);
+
+  const deletePersonalData = useCallback(async (): Promise<readonly DeletionResult[]> => {
+    const removeCategory = (category: string, keys: readonly string[]): DeletionResult => {
+      try {
+        const present = keys.some((key) => storage.getItem(key) !== null);
+        if (!present) return { category, state: 'Not present' };
+        for (const key of keys) storage.removeItem(key);
+        if (keys.some((key) => storage.getItem(key) !== null)) return { category, state: 'Failed' };
+        return { category, state: 'Deleted' };
+      } catch {
+        return { category, state: 'Failed' };
+      }
+    };
+    const saved = removeCategory('Saved stations and commute choices', [SAVED_STORE_KEY]);
+    const last = removeCategory('Last station and covered settings', [LAST_USED_STATION_KEY]);
+    const trip = removeCategory('Active trip and progress', [ACTIVE_TRIP_STORE_KEY, LEGACY_ACTIVE_TRIP_STORE_KEY]);
+    const notification: DeletionResult = {
+      category: 'Notification subscription',
+      state: await deleteNotificationSubscription(),
+    };
+    if (saved.state !== 'Failed') setSavedRecords([]);
+    if (trip.state !== 'Failed') {
+      setActiveTrip(null);
+      setActiveTripOpen(false);
+    }
+    if (saved.state !== 'Failed' || trip.state !== 'Failed') setPersonalStoreGeneration((generation) => generation + 1);
+    if (last.state !== 'Failed') {
+      nearbyAbort.current?.abort();
+      selectedAbort.current?.abort();
+      setStationOpen(false);
+      setPickerOpen(false);
+      dispatch({ type: 'personal-data-reset' });
+    }
+    return [saved, last, trip, notification];
+  }, [deleteNotificationSubscription, storage]);
+
   const currentRuntime = selectedBoard.board?.runtime ?? state.nearby.response?.runtime ?? bootstrap?.runtime;
   const fallback = state.location.phase === 'denied' ? 'denied' as const
     : state.location.phase === 'failed' ? 'failed' as const : undefined;
@@ -596,7 +652,11 @@ export function App({
   return (
     <main className="app-shell" aria-labelledby="app-title">
       <div className="app-frame">
-        <AppHeader runtime={currentRuntime} />
+        <AppHeader
+          runtime={currentRuntime}
+          activeUtility={state.surface === 'data-status' || state.surface === 'settings' ? state.surface : undefined}
+          onUtilityChange={(surface) => dispatch({ type: 'surface-changed', surface })}
+        />
         {offline ? <OfflineBanner /> : null}
         {reconnectionState?.visible.activeWarnings.map((warning) => (
           <StatusBanner tone="warning" key={warning.id}>
@@ -689,7 +749,7 @@ export function App({
               onReset={resetSaved}
               onDelete={deleteSaved}
             />
-          ) : (
+          ) : state.surface === 'commute' ? (
             <CommuteView
               records={savedRecords}
               catalog={catalog?.data.complexes}
@@ -698,6 +758,13 @@ export function App({
               runtimeWindows={commuteNotifications?.runtimeWindows ?? []}
               notificationEnvironment={commuteNotifications?.environment}
             />
+          ) : state.surface === 'settings' ? (
+            <SettingsView
+              onDeletePersonalData={deletePersonalData}
+              onDeleteNotificationSubscription={deleteNotificationSubscription}
+            />
+          ) : (
+            <DataStatusView api={apiClient} connected={connected} />
           )}
         </div>
       </div>
@@ -1071,7 +1138,11 @@ function createAppReconnectionContext(input: {
       positioning: 'none',
       transfer: upcomingTransfers.length > 0 ? 'required' : 'none',
     },
-    activeSurface: input.state.surface === 'nearby' && input.stationOpen ? 'station' : input.state.surface,
+    activeSurface: input.state.surface === 'nearby' && input.stationOpen
+      ? 'station'
+      : input.state.surface === 'data-status' || input.state.surface === 'settings'
+        ? 'nearby'
+        : input.state.surface,
     scrollOffset: typeof window === 'undefined' ? 0 : Math.max(0, window.scrollY || 0),
     focusTargetId: focusTarget,
     readingAnchorId: input.activeTrip?.cursor.pointId ?? null,

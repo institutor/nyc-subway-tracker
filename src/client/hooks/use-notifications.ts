@@ -79,7 +79,7 @@ export function useNotifications(input: {
   return Object.freeze({ capability, enable, disable });
 }
 
-function browserNotificationEnvironment(): NotificationEnvironment {
+export function browserNotificationEnvironment(): NotificationEnvironment {
   const notification = typeof Notification === 'undefined' ? undefined : Notification;
   const serviceWorker = typeof navigator === 'undefined' ? undefined : navigator.serviceWorker;
   const supported = Boolean(notification && serviceWorker && typeof PushManager !== 'undefined');
