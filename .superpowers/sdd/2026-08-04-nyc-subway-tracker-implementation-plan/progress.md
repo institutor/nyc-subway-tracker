@@ -44,3 +44,7 @@ Task 12: fix round 2/5 (3 addressed, 1 open — warning resolution still lacked 
 Task 12: fix round 3/5 (1 root class addressed, 0 open — warning resolution is locally bounded, remaining legs and upcoming transfers are cursor-derived, and completed-leg evidence cannot contaminate the remaining trip; commits 8f051cf..84af09c)
 Task 12: complete (commits 147849f..84af09c, final review clean; 52 focused and 752 full-project tests; typecheck, production build, and 3 Chrome offline journeys clean)
 Task 13: fix round 1/5 (1 addressed, 8 open — threshold immutability passed; recovery ownership, token expiry/linkage, exact equipment sequence, path/alternative/warning fact ownership, exact schemas, and negative mismatch tests remained; commits c883f3a..b179c47)
+Task 13: fix round 2/5 (8 addressed, 0 open — exposure lifetime, recovery ownership, canonical equipment history, path/alternative facts, warning evidence, exact path packages, exact guidance records, and mismatch coverage; commits 004b8fd..2e0d61a)
+Task 13: fix round 3/5 (7 addressed, 2 open — expired replacement copy still required a later event and candidate-path revocation was not revalidated; commits 041ce65..952fa6f)
+Task 13: fix round 4/5 (2 addressed, 0 open — decision-time warning copy and live candidate-path ownership/replay closure; commits 4e32f3f..5a08249)
+Task 13: complete (commits 3ad18f8..5a08249, review clean; 318 Task 13 dependency tests, 990 full-project tests, typecheck, production build, and 4 Chrome journeys clean)
