@@ -33,11 +33,13 @@ export interface CommuteRuntimeWindow {
 
 export interface CommuteWindowRegistration {
   readonly id: string;
+  readonly lifecycle: CommuteLifecycle;
+  readonly notificationEnabled: boolean;
   readonly weekdays: readonly CommuteWeekday[];
   readonly startsAt: string;
   readonly endsAt: string;
   readonly preparationLeadMinutes: number;
-  readonly scope: Omit<CommuteTransitScope, 'actualDestination'>;
+  readonly scope: CommuteTransitScope;
 }
 
 export interface WatchingCommuteOccurrence {
@@ -83,13 +85,12 @@ export function createCommuteWindowRegistration(input: CommuteWindowRegistration
   const runtime = createCommuteRuntimeWindow({
     ...input,
     savedRecordId: input.id,
-    lifecycle: 'active',
     stage: 'deterministic-test',
-    notificationEnabled: true,
-    scope: { ...input.scope, actualDestination: input.scope.destinationStationId },
   });
   return deepFreeze({
     id: runtime.id,
+    lifecycle: runtime.lifecycle,
+    notificationEnabled: runtime.notificationEnabled,
     weekdays: [...runtime.weekdays],
     startsAt: runtime.startsAt,
     endsAt: runtime.endsAt,
@@ -97,6 +98,7 @@ export function createCommuteWindowRegistration(input: CommuteWindowRegistration
     scope: {
       routeId: runtime.scope.routeId,
       direction: runtime.scope.direction,
+      actualDestination: runtime.scope.actualDestination,
       originStationId: runtime.scope.originStationId,
       destinationStationId: runtime.scope.destinationStationId,
       segmentStationIds: [...runtime.scope.segmentStationIds],
@@ -112,10 +114,7 @@ export function runtimeWindowFromRegistration(
   return createCommuteRuntimeWindow({
     ...registration,
     savedRecordId: registration.id,
-    lifecycle: 'active',
     stage,
-    notificationEnabled: true,
-    scope: { ...registration.scope, actualDestination: registration.scope.destinationStationId },
   });
 }
 
@@ -174,7 +173,7 @@ function captureScope(value: CommuteTransitScope): CommuteTransitScope {
   const originStationId = normalizeBoundedIdentity(value.originStationId, 'origin station');
   const destinationStationId = normalizeBoundedIdentity(value.destinationStationId, 'destination station');
   if (originStationId === destinationStationId) invalid('journey');
-  if (typeof value.actualDestination !== 'string' || !value.actualDestination.trim()) invalid('actual destination');
+  const actualDestination = boundedDisplayText(value.actualDestination, 'actual destination', 160);
   if (!Array.isArray(value.segmentStationIds) || value.segmentStationIds.length < 2 || value.segmentStationIds.length > 512) invalid('segment');
   const segmentStationIds = value.segmentStationIds.map((id) => normalizeBoundedIdentity(id, 'segment station'));
   if (new Set(segmentStationIds).size !== segmentStationIds.length
@@ -182,11 +181,19 @@ function captureScope(value: CommuteTransitScope): CommuteTransitScope {
   return {
     routeId,
     direction: value.direction,
-    actualDestination: value.actualDestination.normalize('NFC').trim(),
+    actualDestination,
     originStationId,
     destinationStationId,
     segmentStationIds: [...segmentStationIds].sort(compareCanonicalIdentity),
   };
+}
+
+function boundedDisplayText(value: string, label: string, maximumCodePoints: number): string {
+  if (typeof value !== 'string') invalid(label);
+  let normalized: string;
+  try { normalized = value.normalize('NFC').trim(); } catch { invalid(label); }
+  if (!normalized || [...normalized].length > maximumCodePoints || /\p{C}/u.test(normalized)) invalid(label);
+  return normalized;
 }
 
 function clockTime(value: string): string {

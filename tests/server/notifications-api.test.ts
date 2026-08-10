@@ -60,10 +60,10 @@ describe('local notification boundaries', () => {
       expect(subscriptions.all('saved-commute-a')).toHaveLength(1);
       expect(subscriptions.all('unrelated-commute')).toHaveLength(0);
       expect(Object.keys(subscriptions.get('https://push.example/a')!.commuteWindows[0]).sort()).toEqual([
-        'endsAt', 'id', 'preparationLeadMinutes', 'scope', 'startsAt', 'weekdays',
+        'endsAt', 'id', 'lifecycle', 'notificationEnabled', 'preparationLeadMinutes', 'scope', 'startsAt', 'weekdays',
       ]);
       expect(JSON.stringify(subscriptions.get('https://push.example/a')!.commuteWindows)).not.toMatch(
-        /savedRecordId|actualDestination|coordinate|home|work|label/i,
+        /savedRecordId|coordinate|home|work|label/i,
       );
 
       const status = await request('/api/v1/notifications/subscriptions/status', {
@@ -158,9 +158,11 @@ function deliveryAuthorization() {
 
 function registration(id: string) {
   return {
-    id, weekdays: [1, 2, 3, 4, 5], startsAt: '08:00', endsAt: '09:00', preparationLeadMinutes: 15,
+    id, lifecycle: 'active', notificationEnabled: true,
+    weekdays: [1, 2, 3, 4, 5], startsAt: '08:00', endsAt: '09:00', preparationLeadMinutes: 15,
     scope: {
-      routeId: 'A', direction: 'southbound', originStationId: 'A12', destinationStationId: 'A24',
+      routeId: 'A', direction: 'southbound', actualDestination: 'Far Rockaway–Mott Av',
+      originStationId: 'A12', destinationStationId: 'A24',
       segmentStationIds: ['A12', 'A15', 'A24'],
     },
   };

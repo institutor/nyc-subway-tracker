@@ -6,6 +6,7 @@ import {
   type NotificationImpact,
 } from '../../shared/domain/notification-decision';
 import type { CommuteStage } from '../../shared/domain/types';
+import { normalizeBoundedIdentity } from '../../shared/domain/canonical';
 import type { ExposureStage } from '../release/exposure-gates';
 import {
   authorizesDelivery,
@@ -79,8 +80,10 @@ export function createCommuteMonitor(input: {
         const occurrence = resolveCommuteOccurrence(window, request.at);
         if (occurrence.kind !== 'watching') continue;
         const impacts = input.capture(window, request.at);
+        if (!Array.isArray(impacts)) continue;
         evaluated += impacts.length;
         for (const impact of impacts) {
+          if (!isNotificationImpact(impact)) continue;
           const deliveryGroup = `${window.id}:${occurrence.occurrenceId}:${impact.episodeId}`;
           const attemptKey = `${deliveryGroup}:${impactStateKey(impact)}`;
           if (missed.has(deliveryGroup) || attempted.has(attemptKey)) continue;
@@ -124,6 +127,61 @@ export function createCommuteMonitor(input: {
       return { kind: 'evaluated', evaluated, candidates, delivered: deliveredCount } as const;
     },
   });
+}
+
+function isNotificationImpact(value: unknown): value is NotificationImpact {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const impact = value as Partial<NotificationImpact>;
+  if (!boundedIdentity(impact.episodeId, 'episode', 128)
+    || !['delay', 'suspension', 'bypass', 'short-turn', 'closure', 'accessibility'].includes(String(impact.kind))
+    || !boundedIdentity(impact.routeId, 'route')
+    || !['northbound', 'southbound', 'eastbound', 'westbound', 'inbound', 'outbound', 'unknown'].includes(String(impact.direction))
+    || !boundedIdentityArray(impact.affectedStationIds, 'affected station', 512)
+    || !validDate(impact.activeFrom) || !validDate(impact.activeUntil)
+    || impact.activeFrom.getTime() >= impact.activeUntil.getTime()
+    || typeof impact.evidenceCurrent !== 'boolean'
+    || typeof impact.decisionChanging !== 'boolean'
+    || typeof impact.correctionOnly !== 'boolean'
+    || !optionalFinite(impact.addedJourneySeconds, true)
+    || !optionalFinite(impact.severityRank)
+    || (impact.acceptedActionRankingChange !== undefined && typeof impact.acceptedActionRankingChange !== 'boolean')
+    || !Array.isArray(impact.recommendedActions) || impact.recommendedActions.length > 128) return false;
+  const actionIds = new Set<string>();
+  for (const action of impact.recommendedActions) {
+    if (!action || typeof action !== 'object'
+      || !boundedIdentity(action.id, 'recommended action')
+      || actionIds.has(action.id)
+      || !Number.isFinite(action.tier) || !Number.isFinite(action.riderRank)
+      || !boundedDisplayText(action.label, 4_096)) return false;
+    actionIds.add(action.id);
+  }
+  return true;
+}
+
+function boundedIdentity(value: unknown, label: string, maximum = 256): value is string {
+  if (typeof value !== 'string') return false;
+  try { return normalizeBoundedIdentity(value, label, maximum) === value; } catch { return false; }
+}
+
+function boundedIdentityArray(value: unknown, label: string, maximumLength: number): value is readonly string[] {
+  return Array.isArray(value) && value.length > 0 && value.length <= maximumLength
+    && value.every((item) => boundedIdentity(item, label)) && new Set(value).size === value.length;
+}
+
+function boundedDisplayText(value: unknown, maximumCodePoints: number): value is string {
+  if (typeof value !== 'string') return false;
+  try {
+    const normalized = value.normalize('NFC').trim();
+    return normalized === value && normalized.length > 0 && [...normalized].length <= maximumCodePoints && !/\p{C}/u.test(normalized);
+  } catch { return false; }
+}
+
+function validDate(value: unknown): value is Date {
+  return value instanceof Date && Number.isFinite(value.getTime());
+}
+
+function optionalFinite(value: unknown, nonnegative = false): boolean {
+  return value === undefined || (typeof value === 'number' && Number.isFinite(value) && (!nonnegative || value >= 0));
 }
 
 function renderPush(

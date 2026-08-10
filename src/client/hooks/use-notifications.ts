@@ -145,6 +145,8 @@ function browserNotificationEnvironment(): NotificationEnvironment {
 
 function notificationRegistration({
   id,
+  lifecycle,
+  notificationEnabled,
   weekdays,
   startsAt,
   endsAt,
@@ -153,6 +155,8 @@ function notificationRegistration({
 }: CommuteRuntimeWindow): CommuteWindowRegistration {
   return {
     id,
+    lifecycle,
+    notificationEnabled,
     weekdays,
     startsAt,
     endsAt,
@@ -160,6 +164,7 @@ function notificationRegistration({
     scope: {
       routeId: scope.routeId,
       direction: scope.direction,
+      actualDestination: scope.actualDestination,
       originStationId: scope.originStationId,
       destinationStationId: scope.destinationStationId,
       segmentStationIds: scope.segmentStationIds,

@@ -160,6 +160,25 @@ describe('commute monitor stages and delivery', () => {
     await invalidMonitor.evaluate({ trigger: 'scheduled', at: now, windows: [runtimeWindow()] });
     expect(invalidSender.send).not.toHaveBeenCalled();
   });
+
+  test('rejects malformed captured dates before state serialization without consuming a later valid candidate', async () => {
+    const subscriptions = createSubscriptionStore();
+    subscriptions.upsert(subscription());
+    let malformed = true;
+    const sender = senderFixture({ kind: 'delivered' });
+    const monitor = createCommuteMonitor({
+      stage: 'delivery', evaluationAuthorization: evaluationAuthorization('delivery'), deliveryAuthorization: deliveryAuthorization(),
+      capture: () => [{ ...impact(), activeFrom: malformed ? new Date('invalid') : impact().activeFrom }],
+      sender, subscriptions,
+    });
+    await expect(monitor.evaluate({ trigger: 'scheduled', at: now, windows: [runtimeWindow()] })).resolves.toMatchObject({
+      evaluated: 1, candidates: 0, delivered: 0,
+    });
+    malformed = false;
+    await expect(monitor.evaluate({
+      trigger: 'scheduled', at: new Date(now.getTime() + 60_000), windows: [runtimeWindow()],
+    })).resolves.toMatchObject({ candidates: 1, delivered: 1 });
+  });
 });
 
 function runtimeWindow(overrides: { stage?: 'deterministic-test' | 'silent-evaluation' } = {}) {
@@ -187,9 +206,11 @@ function subscription() {
     endpoint: 'https://push.example/subscription-a',
     keys: { p256dh: 'p256dh-value', auth: 'auth-value' },
     commuteWindows: [{
-      id: 'commute-a', weekdays: [1] as const, startsAt: '08:00', endsAt: '09:00', preparationLeadMinutes: 15,
+      id: 'commute-a', lifecycle: 'active' as const, notificationEnabled: true,
+      weekdays: [1] as const, startsAt: '08:00', endsAt: '09:00', preparationLeadMinutes: 15,
       scope: {
-        routeId: 'F', direction: 'southbound' as const, originStationId: 'D15', destinationStationId: 'D21',
+        routeId: 'F', direction: 'southbound' as const, actualDestination: 'Coney Island–Stillwell Av',
+        originStationId: 'D15', destinationStationId: 'D21',
         segmentStationIds: ['D15', 'D18', 'D21'],
       },
     }],

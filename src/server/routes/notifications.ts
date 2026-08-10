@@ -105,10 +105,12 @@ function registrations(value: unknown): readonly CommuteWindowRegistration[] {
   if (!Array.isArray(value) || value.length < 1 || value.length > 128) throw new ApiRequestError(400);
   try {
     return value.map((entry) => {
-      const row = strictRecord(entry, ['id', 'weekdays', 'startsAt', 'endsAt', 'preparationLeadMinutes', 'scope']);
-      const scope = strictRecord(row.scope, ['routeId', 'direction', 'originStationId', 'destinationStationId', 'segmentStationIds']);
+      const row = strictRecord(entry, ['id', 'lifecycle', 'notificationEnabled', 'weekdays', 'startsAt', 'endsAt', 'preparationLeadMinutes', 'scope']);
+      const scope = strictRecord(row.scope, ['routeId', 'direction', 'actualDestination', 'originStationId', 'destinationStationId', 'segmentStationIds']);
       return createCommuteWindowRegistration({
         id: string(row.id),
+        lifecycle: string(row.lifecycle) as CommuteWindowRegistration['lifecycle'],
+        notificationEnabled: boolean(row.notificationEnabled),
         weekdays: numberArray(row.weekdays) as CommuteWindowRegistration['weekdays'],
         startsAt: string(row.startsAt),
         endsAt: string(row.endsAt),
@@ -116,6 +118,7 @@ function registrations(value: unknown): readonly CommuteWindowRegistration[] {
         scope: {
           routeId: string(scope.routeId),
           direction: string(scope.direction) as CommuteWindowRegistration['scope']['direction'],
+          actualDestination: string(scope.actualDestination),
           originStationId: string(scope.originStationId),
           destinationStationId: string(scope.destinationStationId),
           segmentStationIds: stringArray(scope.segmentStationIds),
@@ -129,6 +132,11 @@ function registrations(value: unknown): readonly CommuteWindowRegistration[] {
 
 function number(value: unknown): number {
   if (typeof value !== 'number') throw new ApiRequestError(400);
+  return value;
+}
+
+function boolean(value: unknown): boolean {
+  if (typeof value !== 'boolean') throw new ApiRequestError(400);
   return value;
 }
 

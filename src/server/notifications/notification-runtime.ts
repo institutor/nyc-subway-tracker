@@ -51,6 +51,7 @@ export async function createProductionNotificationPipeline(input: {
   readonly vapidSubject?: string;
   readonly intervalMs?: number;
   readonly schedule?: (task: () => Promise<void>, intervalMs: number) => NotificationScheduleHandle;
+  readonly onDiagnostic?: (reasonCode: 'COMMUTE_NOTIFICATION_TICK_FAILED') => void;
 }): Promise<ProductionNotificationPipeline> {
   const subscriptions = input.subscriptions ?? createSubscriptionStore();
   const deliveryAuthorized = authorizesDelivery(input.deliveryAuthorization, input.stage);
@@ -82,7 +83,13 @@ export async function createProductionNotificationPipeline(input: {
     start(): NotificationScheduleHandle {
       if (!authorizesEvaluation(input.evaluationAuthorization, input.stage)) return Object.freeze({ stop: () => undefined });
       const schedule = input.schedule ?? defaultSchedule;
-      return schedule(async () => { await runNow(); }, boundedInterval(input.intervalMs ?? 60_000));
+      return schedule(async () => {
+        try {
+          await runNow();
+        } catch {
+          try { input.onDiagnostic?.('COMMUTE_NOTIFICATION_TICK_FAILED'); } catch { /* Diagnostics cannot destabilize scheduling. */ }
+        }
+      }, boundedInterval(input.intervalMs ?? 60_000));
     },
   });
 }
@@ -109,7 +116,7 @@ export function createConcreteWebPushSender(
 const lockedSender: WebPushSender = Object.freeze({ send: async () => ({ kind: 'failed' as const }) });
 
 function defaultSchedule(task: () => Promise<void>, intervalMs: number): NotificationScheduleHandle {
-  const timer = setInterval(() => { void task(); }, intervalMs);
+  const timer = setInterval(() => { void task().catch(() => undefined); }, intervalMs);
   timer.unref?.();
   return Object.freeze({ stop: () => clearInterval(timer) });
 }
