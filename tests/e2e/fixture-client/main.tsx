@@ -562,8 +562,22 @@ function appRecoveryApi(
       }
       return {
         ...current,
-        responseIdentity: firstRecoveryBoard.responseIdentity,
-        decidedAt: firstRecoveryBoard.decidedAt,
+        provenance: firstRecoveryBoard.provenance,
+        sourceHealth: firstRecoveryBoard.sourceHealth,
+        data: current.data && firstRecoveryBoard.data ? {
+          ...current.data,
+          provenance: firstRecoveryBoard.data.provenance,
+          sourceHealth: firstRecoveryBoard.data.sourceHealth,
+          directions: current.data.directions.map((direction, directionIndex) => ({
+            ...direction,
+            primary: direction.primary.map((arrival, arrivalIndex) => {
+              const firstArrival = firstRecoveryBoard!.data!.directions[directionIndex]?.primary[arrivalIndex];
+              return arrival.kind === 'live' && firstArrival?.kind === 'live'
+                ? { ...arrival, provenance: firstArrival.provenance }
+                : arrival;
+            }),
+          })),
+        } : current.data,
       };
     },
   };

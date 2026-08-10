@@ -1,6 +1,6 @@
 import { describe, expect, test, vi } from 'vitest';
 
-import type { JourneyEnvelopeDto } from '../../src/client/api/client';
+import type { BoardEnvelopeDto, JourneyEnvelopeDto } from '../../src/client/api/client';
 import {
   createAppReconnectionStageLoader,
   type AppReconnectionArtifacts,
@@ -11,6 +11,18 @@ import { boardEnvelope, createClientApi, disclosure } from '../helpers/client-fi
 
 const STARTED_AT = '2026-08-05T12:00:00.000Z';
 const ACCEPTED_AT = '2026-08-05T12:00:02.000Z';
+const FIRST_REALTIME_OWNER = {
+  observedAt: '2026-08-05T12:00:00.100Z',
+  retrievedAt: '2026-08-05T12:00:00.200Z',
+  lastAcceptedAt: '2026-08-05T12:00:00.200Z',
+  assessedAt: '2026-08-05T12:00:00.300Z',
+} as const;
+const SECOND_REALTIME_OWNER = {
+  observedAt: '2026-08-05T12:00:01.100Z',
+  retrievedAt: '2026-08-05T12:00:01.200Z',
+  lastAcceptedAt: '2026-08-05T12:00:01.200Z',
+  assessedAt: '2026-08-05T12:00:01.300Z',
+} as const;
 
 describe('App reconnection owner loader', () => {
   test('revalidates an active trip through its exact current origin-to-destination owner path', async () => {
@@ -176,14 +188,21 @@ describe('App reconnection owner loader', () => {
     });
   });
 
-  test('records one accepted snapshot from a duplicate replay while withholding a stored train choice', async () => {
+  test('does not count different response wrappers over the same GTFS-RT owner snapshot twice', async () => {
+    const unchangedOwnerBoard = withRealtimeOwner(storedTrainBoard(), FIRST_REALTIME_OWNER);
     const first = {
-      ...boardEnvelope(),
-      responseIdentity: 'one-current-snapshot',
+      ...unchangedOwnerBoard,
+      responseIdentity: 'same-source-wrapper-1',
       decidedAt: '2026-08-05T12:00:01.000Z',
       serverTime: '2026-08-05T12:00:01.000Z',
     };
-    const board = vi.fn(async () => first);
+    const second = {
+      ...unchangedOwnerBoard,
+      responseIdentity: 'same-source-wrapper-2',
+      decidedAt: '2026-08-05T12:00:02.000Z',
+      serverTime: '2026-08-05T12:00:02.000Z',
+    };
+    const board = vi.fn().mockResolvedValueOnce(first).mockResolvedValueOnce(second);
     const loader = createAppReconnectionStageLoader({
       api: createClientApi({ board }),
       stationId: 'A12',
@@ -204,7 +223,11 @@ describe('App reconnection owner loader', () => {
       arrivals: {
         disposition: 'withheld',
         freshSnapshotCount: 1,
-        freshSnapshots: [{ evidenceId: 'one-current-snapshot', disposition: 'accepted-fresh' }],
+        freshSnapshots: [{
+          evidenceId: 'gtfs-rt-owner:mta-realtime-ace:2026-08-05T12:00:00.100Z:2026-08-05T12:00:00.200Z:2026-08-05T12:00:00.200Z',
+          evidenceAt: '2026-08-05T12:00:00.200Z',
+          disposition: 'accepted-fresh',
+        }],
       },
       storedTrainChoice: 'unverified',
       invalidation: { stage: 3, scopes: [{ kind: 'train', id: 'departure:leg-1:point-origin:08:15' }] },
@@ -213,13 +236,12 @@ describe('App reconnection owner loader', () => {
   });
 
   test('restores a stored train choice only after two coherent fresh boards', async () => {
-    const coherentBoard = storedTrainBoard();
     const first = {
-      ...coherentBoard, responseIdentity: 'coherent-snapshot-1',
+      ...withRealtimeOwner(storedTrainBoard(), FIRST_REALTIME_OWNER), responseIdentity: 'coherent-snapshot-1',
       decidedAt: '2026-08-05T12:00:01.000Z', serverTime: '2026-08-05T12:00:01.000Z',
     };
     const second = {
-      ...coherentBoard, responseIdentity: 'coherent-snapshot-2',
+      ...withRealtimeOwner(storedTrainBoard(), SECOND_REALTIME_OWNER), responseIdentity: 'coherent-snapshot-2',
       decidedAt: '2026-08-05T12:00:02.000Z', serverTime: '2026-08-05T12:00:02.000Z',
     };
     const board = vi.fn()
@@ -247,8 +269,14 @@ describe('App reconnection owner loader', () => {
         disposition: 'current',
         freshSnapshotCount: 2,
         freshSnapshots: [
-          { evidenceId: 'coherent-snapshot-1' },
-          { evidenceId: 'coherent-snapshot-2' },
+          {
+            evidenceId: 'gtfs-rt-owner:mta-realtime-ace:2026-08-05T12:00:00.100Z:2026-08-05T12:00:00.200Z:2026-08-05T12:00:00.200Z',
+            evidenceAt: '2026-08-05T12:00:00.200Z',
+          },
+          {
+            evidenceId: 'gtfs-rt-owner:mta-realtime-ace:2026-08-05T12:00:01.100Z:2026-08-05T12:00:01.200Z:2026-08-05T12:00:01.200Z',
+            evidenceAt: '2026-08-05T12:00:01.200Z',
+          },
         ],
       },
       storedTrainChoice: 'verified',
@@ -258,14 +286,120 @@ describe('App reconnection owner loader', () => {
     expect(artifacts.selectedBoard).toBe(second);
   });
 
-  test('does not restore an unrelated same-route train outside the selected departure window', async () => {
-    const unrelated = storedTrainBoard('2026-08-05T12:04:00.000Z');
+  test('withholds the whole board when a sibling live GTFS-RT owner does not advance', async () => {
+    const multiFeedBoard = withLiveSibling(storedTrainBoard());
+    const unchangedSibling = {
+      sourceId: 'mta-realtime-bdfm', routeIds: ['C'] as const, ...FIRST_REALTIME_OWNER,
+    };
     const first = {
-      ...unrelated, responseIdentity: 'unrelated-snapshot-1',
+      ...withRouteRealtimeOwners(multiFeedBoard, [
+        { sourceId: 'mta-realtime-ace', routeIds: ['A'], ...FIRST_REALTIME_OWNER },
+        unchangedSibling,
+      ]),
+      responseIdentity: 'multi-owner-wrapper-1',
       decidedAt: '2026-08-05T12:00:01.000Z', serverTime: '2026-08-05T12:00:01.000Z',
     };
     const second = {
-      ...unrelated, responseIdentity: 'unrelated-snapshot-2',
+      ...withRouteRealtimeOwners(multiFeedBoard, [
+        { sourceId: 'mta-realtime-ace', routeIds: ['A'], ...SECOND_REALTIME_OWNER },
+        unchangedSibling,
+      ]),
+      responseIdentity: 'multi-owner-wrapper-2',
+      decidedAt: '2026-08-05T12:00:02.000Z', serverTime: '2026-08-05T12:00:02.000Z',
+    };
+    const board = vi.fn().mockResolvedValueOnce(first).mockResolvedValueOnce(second);
+    const loader = createAppReconnectionStageLoader({
+      api: createClientApi({ board }), stationId: 'A12',
+      filters: { routeIds: ['A'], direction: 'southbound' }, hasUnrelatedSavedRecords: false,
+      artifacts: {}, activeTrip: timedActiveTrip(), now: () => new Date(ACCEPTED_AT),
+    });
+
+    await expect(loader(
+      { stage: 3, context: recoveryContext(), state: null as any }, new AbortController().signal,
+    )).resolves.toMatchObject({
+      stage: 3,
+      arrivals: { disposition: 'withheld', freshSnapshotCount: 1 },
+      storedTrainChoice: 'unverified',
+    });
+  });
+
+  test('rejects a source snapshot assessed after its response server time', async () => {
+    const first = {
+      ...withRealtimeOwner(storedTrainBoard(), FIRST_REALTIME_OWNER), responseIdentity: 'clock-wrapper-1',
+      decidedAt: '2026-08-05T12:00:01.000Z', serverTime: '2026-08-05T12:00:01.000Z',
+    };
+    const second = {
+      ...withRealtimeOwner(storedTrainBoard(), SECOND_REALTIME_OWNER), responseIdentity: 'clock-wrapper-2',
+      decidedAt: '2026-08-05T12:00:02.000Z', serverTime: '2026-08-05T12:00:01.050Z',
+    };
+    const board = vi.fn().mockResolvedValueOnce(first).mockResolvedValueOnce(second);
+    const loader = createAppReconnectionStageLoader({
+      api: createClientApi({ board }), stationId: 'A12',
+      filters: { routeIds: ['A'], direction: 'southbound' }, hasUnrelatedSavedRecords: false,
+      artifacts: {}, activeTrip: timedActiveTrip(), now: () => new Date(ACCEPTED_AT),
+    });
+
+    await expect(loader(
+      { stage: 3, context: recoveryContext(), state: null as any }, new AbortController().signal,
+    )).resolves.toMatchObject({
+      stage: 3,
+      arrivals: { disposition: 'withheld', freshSnapshotCount: 1 },
+      storedTrainChoice: 'unverified',
+    });
+  });
+
+  test('does not query or certify a trip outside the preserved active-trip and train scope', async () => {
+    const board = vi.fn(async () => withRealtimeOwner(storedTrainBoard(), FIRST_REALTIME_OWNER));
+    const loader = createAppReconnectionStageLoader({
+      api: createClientApi({ board }), stationId: 'A12',
+      filters: { routeIds: ['A'], direction: 'southbound' }, hasUnrelatedSavedRecords: false,
+      artifacts: {}, activeTrip: { ...timedActiveTrip(), id: 'trip-other' }, now: () => new Date(ACCEPTED_AT),
+    });
+
+    await expect(loader(
+      { stage: 3, context: recoveryContext(), state: null as any }, new AbortController().signal,
+    )).resolves.toBeUndefined();
+    expect(board).not.toHaveBeenCalled();
+  });
+
+  test('rejects stale GTFS-RT provenance even when response wrappers are current and distinct', async () => {
+    const staleOwnerBoard = withRealtimeOwner(storedTrainBoard(), {
+      observedAt: '2026-08-04T12:00:00.100Z',
+      retrievedAt: '2026-08-04T12:00:00.200Z',
+      lastAcceptedAt: '2026-08-04T12:00:00.200Z',
+      assessedAt: '2026-08-05T12:00:00.300Z',
+    });
+    const board = vi.fn()
+      .mockResolvedValueOnce({
+        ...staleOwnerBoard, responseIdentity: 'stale-source-wrapper-1',
+        decidedAt: '2026-08-05T12:00:01.000Z', serverTime: '2026-08-05T12:00:01.000Z',
+      })
+      .mockResolvedValueOnce({
+        ...staleOwnerBoard, responseIdentity: 'stale-source-wrapper-2',
+        decidedAt: '2026-08-05T12:00:02.000Z', serverTime: '2026-08-05T12:00:02.000Z',
+      });
+    const loader = createAppReconnectionStageLoader({
+      api: createClientApi({ board }), stationId: 'A12',
+      filters: { routeIds: ['A'], direction: 'southbound' },
+      hasUnrelatedSavedRecords: false, artifacts: {}, activeTrip: timedActiveTrip(),
+      now: () => new Date(ACCEPTED_AT),
+    });
+
+    await expect(loader(
+      { stage: 3, context: recoveryContext(), state: null as any },
+      new AbortController().signal,
+    )).resolves.toBeUndefined();
+    expect(board).toHaveBeenCalledTimes(1);
+  });
+
+  test('does not restore an unrelated same-route train outside the selected departure window', async () => {
+    const unrelated = storedTrainBoard('2026-08-05T12:04:00.000Z');
+    const first = {
+      ...withRealtimeOwner(unrelated, FIRST_REALTIME_OWNER), responseIdentity: 'unrelated-snapshot-1',
+      decidedAt: '2026-08-05T12:00:01.000Z', serverTime: '2026-08-05T12:00:01.000Z',
+    };
+    const second = {
+      ...withRealtimeOwner(unrelated, SECOND_REALTIME_OWNER), responseIdentity: 'unrelated-snapshot-2',
       decidedAt: '2026-08-05T12:00:02.000Z', serverTime: '2026-08-05T12:00:02.000Z',
     };
     const board = vi.fn().mockResolvedValueOnce(first).mockResolvedValueOnce(second);
@@ -279,13 +413,8 @@ describe('App reconnection owner loader', () => {
     await expect(loader(
       { stage: 3, context: recoveryContext(), state: null as any },
       new AbortController().signal,
-    )).resolves.toMatchObject({
-      stage: 3,
-      arrivals: { disposition: 'withheld', freshSnapshotCount: 1 },
-      storedTrainChoice: 'unverified',
-      invalidation: { stage: 3 },
-    });
-    expect(board).toHaveBeenCalledTimes(2);
+    )).resolves.toBeUndefined();
+    expect(board).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -308,6 +437,96 @@ function storedTrainBoard(arrivalAt = '2026-08-05T12:15:00.000Z') {
               : { ...arrival, destination: 'Far Rockaway' }),
           }
         : direction),
+    } : null,
+  };
+}
+
+function withRealtimeOwner(
+  board: BoardEnvelopeDto,
+  evidence: {
+    readonly observedAt: string;
+    readonly retrievedAt: string;
+    readonly lastAcceptedAt: string;
+    readonly assessedAt: string;
+  },
+): BoardEnvelopeDto {
+  return withRouteRealtimeOwners(board, [{
+    sourceId: 'mta-realtime-ace', routeIds: ['A', 'C'], ...evidence,
+  }]);
+}
+
+function withLiveSibling(board: BoardEnvelopeDto): BoardEnvelopeDto {
+  if (!board.data) return board;
+  return {
+    ...board,
+    data: {
+      ...board.data,
+      directions: board.data.directions.map((direction, index) => {
+        if (index !== 0) return direction;
+        const template = direction.primary.find((arrival) => arrival.kind === 'live');
+        if (!template) return direction;
+        return {
+          ...direction,
+          primary: [...direction.primary, {
+            ...template,
+            id: `${template.id}:sibling-c`,
+            route: { id: 'C', label: 'C' },
+            destination: '168 St',
+          }],
+        };
+      }),
+    },
+  };
+}
+
+function withRouteRealtimeOwners(
+  board: BoardEnvelopeDto,
+  owners: readonly {
+    readonly sourceId: string;
+    readonly routeIds: readonly string[];
+    readonly observedAt: string;
+    readonly retrievedAt: string;
+    readonly lastAcceptedAt: string;
+    readonly assessedAt: string;
+  }[],
+): BoardEnvelopeDto {
+  const provenance = owners.map((owner) => ({
+    source: 'gtfs-rt' as const,
+    sourceId: owner.sourceId,
+    observedAt: owner.observedAt,
+    retrievedAt: owner.retrievedAt,
+  }));
+  const health = owners.map((owner) => ({
+    source: 'gtfs-rt' as const,
+    sourceId: owner.sourceId,
+    state: 'current' as const,
+    assessedAt: owner.assessedAt,
+    lastAcceptedAt: owner.lastAcceptedAt,
+    reasonCode: 'SOURCE_CURRENT' as const,
+  }));
+  const ownerForRoute = (routeId: string) => owners.find(({ routeIds }) => routeIds.includes(routeId));
+  const arrivalProvenance = (arrival:
+    | NonNullable<BoardEnvelopeDto['data']>['directions'][number]['primary'][number]
+    | NonNullable<BoardEnvelopeDto['data']>['directions'][number]['secondary'][number]) => {
+    const owner = ownerForRoute(arrival.route.id);
+    return owner ? {
+      source: 'gtfs-rt' as const, sourceId: owner.sourceId,
+      observedAt: owner.observedAt, retrievedAt: owner.retrievedAt,
+    } : arrival.provenance;
+  };
+  return {
+    ...board,
+    sourceHealth: health,
+    provenance,
+    data: board.data ? {
+      ...board.data,
+      sourceHealth: health,
+      provenance,
+      directions: board.data.directions.map((direction) => ({
+        ...direction,
+        primary: direction.primary.map((arrival) => ({ ...arrival, provenance: arrivalProvenance(arrival) })),
+        secondary: direction.secondary.map((arrival) => ({ ...arrival, provenance: arrivalProvenance(arrival) })),
+      })),
     } : null,
   };
 }

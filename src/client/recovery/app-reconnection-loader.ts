@@ -20,6 +20,30 @@ import type { ReconnectionStageRequest } from './run-reconnection';
 
 const SELECTED_DEPARTURE_TOLERANCE_MS = 90_000;
 
+interface RealtimeOwnerEvidence {
+  readonly sourceId: string;
+  readonly observedAt: string;
+  readonly retrievedAt: string;
+  readonly lastAcceptedAt: string;
+  readonly assessedAt: string;
+  readonly evidenceId: string;
+}
+
+interface RealtimeOwnerPair {
+  readonly first: RealtimeOwnerEvidence;
+  readonly second: RealtimeOwnerEvidence;
+}
+
+interface StoredTrainSelection {
+  readonly cursorLeg: ActiveTripRecord['legs'][number];
+  readonly selectedAt: number;
+}
+
+interface StoredTrainRecoveryEvidence {
+  readonly board: RealtimeOwnerPair;
+  readonly train: RealtimeOwnerPair;
+}
+
 export interface AppReconnectionArtifacts {
   selectedBoard?: BoardEnvelopeDto;
   mapOverlay?: MapOverlayEnvelopeDto;
@@ -318,43 +342,59 @@ async function loadArrivals(
   signal: AbortSignal,
 ): Promise<ReconnectionStageResult | undefined> {
   if (!options.stationId) return undefined;
+  const selection = context.hasStoredTrainChoice
+    ? storedTrainSelection(options.activeTrip, context)
+    : undefined;
+  if (context.hasStoredTrainChoice && !selection) return undefined;
   const first = await options.api.board(options.stationId, options.filters, signal);
   if (!isFreshBoard(first, context, options.stationId)) return undefined;
   const firstAcceptedAt = exactNow(options.now);
   if (context.hasStoredTrainChoice) {
+    const firstCandidate = storedTrainCandidate(first, selection!);
+    const firstBoardOwner = combinedLiveOwnerEvidence(first, context);
+    if (!firstCandidate || !ownerForArrival(first, firstCandidate, context) || !firstBoardOwner) return undefined;
     const second = await options.api.board(options.stationId, options.filters, signal);
-    if (!isFreshBoard(second, context, options.stationId)
-      || first.responseIdentity === second.responseIdentity
-      || Date.parse(second.decidedAt) < Date.parse(first.decidedAt)
-      || !coherentlyTracksStoredTrain(first, second, options.activeTrip)) {
-      return oneSnapshotWithheld(context, first, firstAcceptedAt);
+    const recoveryEvidence = isFreshBoard(second, context, options.stationId)
+      && first.responseIdentity !== second.responseIdentity
+      && Date.parse(second.decidedAt) >= Date.parse(first.decidedAt)
+      && Date.parse(second.serverTime) >= Date.parse(first.serverTime)
+      ? coherentlyTracksStoredTrain(first, second, selection!, context)
+      : null;
+    if (recoveryEvidence === null) {
+      return oneSnapshotWithheld(context, firstBoardOwner, firstAcceptedAt);
     }
     const secondAcceptedAt = exactNow(options.now);
     const scope = stationScope(context, options.stationId);
     const firstSnapshot = acceptedGate(
-      context, 'arrivals', first.responseIdentity, first.decidedAt, firstAcceptedAt, scope,
+      context, 'arrivals', recoveryEvidence.board.first.evidenceId,
+      recoveryEvidence.board.first.lastAcceptedAt, firstAcceptedAt, scope,
     );
     const secondSnapshot = acceptedGate(
-      context, 'arrivals', second.responseIdentity, second.decidedAt, secondAcceptedAt, scope,
+      context, 'arrivals', recoveryEvidence.board.second.evidenceId,
+      recoveryEvidence.board.second.lastAcceptedAt, secondAcceptedAt, scope,
     );
     options.artifacts.selectedBoard = second;
     return {
       stage: 3,
       feedRecovery: {
-        gate: acceptedGate(context, 'feed-health', second.responseIdentity, second.decidedAt, secondAcceptedAt, scope),
+        gate: acceptedGate(
+          context, 'feed-health', recoveryEvidence.board.second.evidenceId,
+          recoveryEvidence.board.second.lastAcceptedAt, secondAcceptedAt, scope,
+        ),
         disposition: 'readmitted',
       },
       trainReadmission: {
         gate: acceptedGate(
-          context, 'train-admission', second.responseIdentity, second.decidedAt, secondAcceptedAt,
+          context, 'train-admission', recoveryEvidence.train.second.evidenceId,
+          recoveryEvidence.train.second.lastAcceptedAt, secondAcceptedAt,
           ownerScope(context, 'train-admission'),
         ),
         disposition: 'admitted',
       },
       arrivals: {
         gate: acceptedGate(
-          context, 'arrivals', `${first.responseIdentity}:${second.responseIdentity}`,
-          second.decidedAt, secondAcceptedAt, scope,
+          context, 'arrivals', `${recoveryEvidence.board.second.evidenceId}:two-snapshot-progression`,
+          recoveryEvidence.board.second.lastAcceptedAt, secondAcceptedAt, scope,
         ),
         disposition: 'current',
         freshSnapshotCount: 2,
@@ -365,24 +405,34 @@ async function loadArrivals(
     };
   }
   const second = await options.api.board(options.stationId, options.filters, signal);
-  if (!isFreshBoard(second, context, options.stationId)
-    || first.responseIdentity === second.responseIdentity
-    || Date.parse(second.decidedAt) < Date.parse(first.decidedAt)) return undefined;
+  const ownerPair = isFreshBoard(second, context, options.stationId)
+    && first.responseIdentity !== second.responseIdentity
+    && Date.parse(second.decidedAt) >= Date.parse(first.decidedAt)
+    && Date.parse(second.serverTime) >= Date.parse(first.serverTime)
+    ? advancingRealtimeOwnerPair(first, second, context)
+    : null;
+  if (ownerPair === null) return undefined;
   const secondAcceptedAt = exactNow(options.now);
 
   const scope = stationScope(context, options.stationId);
-  const firstSnapshot = acceptedGate(context, 'arrivals', first.responseIdentity, first.decidedAt, firstAcceptedAt, scope);
-  const secondSnapshot = acceptedGate(context, 'arrivals', second.responseIdentity, second.decidedAt, secondAcceptedAt, scope);
+  const firstSnapshot = acceptedGate(
+    context, 'arrivals', ownerPair.first.evidenceId, ownerPair.first.lastAcceptedAt, firstAcceptedAt, scope,
+  );
+  const secondSnapshot = acceptedGate(
+    context, 'arrivals', ownerPair.second.evidenceId, ownerPair.second.lastAcceptedAt, secondAcceptedAt, scope,
+  );
   options.artifacts.selectedBoard = second;
   return {
     stage: 3,
     feedRecovery: {
-      gate: acceptedGate(context, 'feed-health', second.responseIdentity, second.decidedAt, secondAcceptedAt, scope),
+      gate: acceptedGate(
+        context, 'feed-health', ownerPair.second.evidenceId, ownerPair.second.lastAcceptedAt, secondAcceptedAt, scope,
+      ),
       disposition: 'readmitted',
     },
     trainReadmission: {
       gate: acceptedGate(
-        context, 'train-admission', second.responseIdentity, second.decidedAt, secondAcceptedAt,
+        context, 'train-admission', ownerPair.second.evidenceId, ownerPair.second.lastAcceptedAt, secondAcceptedAt,
         ownerScope(context, 'train-admission'),
       ),
       disposition: 'admitted',
@@ -391,8 +441,8 @@ async function loadArrivals(
       gate: acceptedGate(
         context,
         'arrivals',
-        `${first.responseIdentity}:${second.responseIdentity}`,
-        second.decidedAt,
+        `${ownerPair.second.evidenceId}:two-snapshot-progression`,
+        ownerPair.second.lastAcceptedAt,
         secondAcceptedAt,
         scope,
       ),
@@ -407,13 +457,13 @@ async function loadArrivals(
 
 function oneSnapshotWithheld(
   context: PreservedReconnectionContext,
-  first: BoardEnvelopeDto,
+  first: RealtimeOwnerEvidence,
   acceptedAt: string,
 ): ReconnectionStageResult {
   const stationScopes = ownerScope(context, 'arrivals');
   const trainScopes = ownerScope(context, 'train-admission');
   const feed = acceptedGate(
-    context, 'feed-health', first.responseIdentity, first.decidedAt, acceptedAt, ownerScope(context, 'feed-health'),
+    context, 'feed-health', first.evidenceId, first.lastAcceptedAt, acceptedAt, ownerScope(context, 'feed-health'),
   );
   const train = failClosedGate(
     context,
@@ -423,10 +473,10 @@ function oneSnapshotWithheld(
     'A stored train requires two coherent fresh board snapshots.',
   );
   const snapshot = acceptedGate(
-    context, 'arrivals', first.responseIdentity, first.decidedAt, acceptedAt, stationScopes,
+    context, 'arrivals', first.evidenceId, first.lastAcceptedAt, acceptedAt, stationScopes,
   );
   const arrivals = acceptedGate(
-    context, 'arrivals', `${first.responseIdentity}:one-coherent-snapshot`, first.decidedAt, acceptedAt, stationScopes,
+    context, 'arrivals', `${first.evidenceId}:one-coherent-snapshot`, first.lastAcceptedAt, acceptedAt, stationScopes,
   );
   return {
     stage: 3,
@@ -457,17 +507,37 @@ function oneSnapshotWithheld(
 function coherentlyTracksStoredTrain(
   first: BoardEnvelopeDto,
   second: BoardEnvelopeDto,
+  selection: StoredTrainSelection,
+  context: PreservedReconnectionContext,
+): StoredTrainRecoveryEvidence | null {
+  const board = advancingRealtimeOwnerPair(first, second, context);
+  const previous = storedTrainCandidate(first, selection);
+  const current = storedTrainCandidate(second, selection);
+  if (!board || !previous || !current) return null;
+  if (!(previous.id === current.id
+    && Date.parse(current.at) >= Date.parse(previous.at)
+    && Date.parse(current.at) - Date.parse(previous.at) <= SELECTED_DEPARTURE_TOLERANCE_MS)) return null;
+  const firstOwner = ownerForArrival(first, previous, context);
+  const secondOwner = ownerForArrival(second, current, context);
+  return firstOwner && secondOwner && advancesRealtimeOwner(firstOwner, secondOwner)
+    ? { board, train: { first: firstOwner, second: secondOwner } }
+    : null;
+}
+
+function storedTrainSelection(
   trip: ActiveTripRecord | null,
-): boolean {
-  if (!trip) return false;
+  context: PreservedReconnectionContext,
+): StoredTrainSelection | undefined {
+  if (!trip || trip.id !== context.activeTripId || trip.id !== context.recovery.activeTripId) return undefined;
   const cursorLeg = trip.legs.find((leg) => leg.points.some(({ id }) => id === trip.cursor.pointId));
-  if (!cursorLeg) return false;
+  if (!cursorLeg) return undefined;
+  if (context.manualCursor?.stopId !== trip.cursor.pointId) return undefined;
   const schedule = trip.validity.schedule;
-  if (schedule.kind !== 'current' && schedule.kind !== 'stale') return false;
+  if (schedule.kind !== 'current' && schedule.kind !== 'stale') return undefined;
   const departures = schedule.departures.filter(({ legId, pointId }) => (
     legId === cursorLeg.id && pointId === trip.cursor.pointId
   ));
-  if (departures.length !== 1) return false;
+  if (departures.length !== 1) return undefined;
   const selectedDeparture = departures[0]!;
   let selectedAt: number;
   try {
@@ -476,24 +546,29 @@ function coherentlyTracksStoredTrain(
       : selectedDeparture.clockTime;
     selectedAt = serviceDateTimeToInstant(trip.validity.serviceDate, clockTime, 'reject').getTime();
   } catch {
-    return false;
+    return undefined;
   }
-  const selectedWindowMs = SELECTED_DEPARTURE_TOLERANCE_MS;
-  const candidates = (board: BoardEnvelopeDto) => board.data?.directions
+  const expectedTrainScope = `departure:${cursorLeg.id}:${trip.cursor.pointId}:${selectedDeparture.clockTime}`;
+  const trainScopes = ownerScope(context, 'train-admission');
+  if (trainScopes.length !== 1 || trainScopes[0]?.kind !== 'train' || trainScopes[0].id !== expectedTrainScope) {
+    return undefined;
+  }
+  return { cursorLeg, selectedAt };
+}
+
+function storedTrainCandidate(
+  board: BoardEnvelopeDto,
+  selection: StoredTrainSelection,
+): LiveArrivalDto | undefined {
+  const { cursorLeg, selectedAt } = selection;
+  const candidates = board.data?.directions
     .flatMap(({ primary }) => primary)
     .filter((arrival): arrival is LiveArrivalDto => arrival.kind === 'live'
       && arrival.route.id === cursorLeg.route.id
       && arrival.direction === cursorLeg.boundDirection
       && arrival.destination === cursorLeg.actualDestination
-      && Math.abs(Date.parse(arrival.at) - selectedAt) <= selectedWindowMs) ?? [];
-  const firstCandidates = candidates(first);
-  const secondCandidates = candidates(second);
-  if (firstCandidates.length !== 1 || secondCandidates.length !== 1) return false;
-  const previous = firstCandidates[0]!;
-  const current = secondCandidates[0]!;
-  return previous.id === current.id
-    && Date.parse(current.at) >= Date.parse(previous.at)
-    && Date.parse(current.at) - Date.parse(previous.at) <= selectedWindowMs;
+      && Math.abs(Date.parse(arrival.at) - selectedAt) <= SELECTED_DEPARTURE_TOLERANCE_MS) ?? [];
+  return candidates.length === 1 ? candidates[0] : undefined;
 }
 
 async function loadBackground(
@@ -597,15 +672,204 @@ function isFreshBoard(
   context: PreservedReconnectionContext,
   stationId: string,
 ): boolean {
+  const live = liveArrivals(board);
+  const owners = realtimeOwnerEvidence(board, context);
   return board.cacheState === 'network'
     && board.runtime.availability === 'available'
     && board.data?.mode === 'live'
     && board.data.station?.id === stationId
     && board.data.capabilities.arrivals === 'available'
     && board.data.directions.length > 0
-    && board.data.sourceHealth.some(({ source, state }) => source === 'gtfs-rt' && state === 'current')
+    && live.length > 0
+    && owners.length > 0
+    && live.every((arrival) => owners.some((owner) => ownerOwnsArrival(owner, arrival)))
     && freshInstant(board.decidedAt, context.recovery.startedAt)
     && freshInstant(board.serverTime, context.recovery.startedAt);
+}
+
+function realtimeOwnerEvidence(
+  board: BoardEnvelopeDto,
+  context: PreservedReconnectionContext,
+): readonly RealtimeOwnerEvidence[] {
+  if (!board.data) return [];
+  const owners = board.data.provenance
+    .filter(({ source }) => source === 'gtfs-rt')
+    .flatMap((provenance) => {
+      const dataProvenance = board.data!.provenance.filter((candidate) => (
+        candidate.source === 'gtfs-rt' && candidate.sourceId === provenance.sourceId
+      ));
+      const envelopeProvenance = (board.provenance ?? []).filter((candidate) => (
+        candidate.source === 'gtfs-rt' && candidate.sourceId === provenance.sourceId
+      ));
+      const dataHealth = board.data!.sourceHealth.filter((candidate) => (
+        candidate.source === 'gtfs-rt' && candidate.sourceId === provenance.sourceId
+      ));
+      const envelopeHealth = (board.sourceHealth ?? []).filter((candidate) => (
+        candidate.source === 'gtfs-rt' && candidate.sourceId === provenance.sourceId
+      ));
+      if (dataProvenance.length !== 1 || envelopeProvenance.length !== 1
+        || dataHealth.length !== 1 || envelopeHealth.length !== 1) return [];
+      const health = dataHealth[0]!;
+      if (health.state !== 'current' || health.lastAcceptedAt === undefined
+        || !sameProvenance(provenance, envelopeProvenance[0]!)
+        || !sameHealth(health, envelopeHealth[0]!)) return [];
+      const owner = {
+        sourceId: provenance.sourceId,
+        observedAt: provenance.observedAt,
+        retrievedAt: provenance.retrievedAt,
+        lastAcceptedAt: health.lastAcceptedAt,
+        assessedAt: health.assessedAt,
+        evidenceId: `gtfs-rt-owner:${provenance.sourceId}:${provenance.observedAt}:${provenance.retrievedAt}:${health.lastAcceptedAt}`,
+      };
+      return coherentFreshOwner(owner, board.decidedAt, board.serverTime, context.recovery.startedAt) ? [owner] : [];
+    });
+  return owners
+    .filter((owner, index) => owners.findIndex(({ sourceId }) => sourceId === owner.sourceId) === index)
+    .sort((left, right) => left.sourceId.localeCompare(right.sourceId));
+}
+
+function liveArrivals(board: BoardEnvelopeDto): readonly LiveArrivalDto[] {
+  return board.data?.directions.flatMap(({ primary }) => (
+    primary.filter((arrival): arrival is LiveArrivalDto => arrival.kind === 'live')
+  )) ?? [];
+}
+
+function ownerForArrival(
+  board: BoardEnvelopeDto,
+  arrival: LiveArrivalDto,
+  context: PreservedReconnectionContext,
+): RealtimeOwnerEvidence | undefined {
+  return realtimeOwnerEvidence(board, context).find((owner) => ownerOwnsArrival(owner, arrival));
+}
+
+function ownerOwnsArrival(owner: RealtimeOwnerEvidence, arrival: LiveArrivalDto): boolean {
+  return arrival.provenance.source === 'gtfs-rt'
+    && arrival.provenance.sourceId === owner.sourceId
+    && arrival.provenance.observedAt === owner.observedAt
+    && arrival.provenance.retrievedAt === owner.retrievedAt;
+}
+
+function advancingRealtimeOwnerPair(
+  first: BoardEnvelopeDto,
+  second: BoardEnvelopeDto,
+  context: PreservedReconnectionContext,
+): RealtimeOwnerPair | null {
+  if (Date.parse(second.decidedAt) < Date.parse(first.decidedAt)
+    || Date.parse(second.serverTime) < Date.parse(first.serverTime)) return null;
+  const firstOwners = liveOwnerSet(first, context);
+  const secondOwners = liveOwnerSet(second, context);
+  if (firstOwners.length === 0 || firstOwners.length !== secondOwners.length) return null;
+  const pairs = firstOwners.map((owner) => ({
+    first: owner,
+    second: secondOwners.find(({ sourceId }) => sourceId === owner.sourceId),
+  }));
+  if (pairs.some(({ first: previous, second: current }) => (
+    current === undefined || !advancesRealtimeOwner(previous, current)
+  ))) return null;
+  return {
+    first: combineRealtimeOwners(pairs.map(({ first: owner }) => owner)),
+    second: combineRealtimeOwners(pairs.map(({ second: owner }) => owner!)),
+  };
+}
+
+function combinedLiveOwnerEvidence(
+  board: BoardEnvelopeDto,
+  context: PreservedReconnectionContext,
+): RealtimeOwnerEvidence | undefined {
+  const owners = liveOwnerSet(board, context);
+  return owners.length > 0 ? combineRealtimeOwners(owners) : undefined;
+}
+
+function liveOwnerSet(
+  board: BoardEnvelopeDto,
+  context: PreservedReconnectionContext,
+): readonly RealtimeOwnerEvidence[] {
+  const owners = liveArrivals(board).map((arrival) => ownerForArrival(board, arrival, context));
+  if (owners.some((owner) => owner === undefined)) return [];
+  return (owners as RealtimeOwnerEvidence[])
+    .filter((owner, index, values) => values.findIndex(({ sourceId }) => sourceId === owner.sourceId) === index)
+    .sort((left, right) => left.sourceId.localeCompare(right.sourceId));
+}
+
+function combineRealtimeOwners(owners: readonly RealtimeOwnerEvidence[]): RealtimeOwnerEvidence {
+  if (owners.length === 1) return owners[0]!;
+  const latest = (field: 'observedAt' | 'retrievedAt' | 'lastAcceptedAt' | 'assessedAt') => (
+    owners.map((owner) => owner[field]).sort().at(-1)!
+  );
+  return {
+    sourceId: owners.map(({ sourceId }) => sourceId).join(','),
+    observedAt: latest('observedAt'),
+    retrievedAt: latest('retrievedAt'),
+    lastAcceptedAt: latest('lastAcceptedAt'),
+    assessedAt: latest('assessedAt'),
+    evidenceId: `gtfs-rt-owner-set:${owners.length}:${evidenceDigest(owners.map(({ evidenceId }) => evidenceId).join('|'))}:${latest('observedAt')}:${latest('lastAcceptedAt')}`,
+  };
+}
+
+function evidenceDigest(value: string): string {
+  let first = 0x811c9dc5;
+  let second = 0x9e3779b9;
+  for (const byte of new TextEncoder().encode(value)) {
+    first = Math.imul(first ^ byte, 0x01000193) >>> 0;
+    second = Math.imul(second ^ byte, 0x85ebca6b) >>> 0;
+  }
+  return `${first.toString(16).padStart(8, '0')}${second.toString(16).padStart(8, '0')}`;
+}
+
+function advancesRealtimeOwner(first: RealtimeOwnerEvidence, second: RealtimeOwnerEvidence): boolean {
+  return first.sourceId === second.sourceId
+    && Date.parse(second.observedAt) > Date.parse(first.observedAt)
+    && Date.parse(second.retrievedAt) >= Date.parse(first.retrievedAt)
+    && Date.parse(second.lastAcceptedAt) > Date.parse(first.lastAcceptedAt)
+    && Date.parse(second.assessedAt) >= Date.parse(first.assessedAt);
+}
+
+function coherentFreshOwner(
+  owner: RealtimeOwnerEvidence,
+  boardDecidedAt: string,
+  boardServerTime: string,
+  recoveryStartedAt: string,
+): boolean {
+  const observedAt = exactInstant(owner.observedAt);
+  const retrievedAt = exactInstant(owner.retrievedAt);
+  const lastAcceptedAt = exactInstant(owner.lastAcceptedAt);
+  const assessedAt = exactInstant(owner.assessedAt);
+  const decidedAt = exactInstant(boardDecidedAt);
+  const serverTime = exactInstant(boardServerTime);
+  const startedAt = exactInstant(recoveryStartedAt);
+  return observedAt !== null && retrievedAt !== null && lastAcceptedAt !== null
+    && assessedAt !== null && decidedAt !== null && serverTime !== null && startedAt !== null
+    && observedAt <= retrievedAt
+    && observedAt <= lastAcceptedAt
+    && observedAt >= startedAt
+    && retrievedAt >= startedAt
+    && lastAcceptedAt >= startedAt
+    && retrievedAt <= assessedAt
+    && lastAcceptedAt <= assessedAt
+    && assessedAt <= decidedAt
+    && assessedAt <= serverTime;
+}
+
+function sameProvenance(
+  left: NonNullable<BoardEnvelopeDto['data']>['provenance'][number],
+  right: NonNullable<BoardEnvelopeDto['data']>['provenance'][number],
+): boolean {
+  return left.source === right.source && left.sourceId === right.sourceId
+    && left.observedAt === right.observedAt && left.retrievedAt === right.retrievedAt;
+}
+
+function sameHealth(
+  left: NonNullable<BoardEnvelopeDto['data']>['sourceHealth'][number],
+  right: NonNullable<BoardEnvelopeDto['data']>['sourceHealth'][number],
+): boolean {
+  return left.source === right.source && left.sourceId === right.sourceId
+    && left.state === right.state && left.assessedAt === right.assessedAt
+    && left.lastAcceptedAt === right.lastAcceptedAt && left.reasonCode === right.reasonCode;
+}
+
+function exactInstant(value: string): number | null {
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) && new Date(parsed).toISOString() === value ? parsed : null;
 }
 
 function isFreshOverlay(overlay: MapOverlayEnvelopeDto, context: PreservedReconnectionContext): boolean {

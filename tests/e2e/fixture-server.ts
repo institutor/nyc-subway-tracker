@@ -340,8 +340,8 @@ process.once('SIGTERM', close);
 function createSnapshot(): DecisionSnapshot {
   snapshotSequence += 1;
   const capturedAt = new Date(lastClockMillisecond || Date.now());
-  const observedAt = new Date(capturedAt.getTime() - 2_000);
-  const retrievedAt = new Date(capturedAt.getTime() - 1_000);
+  const observedAt = capturedAt;
+  const retrievedAt = capturedAt;
   const board = state.boardScenario === 'default'
     ? createBoard(capturedAt, observedAt, retrievedAt)
     : rebasePublicBoard(publicBoardTimelineDecision(state.boardScenario, state.boardStep), capturedAt);
@@ -456,10 +456,12 @@ function journeyCapture(
         kind: 'current', editionId: 'fixture-supplemented-edition', anchorKind: 'published',
         anchorAt, lastRetrievedAt, effectiveFrom: serviceDate, effectiveUntil: serviceDate,
         currencyAgeSeconds: 3_600,
-        departures: itinerary.legs.map((leg) => ({
+        departures: itinerary.legs.map((leg, index) => ({
           patternId: leg.patternId,
           occurrenceId: leg.orderedOccurrenceIds[0],
-          clockTime: '08:15',
+          clockTime: new Intl.DateTimeFormat('en-CA', {
+            timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+          }).format(new Date(capturedAt.getTime() + (4 + index * 10) * 60_000)),
           evidence: 'scheduled' as const,
           timeZone: 'America/New_York' as const,
         })),

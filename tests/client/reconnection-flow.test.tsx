@@ -459,18 +459,41 @@ function recoveryBoard(identity: string, instant: string): BoardEnvelopeDto {
   const base = boardEnvelope();
   const at = Date.parse(instant);
   const validThrough = new Date(at + 90_000).toISOString();
+  const realtimeOwner = {
+    source: 'gtfs-rt' as const,
+    sourceId: 'mta-realtime-ace',
+    observedAt: instant,
+    retrievedAt: instant,
+  };
+  const realtimeHealth = {
+    source: 'gtfs-rt' as const,
+    sourceId: 'mta-realtime-ace',
+    state: 'current' as const,
+    assessedAt: instant,
+    lastAcceptedAt: instant,
+    reasonCode: 'SOURCE_CURRENT' as const,
+  };
   return {
     ...base,
     responseIdentity: identity,
     decidedAt: instant,
     serverTime: instant,
     cacheState: 'network',
+    provenance: [realtimeOwner],
+    sourceHealth: [realtimeHealth],
     data: base.data ? {
       ...base.data,
+      provenance: [realtimeOwner],
+      sourceHealth: [realtimeHealth],
       directions: base.data.directions.map((direction) => ({
         ...direction,
         primary: direction.primary.map((arrival) => arrival.kind === 'live'
-          ? { ...arrival, at: new Date(at + 180_000).toISOString(), validThrough }
+          ? {
+              ...arrival,
+              at: new Date(at + 180_000).toISOString(),
+              validThrough,
+              provenance: realtimeOwner,
+            }
           : arrival.kind === 'expected'
             ? {
                 ...arrival,
