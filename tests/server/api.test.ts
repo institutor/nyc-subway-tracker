@@ -260,13 +260,20 @@ describe('versioned subway API', () => {
         demonstrationLabel: 'Demonstration data — not live',
         gateDecision: { exposed: false, reasonCode: 'GATE_0_NOT_PASSED' },
         data: {
-          mode: 'unavailable',
-          directions: [],
-          alerts: [],
-          sourceHealth: [],
-          provenance: [],
+          mode: 'demonstration',
+          station: { id: 'A12', name: '125 St' },
+          directions: [
+            { direction: 'northbound', primary: expect.any(Array) },
+            { direction: 'southbound', primary: expect.any(Array) },
+          ],
+          alerts: [{ id: 'alert-a-north', demonstrationLabel: 'Demonstration data — not live' }],
+          sourceHealth: expect.any(Array),
+          provenance: expect.any(Array),
         },
       });
+      expect(body.data.directions.flatMap((direction: any) => direction.primary)).toHaveLength(6);
+      expect(body.data.directions.flatMap((direction: any) => direction.primary)
+        .every((arrival: any) => arrival.demonstrationLabel === 'Demonstration data — not live')).toBe(true);
       expect(body.gates['arrival-boards'].exposed).toBe(false);
     });
   });
@@ -1569,8 +1576,11 @@ describe('versioned subway API', () => {
       expect(bootstrap.sourceHealth).toMatchObject([{ sourceId: 'mta-realtime-bdfm' }]);
       expect(bootstrap.provenance).toMatchObject([{ sourceId: 'mta-realtime-bdfm' }]);
       expect(bootstrap.data.contentVersions).toEqual({
-        stationCatalog: 'catalog-empty-v1',
-        maps: { day: 'map-day-empty-v1', night: 'map-night-empty-v1' },
+        stationCatalog: 'validation-catalog-2026-08-04-v1',
+        maps: {
+          day: 'validation-map-day-2026-08-04-v1',
+          night: 'validation-map-night-2026-08-04-v1',
+        },
         journeyGraph: expect.stringMatching(/^journey-graph-/),
       });
     });
