@@ -15,6 +15,24 @@ export function journeyReferenceHandler(dependencies: AppDependencies) {
   return (request: Request, response: Response): void => {
     assertExactQuery(request, []);
     const contentVersion = parseApiIdentifier(request.params.contentVersion, 'journey graph content version');
+    const gateDecision = dependencies.exposure.public['nearby-offline'];
+    if (dependencies.config.mode !== 'validation') {
+      const decidedAt = captureNow(dependencies).toISOString();
+      sendNoStoreJson(response, 200, {
+        apiVersion: API_VERSION,
+        schemaVersion: SCHEMA_VERSION,
+        responseIdentity: createResponseIdentity([
+          'journey-reference-locked', dependencies.config.mode, contentVersion, decidedAt,
+        ]),
+        decidedAt,
+        serverTime: decidedAt,
+        runtime: { mode: dependencies.config.mode, surface: 'public', availability: 'locked' },
+        gates: dependencies.exposure.public,
+        gateDecision,
+        data: null,
+      });
+      return;
+    }
     const snapshot = captureDecisionSnapshot(dependencies.snapshotProvider);
     const reference = createJourneyGraphReference(snapshot.journeyGraph);
     if (contentVersion !== reference.contentVersion) {

@@ -136,6 +136,21 @@ describe('offline tools API boundary', () => {
     })).journeyReference('journey-graph-7')).rejects.toThrow('Transit information is unavailable.');
   });
 
+  test.each(['live', 'shadow'] as const)(
+    'rejects a locked %s journey reference without yielding graph bytes for local planning',
+    async (mode) => {
+      const client = createTransitApiClient(async () => json({
+        apiVersion: 'v1', schemaVersion: '2026-08-04', responseIdentity: `response:journey-reference-locked-${mode}`,
+        decidedAt: '2026-08-04T12:00:00.000Z', serverTime: '2026-08-04T12:00:00.000Z',
+        runtime: { mode, surface: 'public', availability: 'locked' },
+        gates: { 'nearby-offline': gate }, gateDecision: gate, data: null,
+      }, { 'cache-control': 'no-store' }));
+
+      await expect(client.journeyReference('journey-graph-7'))
+        .rejects.toThrow('Transit information is unavailable.');
+    },
+  );
+
   test('posts a coordinate-free owned online journey request and accepts exact ordered station structure', async () => {
     const fetcher = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => json({
       ...dynamic,

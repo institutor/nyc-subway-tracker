@@ -3,6 +3,7 @@ import { describe, expect, test, vi } from 'vitest';
 import { createApp } from '../../src/server/app';
 import type { DecisionSnapshot } from '../../src/server/api/decision-snapshot';
 import { createProductionDependencies } from '../../src/server/bootstrap';
+import { createJourneyGraphReference } from '../../src/server/services/journey-service';
 import { createFixedClock } from '../../src/shared/domain/clock';
 import { withApi } from '../helpers/api-harness';
 
@@ -985,6 +986,7 @@ describe('versioned subway API', () => {
       const body = await response.json();
       expect(body).toMatchObject({
         contentVersion,
+        demonstrationLabel: 'Demonstration data — not live',
         data: {
           contentVersion,
           graph: {
@@ -1000,6 +1002,37 @@ describe('versioned subway API', () => {
       expect((await request('/api/v1/journeys/reference/not-this-version')).status).toBe(404);
     });
   });
+
+  test.each(['live', 'shadow'] as const)(
+    'locks the non-empty %s journey graph before snapshot access while the nearby-offline gate is closed',
+    async (mode) => {
+      const capture = vi.fn(() => journeySnapshot);
+      const contentVersion = createJourneyGraphReference(journeyGraph).contentVersion;
+      const dependencies = createProductionDependencies({
+        dataDirectory: '.data-test-do-not-read', mode, sources: {},
+      }, {
+        clock: createFixedClock(DECIDED_AT),
+        snapshotProvider: { capture },
+      });
+
+      await withApi(createApp(dependencies), async ({ request }) => {
+        const response = await request(`/api/v1/journeys/reference/${contentVersion}`);
+        const body = await response.json();
+
+        expect(response.status).toBe(200);
+        expect(response.headers.get('cache-control')).toBe('no-store');
+        expect(body).toMatchObject({
+          runtime: { mode, surface: 'public', availability: 'locked' },
+          gateDecision: { exposed: false, reasonCode: 'NEARBY_GATE_0_NOT_PASSED' },
+          data: null,
+        });
+        expect(body).not.toHaveProperty('contentVersion');
+        expect(body).not.toHaveProperty('demonstrationLabel');
+        expect(JSON.stringify(body)).not.toMatch(/nodes|patterns|transfers|occurrence-origin|pattern-a/);
+        expect(capture).not.toHaveBeenCalled();
+      });
+    },
+  );
 
   test.each([
     ['online-current', undefined, 'planned', undefined],
@@ -1544,6 +1577,7 @@ describe('versioned subway API', () => {
         request('/api/v1/status?stationId=A12'),
         request('/api/v1/maps/day/overlay'),
         request('/api/v1/maps/day/reference/map-day-2026-08-04'),
+        request(`/api/v1/journeys/reference/${createJourneyGraphReference(journeyGraph).contentVersion}`),
         request('/api/v1/nearby', {
           method: 'POST', headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ location: { latitude: 40.7, longitude: -74, accuracyMeters: 12 }, accessibleRouteOnly: false }),
