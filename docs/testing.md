@@ -91,7 +91,7 @@ A successful current fetch also remains shadow-only. Gate 0 stays **NO-GO** unti
 
 ## Task 16 final validation record — 2026-08-10
 
-This record covers package `nyc-subway-tracker@0.1.0` at verified implementation baseline `8d2dd80`. Later evidence-only commits do not change the tested product files.
+This record covers package `nyc-subway-tracker@0.1.0` at verified implementation baseline `6ef9288`. Later evidence-only commits do not change the tested product files.
 
 ### Reproducible dependency installation
 
@@ -105,13 +105,13 @@ The first offline attempt against the machine's pre-existing store failed honest
 |---|---|
 | `pnpm test --run` | PASS — 75 files, 1,168 tests |
 | `pnpm run typecheck` | PASS — zero TypeScript errors |
-| `pnpm run build` | PASS — Vite 7.3.6, 71 modules; client JavaScript 427.11 kB and CSS 30.33 kB |
-| Installed-Chrome six-file E2E run | PASS — 33/33 tests in 26.1 seconds, using `C:\Program Files\Google\Chrome\Application\chrome.exe` |
+| `pnpm run build` | PASS — Vite 7.3.6, 71 modules; client JavaScript 427.11 kB and CSS 30.18 kB |
+| Installed-Chrome six-file E2E run | PASS — 35/35 tests in 25.6 seconds, using `C:\Program Files\Google\Chrome\Application\chrome.exe` |
 | `pnpm run truth:all` | PASS — 7/7 zero-exposure replay/drill receipts; bundle digest `sha256:8a904eaf6cc6f844047e944140f2fd69c8778997058b418aa82a80daaa9d1a5b` |
 | `pnpm run shadow:dry-run` | PASS — `DRY_RUN_NO_NETWORK`; 8/8 sources not run by design, 9/9 public locks closed |
 | `pnpm run shadow:live` | Recorded external-source failure — `COMPLETED_WITH_SOURCE_FAILURES`; 0/8 sources accepted, 8/8 `SOURCE_RETRIEVAL_OR_VALIDATION_FAILED`, 0 claims, 0 comparisons, 9/9 public locks closed |
 
-The installed-Chrome run used exactly the six required files: `zero-tap.spec.ts`, `service-change.spec.ts`, `offline.spec.ts`, `accessibility.spec.ts`, `commute.spec.ts`, and `responsive.spec.ts`. It covered real browser location allow/deny and saved precedence; practical-walk and picker fallbacks; continuously governed Live/Scheduled/Expected/Holding and service-change timelines; saved/map/active-trip/offline controls; every reconnection owner stage; accessible-route warnings and explicit replacement; commute locks and materiality; keyboard-only operation; reduced motion; 200% text; 320-pixel reflow; and populated privacy, crowding, coordinate, service-worker, and asset boundaries.
+The installed-Chrome run used exactly the six required files: `zero-tap.spec.ts`, `service-change.spec.ts`, `offline.spec.ts`, `accessibility.spec.ts`, `commute.spec.ts`, and `responsive.spec.ts`. It covered real browser location allow/deny and saved precedence; practical-walk and picker fallbacks; continuously governed Live/Scheduled/Expected/Holding and service-change timelines; saved/map/active-trip/offline controls; every reconnection owner stage; accessible-route warnings and explicit replacement; commute locks and materiality; keyboard-only operation; reduced motion; 200% text; 320-pixel reflow; and populated privacy, crowding, coordinate, service-worker, and asset boundaries. The final privacy review added adversarial proofs for exact and snake/kebab crowding keys, neutral train-car shells, embedded image or inline-SVG payloads, protected-brand coupling, all runtime image-bearing elements, and every visible computed image property.
 
 ### Production and visual smoke
 
