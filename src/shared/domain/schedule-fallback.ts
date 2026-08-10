@@ -3,13 +3,12 @@ import { parseServiceDate } from './clock';
 import type { PublicRouteOrderKind } from './arrival-order';
 import type { ScheduleEditionRegistry, ScheduleCurrencyState } from './schedule-owner';
 import type { Direction, Provenance, ScheduledArrival } from './types';
-import {
-  isServiceActive,
-  serviceTimeToInstant,
-  type NormalizedStaticGtfs,
-  type StaticScheduleSource,
-  type StopTimeRecord,
-  type TripRecord,
+import { isServiceActive, serviceTimeToInstant } from './static-schedule-runtime';
+import type {
+  NormalizedStaticGtfs,
+  StaticScheduleSource,
+  StopTimeRecord,
+  TripRecord,
 } from '../../server/gtfs/static-normalizer';
 
 export interface ScheduleFallbackFeedDecision {

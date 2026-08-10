@@ -190,8 +190,8 @@ function JourneyResults({
               })}
             </ol>
             {canActivate && itinerary.capture ? (
-              <button type="button" onClick={() => onActivateTrip(itinerary, response)}>
-                Use {transfer ? 'transfer' : 'direct'} itinerary underground
+              <button type="button" aria-label="Use this trip" onClick={() => onActivateTrip(itinerary, response)}>
+                Use this trip
               </button>
             ) : null}
           </article>

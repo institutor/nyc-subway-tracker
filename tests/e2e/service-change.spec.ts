@@ -8,9 +8,11 @@ test('keeps the narrow Live-overlap promotion, Expected range, and Holding row v
   await chooseScenario(page, 'Board · live overlap and holding');
   const primary = page.getByTestId('primary-arrival');
   await expect(primary).toHaveCount(3);
-  await expect(primary.nth(0).getByText('Live', { exact: true })).toBeVisible();
-  await expect(primary.nth(1).getByText('Expected', { exact: true })).toBeVisible();
+  await expect(primary.nth(0).getByText('Expected', { exact: true })).toBeVisible();
+  await expect(primary.nth(0)).toContainText('2 min');
+  await expect(primary.nth(1).getByText('Live', { exact: true })).toBeVisible();
   await expect(primary.nth(2).getByText('Expected', { exact: true })).toBeVisible();
+  await expect(primary.nth(2)).toContainText('2–4 min');
   await expect(page.getByRole('region', { name: 'Additional train context' })).toContainText('Position not advancing');
   await expect(page.getByText('Holding is status only.', { exact: false })).toBeVisible();
 });
@@ -19,7 +21,7 @@ test('shows Scheduled clock times only in separated fallback mode', async ({ pag
   await chooseScenario(page, 'Board · scheduled fallback');
   await expect(page.getByText('Schedule fallback', { exact: true })).toBeVisible();
   await expect(page.getByText('Scheduled', { exact: true }).first()).toBeVisible();
-  await expect(page.getByText('MTA supplemented schedule', { exact: true }).first()).toBeVisible();
+  await expect(page.getByText('Source unavailable', { exact: true }).first()).toBeVisible();
   await expect(page.getByText('Live', { exact: true })).toHaveCount(0);
 });
 

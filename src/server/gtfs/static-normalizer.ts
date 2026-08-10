@@ -1,5 +1,6 @@
 import type { Direction } from '../../shared/domain/types';
 import type { ScheduleCoverageMask } from '../../shared/domain/schedule-owner';
+export { isServiceActive, serviceTimeToInstant } from '../../shared/domain/static-schedule-runtime';
 import { canonicalCsvRowIdentity, type ParsedCsv } from './csv-reader';
 
 export type StaticScheduleSource = 'regular-gtfs' | 'supplemented-gtfs';
@@ -287,65 +288,6 @@ export function normalizeGtfsTables(tables: ReadonlyMap<string, ParsedCsv>): Nor
   });
 }
 
-export function isServiceActive(
-  data: Pick<NormalizedStaticGtfs, 'calendars' | 'calendarDates'>,
-  serviceId: string,
-  serviceDate: string,
-): boolean {
-  assertServiceDate(serviceDate);
-  const exceptions = data.calendarDates.filter(
-    (row) => row.serviceId === serviceId && row.date === serviceDate,
-  );
-  if (exceptions.length > 1) {
-    throw new Error(`Duplicate GTFS calendar_dates service_id,date: ${serviceId},${serviceDate}`);
-  }
-  const exception = exceptions[0];
-  if (exception) return exception.exceptionType === 1;
-  const calendars = data.calendars.filter((row) => row.serviceId === serviceId);
-  if (calendars.length > 1) {
-    throw new Error(`Duplicate GTFS calendar service_id: ${serviceId}`);
-  }
-  const calendar = calendars[0];
-  if (!calendar || serviceDate < calendar.startDate || serviceDate > calendar.endDate) return false;
-  const date = serviceDateToUtcDate(serviceDate);
-  const mondayIndex = (date.getUTCDay() + 6) % 7;
-  return calendar.weekdays[mondayIndex];
-}
-
-export function serviceTimeToInstant(
-  serviceDate: string,
-  serviceTime: string,
-  timeZone = 'America/New_York',
-): Date {
-  assertServiceDate(serviceDate);
-  const seconds = parseGtfsTime(serviceTime);
-  if (seconds === null) throw new Error(`GTFS service time is required: ${serviceTime}`);
-  const base = serviceDateToUtcDate(serviceDate);
-  base.setUTCSeconds(base.getUTCSeconds() + seconds);
-  const wanted = {
-    year: base.getUTCFullYear(),
-    month: base.getUTCMonth() + 1,
-    day: base.getUTCDate(),
-    hour: base.getUTCHours(),
-    minute: base.getUTCMinutes(),
-    second: base.getUTCSeconds(),
-  };
-  const approximate = Date.UTC(wanted.year, wanted.month - 1, wanted.day, wanted.hour, wanted.minute, wanted.second);
-  const candidates: number[] = [];
-  for (let offsetMinutes = -14 * 60; offsetMinutes <= 14 * 60; offsetMinutes += 15) {
-    const instant = approximate - offsetMinutes * 60_000;
-    if (sameZonedParts(instant, timeZone, wanted)) candidates.push(instant);
-  }
-  if (candidates.length !== 1) {
-    throw new Error(
-      candidates.length === 0
-        ? `GTFS service time does not map to a real ${timeZone} instant`
-        : `GTFS service time is ambiguous in ${timeZone}`,
-    );
-  }
-  return new Date(candidates[0]);
-}
-
 export function parseGtfsTime(value: string): number | null {
   if (value === '') return null;
   const match = /^(\d{1,3}):(\d{2}):(\d{2})$/.exec(value);
@@ -489,32 +431,6 @@ function sortRecords<T extends IdentifiedRow>(records: T[]): T[] {
 
 function compareText(left: string, right: string): number {
   return Buffer.from(left).compare(Buffer.from(right));
-}
-
-function sameZonedParts(
-  instant: number,
-  timeZone: string,
-  wanted: { year: number; month: number; day: number; hour: number; minute: number; second: number },
-): boolean {
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone,
-    hourCycle: 'h23',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-  }).formatToParts(new Date(instant));
-  const values = Object.fromEntries(parts.filter((part) => part.type !== 'literal').map((part) => [part.type, Number(part.value)]));
-  return (
-    values.year === wanted.year &&
-    values.month === wanted.month &&
-    values.day === wanted.day &&
-    values.hour === wanted.hour &&
-    values.minute === wanted.minute &&
-    values.second === wanted.second
-  );
 }
 
 function deepFreeze<T>(value: T): T {

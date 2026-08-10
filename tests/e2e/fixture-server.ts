@@ -8,11 +8,14 @@ import { build } from 'vite';
 import { createApp } from '../../src/server/app';
 import type { DecisionSnapshot } from '../../src/server/api/decision-snapshot';
 import { createProductionDependencies } from '../../src/server/bootstrap';
+import { planJourney } from '../../src/server/services/journey-service';
+import type { JourneyCapturePackage } from '../../src/shared/domain/journey-capture';
 import type { BoardDecision } from '../../src/shared/domain/types';
 import { journeyGraphFixture } from '../helpers/journey-graph-fixture';
 
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const clientDirectory = resolve(projectRoot, 'dist/client');
+const validationClientDirectory = resolve(projectRoot, 'dist/e2e-client');
 const fixtureOrigin = '127.0.0.1';
 const fixturePort = 4173;
 
@@ -23,6 +26,7 @@ interface FixtureState {
 
 const state: FixtureState = { boardTransport: 'ok', overlay: 'ready' };
 const requestLog: string[] = [];
+const transitionLog: ValidationTransition[] = [];
 let snapshotSequence = 0;
 let lastClockMillisecond = 0;
 
@@ -48,8 +52,28 @@ const catalog = {
       routeIds: ['N', 'Q', 'R', 'W'],
       constituents: [{ id: 'R20', name: 'Canal St', directionalStopIds: ['R20N', 'R20S'] }],
     },
+    {
+      id: 'L03',
+      name: '14 St–Union Sq',
+      routeIds: ['L'],
+      constituents: [{ id: 'L03', name: '14 St–Union Sq', directionalStopIds: ['L03N', 'L03S'] }],
+    },
   ],
 } as const;
+
+const nearbyUniverse = [
+  { id: 'entrance-a12', coordinate: { latitude: 40.811, longitude: -73.952 } },
+  { id: 'entrance-r20', coordinate: { latitude: 40.719, longitude: -74.002 } },
+  { id: 'entrance-l03', coordinate: { latitude: 40.735, longitude: -73.991 } },
+] as const;
+
+const currentJourney = planJourney(journeyGraphFixture, {
+  mode: 'online-current', originStationId: 'A12', destinationStationId: 'R20', accessibleRouteOnly: false,
+});
+if (currentJourney.kind !== 'planned' || !currentJourney.itineraries[0]) {
+  throw new Error('Browser journey fixture must produce one current itinerary');
+}
+const currentJourneyItinerary = currentJourney.itineraries[0];
 
 const mapReferences = {
   day: {
@@ -109,11 +133,27 @@ const dependencies = createProductionDependencies({
 }, {
   clock: fixtureClock,
   catalog,
+  nearbyUniverse,
+  walk: async ({ destinations }) => Object.freeze({
+    kind: 'available' as const,
+    source: 'practical-walk' as const,
+    sourceId: 'practical-walk',
+    coverage: Object.freeze({ kind: 'complete-universe' as const }),
+    results: Object.freeze(destinations.map(({ id }) => Object.freeze({
+      destinationId: id,
+      range: id === 'entrance-a12'
+        ? { minimumSeconds: 95, maximumSeconds: 120 }
+        : id === 'entrance-r20'
+          ? { minimumSeconds: 135, maximumSeconds: 160 }
+          : { minimumSeconds: 175, maximumSeconds: 205 },
+    }))),
+  }),
   mapReferences,
   snapshotProvider: Object.freeze({ capture: createSnapshot }),
 });
 
 await build({ configFile: resolve(projectRoot, 'vite.config.ts') });
+await build({ configFile: resolve(projectRoot, 'tests/e2e/fixture-vite.config.ts') });
 
 const fixture = express();
 fixture.disable('x-powered-by');
@@ -123,6 +163,7 @@ fixture.post('/__test/reset', (_request, response) => {
   state.boardTransport = 'ok';
   state.overlay = 'ready';
   requestLog.length = 0;
+  transitionLog.length = 0;
   response.status(204).end();
 });
 fixture.post('/__test/state', (request, response) => {
@@ -148,6 +189,24 @@ fixture.post('/__test/requests/clear', (_request, response) => {
   requestLog.length = 0;
   response.status(204).end();
 });
+fixture.get('/__test/transitions', (_request, response) => response.status(200).json({ transitions: [...transitionLog] }));
+fixture.post('/__test/transitions', (request, response) => {
+  const candidate = request.body as Partial<ValidationTransition>;
+  const keys = Object.keys(candidate);
+  if (keys.length !== 3 || !keys.every((key) => ['scenario', 'phase', 'stage'].includes(key))
+    || !RECONNECTION_SCENARIOS.includes(candidate.scenario as ReconnectionScenario)
+    || (candidate.phase !== 'requested' && candidate.phase !== 'presented')
+    || ![1, 2, 3, 4, 5].includes(candidate.stage as number)) {
+    response.status(400).json({ error: 'invalid transition receipt' });
+    return;
+  }
+  transitionLog.push({
+    scenario: candidate.scenario as ReconnectionScenario,
+    phase: candidate.phase,
+    stage: candidate.stage as 1 | 2 | 3 | 4 | 5,
+  });
+  response.status(204).end();
+});
 fixture.use((request, response, next) => {
   if (!request.path.startsWith('/api/v1/')) {
     next();
@@ -160,6 +219,11 @@ fixture.use((request, response, next) => {
   }
   next();
 });
+fixture.use('/__validation', express.static(validationClientDirectory, { dotfiles: 'allow', index: false }));
+fixture.get(['/__validation', '/__validation/'], (_request, response) => response.sendFile(
+  resolve(validationClientDirectory, 'index.html'),
+  { dotfiles: 'allow' },
+));
 fixture.use(express.static(clientDirectory, { dotfiles: 'allow', index: false }));
 fixture.get('/', (_request, response) => response.sendFile(
   resolve(clientDirectory, 'index.html'),
@@ -176,7 +240,7 @@ process.once('SIGTERM', close);
 
 function createSnapshot(): DecisionSnapshot {
   snapshotSequence += 1;
-  const capturedAt = new Date(Date.now() - 25);
+  const capturedAt = new Date(lastClockMillisecond || Date.now());
   const observedAt = new Date(capturedAt.getTime() - 2_000);
   const retrievedAt = new Date(capturedAt.getTime() - 1_000);
   const board = createBoard(capturedAt, observedAt, retrievedAt);
@@ -215,6 +279,7 @@ function createSnapshot(): DecisionSnapshot {
       },
     ],
     boards: [{ decision: board, validThrough: new Date(capturedAt.getTime() + 90_000).toISOString() }],
+    nearby: nearbySnapshot(),
     ...(state.overlay === 'ready' ? {
       mapOverlays: [{
         theme: 'day',
@@ -223,7 +288,92 @@ function createSnapshot(): DecisionSnapshot {
       }],
     } : { mapOverlays: [] }),
     journeyGraph: journeyGraphFixture,
+    journeyCaptures: [journeyCapture(capturedAt)],
   };
+}
+
+function nearbySnapshot(): NonNullable<DecisionSnapshot['nearby']> {
+  const complexes = catalog.complexes.map(({ id, name }) => ({ id, name }));
+  const constituents = catalog.complexes.map(({ id, name }) => ({ id, complexId: id, publicName: name }));
+  const entrances = catalog.complexes.map(({ id, name }) => ({
+    id: `entrance-${id.toLowerCase()}`,
+    complexId: id,
+    constituentId: id,
+    publicDescription: `${name} main entrance`,
+    entryPermission: 'entry' as const,
+    joinStatus: 'matched' as const,
+    directionalStopIds: [`${id}N`, `${id}S`],
+    usability: 'open' as const,
+    accessibility: 'eligible' as const,
+  }));
+  const serviceRows = [
+    ['A12', ['A', 'C'], 'Inwood–207 St', 'Far Rockaway'],
+    ['R20', ['N', 'Q'], 'Astoria–Ditmars Blvd', 'Coney Island–Stillwell Av'],
+    ['L03', ['L'], '8 Av', 'Canarsie–Rockaway Pkwy'],
+  ] as const;
+  const services = serviceRows.flatMap(([id, routes, northDestination, southDestination]) => routes.flatMap((routeId) => ([
+    {
+      id: `service-${id}-${routeId}-north`, complexId: id, constituentId: id, directionalStopId: `${id}N`,
+      routeId, direction: 'northbound' as const, actualDestination: northDestination,
+      state: 'current' as const, arrivalState: 'available' as const,
+    },
+    {
+      id: `service-${id}-${routeId}-south`, complexId: id, constituentId: id, directionalStopId: `${id}S`,
+      routeId, direction: 'southbound' as const, actualDestination: southDestination,
+      state: 'current' as const, arrivalState: 'available' as const,
+    },
+  ])));
+  return { complexes, constituents, entrances, services };
+}
+
+function journeyCapture(capturedAt: Date): JourneyCapturePackage {
+  const instant = capturedAt.toISOString();
+  const serviceDate = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(capturedAt);
+  const anchorAt = new Date(capturedAt.getTime() - 3_600_000).toISOString();
+  const lastRetrievedAt = new Date(capturedAt.getTime() - 30_000).toISOString();
+  return {
+    itineraryId: currentJourneyItinerary.id,
+    requestMode: 'online-current',
+    scope: { mode: 'online-current', originStationId: 'A12', destinationStationId: 'R20', accessibleRouteOnly: false },
+    serviceDate,
+    timing: 'timed',
+    capturedAt: instant,
+    disclosure: 'Demonstration data — not live',
+    validity: {
+      result: 'current-itinerary',
+      pattern: 'actual-now',
+      schedule: {
+        kind: 'current', editionId: 'fixture-supplemented-edition', anchorKind: 'published',
+        anchorAt, lastRetrievedAt, effectiveFrom: serviceDate, effectiveUntil: serviceDate,
+        currencyAgeSeconds: 3_600,
+        departures: currentJourneyItinerary.legs.map((leg) => ({
+          patternId: leg.patternId,
+          occurrenceId: leg.orderedOccurrenceIds[0],
+          clockTime: '08:15',
+          evidence: 'scheduled' as const,
+          timeZone: 'America/New_York' as const,
+        })),
+      },
+      warnings: [], vetoes: [],
+    },
+    serviceClaims: [], equipmentClaims: [],
+  };
+}
+
+const RECONNECTION_SCENARIOS = [
+  'Reconnect · stage 1 path invalidation',
+  'Reconnect · stage 2 service invalidation',
+  'Reconnect · stage 3 train invalidation',
+  'Reconnect · stage 4 required guidance invalidation',
+  'Reconnect · optional guidance removed',
+] as const;
+type ReconnectionScenario = typeof RECONNECTION_SCENARIOS[number];
+interface ValidationTransition {
+  readonly scenario: ReconnectionScenario;
+  readonly phase: 'requested' | 'presented';
+  readonly stage: 1 | 2 | 3 | 4 | 5;
 }
 
 function createBoard(capturedAt: Date, observedAt: Date, retrievedAt: Date): BoardDecision {

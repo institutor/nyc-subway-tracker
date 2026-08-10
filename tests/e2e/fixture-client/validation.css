@@ -1,0 +1,92 @@
+.validation-frame {
+  --surface-gutter: var(--space-4);
+}
+
+.validation-header {
+  padding: var(--space-4) var(--surface-gutter);
+  border-block-end: 0.25rem solid var(--enamel);
+  background:
+    linear-gradient(135deg, rgba(255, 209, 102, 0.08), transparent 42%),
+    var(--platform);
+}
+
+.validation-header h1 {
+  max-width: 18ch;
+  margin-block-end: var(--space-2);
+  font-size: var(--step-3);
+}
+
+.validation-eyebrow,
+.surface-disclosure {
+  color: var(--signal);
+  font-family: var(--utility-face);
+  font-size: var(--step--1);
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.validation-scenarios {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
+  gap: var(--space-2);
+  margin-block-start: var(--space-4);
+}
+
+.validation-scenarios button {
+  min-width: 0;
+  padding: var(--space-2) var(--space-3);
+  overflow-wrap: anywhere;
+  text-align: start;
+}
+
+.validation-scenarios button[aria-pressed='true'] {
+  border-color: var(--signal);
+  box-shadow: inset 0.25rem 0 var(--signal);
+}
+
+.validation-surface-frame,
+.validation-scenario,
+.validation-scenario > * {
+  min-width: 0;
+}
+
+.validation-board {
+  padding: var(--space-3);
+}
+
+.validation-receipt,
+.notification-receipt,
+.preserved-context {
+  padding: var(--space-4);
+  border: 1px solid var(--line);
+  background: var(--platform);
+}
+
+.validation-success,
+.delivery-lock {
+  padding: var(--space-3);
+  border-inline-start: 0.35rem solid #4bd27d;
+  background: var(--platform);
+}
+
+.reconnection-evidence > ol {
+  display: grid;
+  gap: var(--space-2);
+  padding-inline-start: 1.7rem;
+}
+
+@media (max-width: 36rem) {
+  .validation-frame {
+    --surface-gutter: var(--space-2);
+  }
+
+  .validation-header,
+  .validation-surface-frame {
+    padding-inline: var(--space-2);
+  }
+
+  .validation-scenarios {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
