@@ -224,3 +224,51 @@ This external failure is truthful shadow evidence, not a test weakening. The det
 - This report update is committed separately so the round-2 implementation hash is exact.
 
 Concern: the official live attempt again accepted no complete source snapshot, so the new authentic projection and later physical comparison could not be exercised against current MTA content in this environment. No stage may open from deterministic tests alone. Operators should rerun two accepted observations and inspect exact suppressed/admitted transitions before treating shadow comparison as release evidence.
+
+## Fix round 3 (2026-08-10)
+
+### Outcome and files
+
+Round 3 binds every later comparison artifact to the exact earlier file bytes and exact earlier/later record chronology, adds exact service ownership and alert-source provenance, routes genuine recent-history claims through the issued structured service-change decision and existing arrival-admission boundary, and deterministically budgets maximal valid artifacts under 1,000,000 bytes. Dry runs retain a null comparison context and zero rows. Public boards and every exposure gate remain locked.
+
+Implementation commit: `26e55625d3700523ec9520b8cf6cdad2d6dd40cf` (`bind shadow comparison evidence`). Files: `scripts/live-shadow.ts`, `src/server/services/shadow-progress.ts`, `src/server/services/shadow-validation.ts`, `tests/server/live-shadow.test.ts`, `tests/server/shadow-progress.test.ts`, `tests/server/shadow-round3.test.ts`, `tests/server/shadow-validation.test.ts`, `docs/data-sources.md`, and `docs/testing.md`. The controller-owned `progress.md` remained unstaged and was not edited or committed.
+
+### Normalized RED evidence
+
+1. `npm test -- --run tests/server/shadow-round3.test.ts` — 1 file, 14 tests: 8 failed, 6 passed. Missing context/builder/binding APIs, ungoverned service interval/null ownership, and absent deterministic byte-budget composition were exposed. Six future-schema rejection cases passed only because the then-current parser rejected the new top-level schema, so independent current-schema tests were added before production work.
+2. `npm test -- --run tests/server/shadow-progress.test.ts` — 1 file, 27 tests: 3 failed, 24 passed. A valid current-schema control proved the parser accepted source retrieval before observation, source retrieval after decision, and a current feed paired with the degraded reason.
+3. `npm test -- --run tests/server/shadow-validation.test.ts` — 1 file, 7 tests: 3 failed, 4 passed. Accepted alert provenance was not joined, a failed alert source could appear service-eligible, and exact recent prior progress could not reach governed admission.
+4. `npm test -- --run tests/server/live-shadow.test.ts` — 1 file, 2 tests: 1 failed, 1 passed. Dry output lacked the required null comparison context and exact zero truncation state.
+5. Combined normalized governing RED, `npm test -- --run tests/server/shadow-round3.test.ts tests/server/shadow-progress.test.ts tests/server/shadow-validation.test.ts tests/server/live-shadow.test.ts` — 4 files, 50 tests: 15 failed, 35 passed.
+6. Self-review RED, `npm test -- --run tests/server/shadow-round3.test.ts tests/server/shadow-validation.test.ts` — 2 files, 23 tests: 3 failed, 20 passed. The parser accepted impossible Gregorian date `20260231` and noncanonical service identities after claim keys were truthfully recomputed, while arrival admission was called without the issued structured service decision, exact claim ID, assessment time, or alert-context ownership.
+7. Alert-context exactness RED, `npm test -- --run tests/server/shadow-round3.test.ts` — 1 file, 17 tests: 1 failed, 16 passed. The parser accepted a noncanonical alert-context identity.
+
+### GREEN progression
+
+- `shadow-v2` now contains an exact comparison context: earlier record ID, SHA-256 of the exact earlier file bytes, earlier decision/recorded times, later record ID, later decision/recorded times, exact interval, and the fixed 900,000 ms maximum. A dry record must have a null context, zero claims/comparisons, and zero considered counts.
+- Every comparison row owns exact earlier and later claim keys (or explicit null), exact earlier/later observations, source/train/service/target-call ownership, and disposition transition. Both admitted and suppressed claims participate. Null or changed service ownership, over-limit intervals, missing retained claims, reroutes, changed paths, non-later observations, and missing targets remain explicit inconclusive outcomes rather than progress.
+- The CLI reads and preserves the exact prior bytes, parses the entire prior record, hashes those bytes, constructs the later context, recomputes deterministic comparison rows, exact-matches serialized rows and truncation counts, and only then calls the atomic writer. Missing `--compare` remains an exit-2 failure.
+- Accepted source chronology is enforced as `observedAt <= retrievedAt <= decisionTime <= recordedAt`; claim and comparison chronology is bounded by the same owning decisions. Feed kind/reason pairs are exact: `current/accepted-current`, `degraded/snapshot-age-degraded`, and `unavailable/snapshot-age-unavailable`.
+- Service dates must be real Gregorian `YYYYMMDD` values. Service-instance IDs and claim IDs/keys are canonical SHA-256 identities, preserving exact service-date/instance ownership without unbounded raw identity strings.
+- Every projected service summary binds the canonical alert source. Accepted alert context contains only source ID, observed/retrieved instants, source SHA-256, and a bounded digest of the issued alert context. Failed alert context is an exact three-field failure record and can never be eligible. Stale accepted alert evidence is quarantined and cannot influence admission.
+- A single observation stays suppressed. With an exact recent prior record, same non-null service instance, exact suffix progress, current movement, exact future stop call, eligible feed/service/track, and unchanged destination/direction, projection calls `admitArrivalCandidate` with the issued full `ServiceChangeDecision`, exact service claim ID, exact assessment epoch, and exact internal alert-context identity. Only its admitted result becomes the compact persisted admitted summary; the full decision, alert text, supported range, identity/recovery/movement internals, and audit arrays are never serialized.
+- The bounded builder orders claims and comparisons canonically, reserves independent partitions for claims/comparisons and the fixed envelope, retains deterministic prefixes, and records considered/included/omitted counts plus `NOT_TRUNCATED` or `BYTE_BUDGET_EXHAUSTED`. The governed 500-candidate/64-call maximal case retains honest claims and comparisons below 1,000,000 bytes in identical order regardless of input order.
+- Focused final GREEN: `npm run typecheck` passed, then the four governing files passed 53/53 tests. The wider shadow/status regression passed 58/58 before the final identity-hardening additions.
+
+### Full verification and live shadow
+
+- `npm test -- --run`: 74 files, 1,120/1,120 passed.
+- `npm run typecheck`: passed with no diagnostics.
+- `npm run build`: passed; 70 modules transformed, CSS 29.09 kB and JS 421.71 kB before gzip.
+- Installed Chrome (`C:\Program Files\Google\Chrome\Application\chrome.exe`), `npm run test:e2e`: 5/5 passed.
+- `npm run shadow:dry-run` and the documented `pnpm run shadow:dry-run`: both passed with exact eight not-run sources, nine closed gates, null comparison context, zero claims/comparisons, exact zero truncation, and no network.
+- `npm run shadow:live`: exited 0 and atomically wrote ignored artifact `.data/shadow/shadow-2026-08-10T08-55-51.936Z-f560e101-7afa-46b2-87d4-48c70d7b2090.json`, 3,026 bytes. Outcome was truthfully `COMPLETED_WITH_SOURCE_FAILURES`: 0 accepted and 8 failed official sources, 0 claims/comparisons, 9/9 gates closed, `riderExposure=false`, and `boardsExposed=false`.
+- The live artifact privacy scan found no coordinate, saved-record, rider-label, active-trip/cursor, permission, endpoint/token/key, private-key, secret, or crowding match. `git diff --check` and staged diff hygiene passed; runtime `.data` remained ignored.
+
+### Visual, React, accessibility, privacy, and concerns
+
+Round 3 changes only the isolated server-side shadow composition, exact parser/comparator, tests, and operator docs. It changes no rider UI, React effect/listener/storage behavior, navigation, focus, zoom, reduced-motion behavior, or CSS. The prior installed-Chrome Settings/Data Status/accessibility verification remains green, and all independent public/commute exposure decisions remain immutable and closed.
+
+Persisted shadow records contain bounded non-personal operational evidence only. They contain no full `ArrivalAdmissionDecision`, raw service/audit/rider arrays, official alert text, coordinate, rider record/label, active trip/cursor, permission state, push credential, private key, secret, joinable personal identifier, or crowding construct. No public board path is called and no release gate is mutated.
+
+Concern: the current official-source attempt accepted 0 of 8 sources, so real-network admission and bound two-record comparison could not be observed here. This is a truthful external-source outcome, not a weakened test. Deterministic tests prove authentic suppression-to-admission through the existing structured service/admission boundaries, but operators must capture two accepted official observations within 15 minutes before treating live comparison evidence as available. No stage may open from this result.
