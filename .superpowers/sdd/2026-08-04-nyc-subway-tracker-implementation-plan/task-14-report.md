@@ -278,3 +278,102 @@ Correction-only escalation self-review RED:
 - The product remains a validation candidate under the controlling NO-GO posture. Production defaults are closed, and no pilot/delivery exposure, live VAPID credential, real subscription, or rider delivery evidence is claimed.
 - The evidence capture adapter is deliberately injected. A future authorized deployment must bind it to approved current operational evidence and pass the independent immutable authorizations; the repository does not infer authorization from environment strings or Draft/Pending artifacts.
 - Live source calibration, owner reviews, delivery quality, retention/operations evidence, and launch approval remain unavailable and cannot open a stage.
+
+## Fix round 2
+
+### Outcome
+
+Resolved all three Important review findings against review head `8817984`. The exact subscription registration now preserves lifecycle, notification authorization, and the train's actual destination through the client serializer, strict API parser, bounded canonical registration, subscription store, and runtime reconstruction. Paused, expired, and notification-disabled windows remain reconstructable for exact status/rebind semantics but resolve outside the watching interval and perform no evidence capture, evaluation, or delivery.
+
+The actual train destination is no longer fabricated from the rider's destination station identity. It is a separate NFC-normalized, trimmed, control-free field bounded to 160 Unicode code points. Push copy therefore says the train is headed toward the saved train destination rather than displaying a station identifier. Server-held data remains the minimum exact runtime-window registration: it contains no rider label, SavedRecord payload, coordinates, home/work inference, or unrelated saved records.
+
+Captured evidence is validated before episode-state key construction, date serialization, decision evaluation, attempted-state mutation, or transport. Malformed evidence is ignored without consuming the later valid candidate. Scheduled capture or monitor failures are contained per tick, reported only as the constant reason code `COMMUTE_NOTIFICATION_TICK_FAILED`, and do not prevent a later scheduled tick. The default interval also installs a final promise rejection sink. No error object, secret, endpoint, token, or personal scope enters diagnostics.
+
+No stage or exposure was opened. Independent evaluation and delivery authorizations, half-open New York/DST behavior, reconnect no-replay, no routine all-clear, and all closed defaults remain unchanged.
+
+### Files
+
+Production:
+
+- `src/client/hooks/use-notifications.ts`
+- `src/server/notifications/commute-monitor.ts`
+- `src/server/notifications/notification-runtime.ts`
+- `src/server/routes/notifications.ts`
+- `src/shared/domain/commute-window.ts`
+
+Tests:
+
+- `tests/server/commute-monitor.test.ts`
+- `tests/server/notification-runtime.test.ts`
+- `tests/server/notifications-api.test.ts`
+
+The controller-owned `progress.md` was deliberately excluded from both fix and report commits.
+
+### RED commands, counts, and expected reasons
+
+Normalized three-finding RED:
+
+`npm test -- --run tests/server/notification-runtime.test.ts tests/server/commute-monitor.test.ts`
+
+- **2 failed files; 4 failed / 10 passed** across 14 tests.
+- Notification runtime: **3 failed / 2 passed**. The destination assertion received `toward D21` instead of the saved train destination; paused/expired lifecycle values were reconstructed as active and a false notification setting as true; the scheduled task rejected with the capture adapter's private error instead of containing it and continuing.
+- Commute monitor: **1 failed / 8 passed**. A malformed `Date` reached `impactStateKey()` and `toISOString()`, producing `RangeError: Invalid time value` before evidence validation and preventing the later valid candidate.
+
+Every failure was the intended production break. There was no collection, fixture, or environment failure in the normalized RED.
+
+### GREEN commands and counts
+
+- First focused GREEN: `npm test -- --run tests/server/notification-runtime.test.ts tests/server/commute-monitor.test.ts` - **2 files, 14/14 passed** (runtime 5/5, monitor 9/9).
+- Notification regression matrix: `npm test -- --run tests/domain/notification-decision.test.ts tests/server/commute-monitor.test.ts tests/server/notification-runtime.test.ts tests/server/notifications-api.test.ts tests/client/commute-view.test.tsx tests/client/service-worker.test.ts tests/client/service-worker-registration.test.ts` - **7 files, 67/67 passed** with no React or runtime warnings.
+- Production composition closed/authorized/error smoke: `tests/server/notification-runtime.test.ts` - **5/5 passed**. The closed case loaded no VAPID state and performed no scheduling/capture/delivery; the authorized case delivered one exact worker-valid payload containing the actual train destination; the error case contained one failed tick, emitted only the safe reason code, and completed the next tick.
+- Exact subscription/API privacy regression: `tests/server/notifications-api.test.ts` - **6/6 passed** within the matrix. Stored registration keys are exact, replacement/rebind remains exact, deletion removes the scope, and the privacy assertion rejects SavedRecord identity, coordinates, home/work, and rider labels.
+
+### Full verification
+
+- Full Vitest: `npm test -- --run` - **63 files, 1,035/1,035 passed**.
+- TypeScript: `npm run typecheck` - passed with zero diagnostics.
+- Production build: `npm run build` - Vite **7.3.6**, **68 modules transformed**, completed successfully.
+- Installed Google Chrome E2E: `$env:PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH='C:\Program Files\Google\Chrome\Application\chrome.exe'; npm run test:e2e` - **5/5 passed**.
+- Diff hygiene: `git diff --check` and `git diff --cached --check` passed. Only repository line-ending notices appeared in unstaged Git output.
+- Scope/privacy scan: no crowding field, type, module, shell, badge, placeholder, proxy, or legend was introduced. No diagnostic or response contains a private VAPID key, push key, endpoint, evidence error, rider label, coordinate, or home/work inference.
+
+### Strict self-review
+
+#### Lifecycle and exact binding
+
+- `CommuteWindowRegistration` now carries the original `lifecycle` and `notificationEnabled` values. Neither the canonicalizer nor runtime reconstruction supplies active/enabled defaults.
+- The browser serializer sends those values, so the primitive exact-scope key changes when either setting changes and the existing read-only inspection detects a stale server binding. Permission prompts and rebinds remain explicit rider events.
+- `resolveCommuteOccurrence` still fails closed before capture for paused, expired, or disabled windows. The three inactive forms were tested together under an otherwise fully authorized delivery pipeline and produced zero capture and zero delivery.
+- Registration/status/replacement/deletion retain exact route, known direction, origin, rider destination station, explicit segment, recurrence, lead, lifecycle, authorization, and train destination. There is no wildcard or cross-record borrowing.
+
+#### Destination and privacy semantics
+
+- `actualDestination` is distinct from `destinationStationId` at every boundary. Runtime reconstruction no longer copies one into the other, and the authorized Web Push smoke explicitly rejects `toward D21` while requiring the saved train destination.
+- Display destination text is NFC-normalized, trimmed, nonempty, control-free, and bounded. Operational identities remain under the existing stricter canonical identity rules.
+- Only the train destination needed to render the authorized exact notification is stored. No custom rider name, Home/Work label, coordinate, SavedRecord object, or unrelated record is admitted.
+
+#### Evidence and scheduler containment
+
+- Evidence validation precedes `impactStateKey()`. It checks bounded canonical episode/route/station/action identities, allowed impact kind/direction, nonempty bounded unique station scope, finite ordered dates, Boolean decision flags, finite optional metrics, bounded unique actions, and bounded canonical action copy.
+- Rejected evidence does not write attempted, missed, or delivered state. The focused regression proves a malformed observation cannot consume a later valid candidate.
+- A scheduled tick wraps capture, monitor, and sender-level propagation. It catches per-tick failure, emits only the constant safe diagnostic, resolves the scheduled task, and allows later calls. A throwing diagnostic callback is also contained.
+- Direct `runNow()` remains useful to tests and operators because adapter failures propagate there; containment is specifically owned by the scheduler boundary where an unhandled rejection would otherwise destabilize the process.
+
+#### Preserved contracts
+
+- Evaluation and delivery remain independently authorized by opaque immutable records and explicitly named exposure keys. No single Boolean, ordinal mapping, or string coincidence was reintroduced.
+- Closed/default stages remain inert; deterministic fixtures do not alter public state; pilot/delivery were not opened.
+- Half-open intervals, New York weekday/DST resolution, exact route+direction+segment relevance, correction-only/equivalent suppression, material escalation, reconnect no-replay, and no routine all-clear remain covered by the 67-test matrix.
+- The React boundary changed only its exact registration serializer. Effects remain read-only on inspection and event-driven for permission/subscription changes; primitive scope dependencies, stable component definitions, existing storage version, one service-worker listener set, and Commute-only heavy behavior remain intact.
+- No Commute visual or copy layout changed in this round; the approved dark platform-spine system and compact recurring-window route/time signature remain untouched.
+
+### Commits
+
+- `693e1c7` - `preserve commute notification truth`
+- The Fix round 2 report is committed separately after its final verification entry.
+
+### Concerns
+
+- This remains a validation candidate under the controlling NO-GO posture. No live stage, exposure, VAPID credential, subscription, or delivery evidence is claimed.
+- The evidence adapter and diagnostic sink remain injected production boundaries. A future separately authorized deployment must supply approved current evidence and operational diagnostics without weakening the constant-code privacy boundary.
+- Draft/Pending source calibration, operator ownership, pilot evidence, delivery quality, correction channel, retention policy, and launch approvals remain unavailable and cannot open a stage.
