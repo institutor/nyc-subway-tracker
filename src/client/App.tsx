@@ -380,7 +380,7 @@ export function App({
     onRequest: (requestId) => dispatch({ type: 'location-requested', requestId }),
     onFix: (requestId, fix) => {
       const explicitSelection = stateRef.current.selectionOwner === 'explicit';
-      dispatch({ type: 'location-resolved', requestId, fix });
+      dispatch({ type: 'location-resolved', requestId });
       runNearby(fix, accessibleRouteOnlyRef.current);
       if (explicitSelection) return;
       setPickerOpen(false);
@@ -821,8 +821,7 @@ export function App({
               onOpenPicker={() => setPickerOpen(true)}
               onRefresh={() => {
                 if (!connectedRef.current || stateRef.current.location.phase === 'denied') return;
-                if (stateRef.current.location.fix) runNearby(stateRef.current.location.fix);
-                else location.retry();
+                location.retry();
               }}
               accessibleRouteOnly={accessibleRouteOnly}
               onAccessibleRouteOnlyChange={(value) => {

@@ -321,6 +321,31 @@ describe('zero-tap Nearby rider view', () => {
     expect(await screen.findAllByTestId('nearby-station-card')).toHaveLength(3);
   });
 
+  test('reacquires a current exact fix for Nearby refresh instead of replaying retained coordinates', async () => {
+    const storage = new MemoryStorage();
+    const nearby = vi.fn(async () => nearbyEnvelope);
+    const geolocation = new ControlledGeolocation();
+    render(<App api={createClientApi({ nearby })} geolocation={geolocation} storage={storage} />);
+    await waitFor(() => expect(geolocation.requests).toHaveLength(1));
+    await act(async () => geolocation.succeed(
+      0, 12, { latitude: 40.700123, longitude: -74.000456 },
+    ));
+    await waitFor(() => expect(nearby).toHaveBeenCalledTimes(1));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh nearby stations' }));
+
+    expect(geolocation.requests).toHaveLength(2);
+    expect(nearby).toHaveBeenCalledTimes(1);
+    await act(async () => geolocation.succeed(
+      1, 18, { latitude: 40.711234, longitude: -73.991234 },
+    ));
+    await waitFor(() => expect(nearby).toHaveBeenCalledTimes(2));
+    expect(nearby).toHaveBeenLastCalledWith({
+      coordinate: { latitude: 40.711234, longitude: -73.991234 }, accuracyMeters: 18,
+    }, false, expect.any(AbortSignal));
+    expect([...storage.values.values()].join('\n')).not.toMatch(/40\.700123|-74\.000456|40\.711234|-73\.991234/u);
+  });
+
   test('does not re-prompt from denial controls and instead gives device-settings guidance', async () => {
     const geolocation = new ControlledGeolocation();
     render(<App api={createClientApi()} geolocation={geolocation} storage={new MemoryStorage()} />);

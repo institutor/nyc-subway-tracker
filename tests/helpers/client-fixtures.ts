@@ -243,11 +243,15 @@ export class ControlledGeolocation implements Pick<Geolocation, 'getCurrentPosit
     this.requests.push({ success, failure });
   }
 
-  succeed(index: number, accuracy: number): void {
+  succeed(
+    index: number,
+    accuracy: number,
+    coordinate: { readonly latitude: number; readonly longitude: number } = { latitude: 40.7, longitude: -74 },
+  ): void {
     this.requests[index].success({
       coords: {
-        latitude: 40.7, longitude: -74, accuracy, altitude: null, altitudeAccuracy: null, heading: null, speed: null,
-        toJSON: () => ({ latitude: 40.7, longitude: -74, accuracy }),
+        ...coordinate, accuracy, altitude: null, altitudeAccuracy: null, heading: null, speed: null,
+        toJSON: () => ({ ...coordinate, accuracy }),
       },
       timestamp: 1,
       toJSON: () => ({ timestamp: 1 }),

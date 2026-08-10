@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 
-import { appReducer, createInitialAppState } from '../../src/client/state/app-state';
+import { appReducer, createInitialAppState, type AppAction } from '../../src/client/state/app-state';
 
 const lastStation = { complexId: 'A12', constituentId: 'A12', name: '125 St' } as const;
 const chosenStation = { complexId: 'R20', constituentId: 'R20', name: 'Canal St' } as const;
@@ -17,31 +17,23 @@ describe('rider-owned application state', () => {
     state = appReducer(state, {
       type: 'location-resolved', requestId: 1,
       fix: { coordinate: { latitude: 40.7, longitude: -74 }, accuracyMeters: 5 },
-    });
+    } as unknown as AppAction);
 
     expect(state.selectedStation).toEqual(chosenStation);
     expect(state.selectionOwner).toBe('explicit');
-    expect(state.location).toEqual({
-      phase: 'ready', requestId: 1,
-      fix: { coordinate: { latitude: 40.7, longitude: -74 }, accuracyMeters: 5 },
-    });
+    expect(state.location).toEqual({ phase: 'ready', requestId: 1 });
+    expect(JSON.stringify(state)).not.toMatch(/40\.7|-74/u);
   });
 
   test('finishes a successful location retry without surrendering an explicit station', () => {
     let state = createInitialAppState({ savedStations: [] });
     state = appReducer(state, { type: 'station-selected', station: chosenStation, owner: 'explicit', filters: { routeIds: [] } });
     state = appReducer(state, { type: 'location-requested', requestId: 2 });
-    state = appReducer(state, {
-      type: 'location-resolved', requestId: 2,
-      fix: { coordinate: { latitude: 40.7, longitude: -74 }, accuracyMeters: 50 },
-    });
+    state = appReducer(state, { type: 'location-resolved', requestId: 2 });
 
     expect(state.selectedStation).toEqual(chosenStation);
     expect(state.selectionOwner).toBe('explicit');
-    expect(state.location).toEqual({
-      phase: 'ready', requestId: 2,
-      fix: { coordinate: { latitude: 40.7, longitude: -74 }, accuracyMeters: 50 },
-    });
+    expect(state.location).toEqual({ phase: 'ready', requestId: 2 });
   });
 
   test.each([

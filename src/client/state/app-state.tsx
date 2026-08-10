@@ -1,6 +1,6 @@
 import { createContext, type Dispatch, type PropsWithChildren, useContext, useMemo, useReducer } from 'react';
 
-import type { LocationFixDto, NearbyEnvelopeDto } from '../api/client';
+import type { NearbyEnvelopeDto } from '../api/client';
 import type { Direction } from '../../shared/domain/types';
 
 export const LAST_USED_STATION_KEY = 'nyc-subway-tracker:last-station:v1';
@@ -20,7 +20,6 @@ export interface AppState {
   readonly location: {
     readonly phase: 'idle' | 'requesting' | 'ready' | 'denied' | 'failed';
     readonly requestId: number;
-    readonly fix?: LocationFixDto;
   };
   readonly nearby: {
     readonly phase: 'idle' | 'loading' | 'ready' | 'error';
@@ -37,7 +36,7 @@ export type AppAction =
   | { readonly type: 'surface-changed'; readonly surface: AppState['surface'] }
   | { readonly type: 'personal-data-reset' }
   | { readonly type: 'location-requested'; readonly requestId: number }
-  | { readonly type: 'location-resolved'; readonly requestId: number; readonly fix: LocationFixDto }
+  | { readonly type: 'location-resolved'; readonly requestId: number }
   | { readonly type: 'location-denied'; readonly requestId: number }
   | { readonly type: 'location-failed'; readonly requestId: number }
   | {
@@ -89,7 +88,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
   }
   if (action.type === 'location-resolved') {
     if (action.requestId !== state.location.requestId) return state;
-    return freeze({ ...state, location: { phase: 'ready', requestId: action.requestId, fix: captureFix(action.fix) } });
+    return freeze({ ...state, location: { phase: 'ready', requestId: action.requestId } });
   }
   if (action.type === 'location-denied' || action.type === 'location-failed') {
     if (action.requestId !== state.location.requestId) return state;
@@ -179,15 +178,6 @@ export function writeLastUsedStation(storage: Pick<Storage, 'setItem'>, station:
   } catch {
     // A local preference write never blocks current transit information.
   }
-}
-
-function captureFix(value: LocationFixDto): LocationFixDto {
-  const { latitude, longitude } = value.coordinate;
-  if (![latitude, longitude, value.accuracyMeters].every((candidate) => Number.isFinite(candidate))
-    || latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180 || value.accuracyMeters <= 0) {
-    throw new Error('Invalid location fix');
-  }
-  return { coordinate: { latitude, longitude }, accuracyMeters: value.accuracyMeters };
 }
 
 function captureStation(value: StationChoice): StationChoice {
