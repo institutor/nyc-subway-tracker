@@ -4,6 +4,7 @@ const systemChromium = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH;
 
 export default defineConfig({
   testDir: './tests/e2e',
+  testIgnore: 'production-validation.spec.ts',
   workers: 1,
   webServer: {
     command: 'node node_modules/tsx/dist/cli.mjs tests/e2e/fixture-server.ts',

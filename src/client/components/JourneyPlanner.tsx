@@ -9,6 +9,10 @@ import type {
 } from '../api/client';
 import type { StationChoice } from '../state/app-state';
 import type { OfflineJourneyPlanner } from '../offline/plan-offline-journey';
+import { JOURNEY_CAPTURE_DISCLOSURE } from '../../shared/domain/journey-capture';
+import type { ValidationRiderEvidence } from '../../shared/validation/rider-evidence';
+import { ValidationAccessibilityPanel } from './AccessibilityPanel';
+import { ValidationPlatformGuidance } from './PlatformGuidance';
 import { RouteToken } from './RouteToken';
 import { StationSearch } from './StationSearch';
 import { StatusBanner } from './StatusBanner';
@@ -23,6 +27,9 @@ export function JourneyPlanner({
   connected,
   planOfflineJourney,
   onActivateTrip,
+  accessibleRouteOnly: controlledAccessibleRouteOnly,
+  onAccessibleRouteOnlyChange,
+  validationEvidence,
 }: {
   readonly api: TransitApiClient;
   readonly origin?: StationChoice;
@@ -31,11 +38,16 @@ export function JourneyPlanner({
   readonly connected: boolean;
   readonly planOfflineJourney?: OfflineJourneyPlanner;
   readonly onActivateTrip: (itinerary: JourneyItineraryDto, response: JourneyEnvelopeDto) => void;
+  readonly accessibleRouteOnly?: boolean;
+  readonly onAccessibleRouteOnlyChange?: (value: boolean) => void;
+  readonly validationEvidence?: ValidationRiderEvidence;
 }) {
   const generation = useRef(0);
   const abort = useRef<AbortController | undefined>(undefined);
   const [destination, setDestination] = useState<StationChoice>();
-  const [accessibleRouteOnly, setAccessibleRouteOnly] = useState(false);
+  const [localAccessibleRouteOnly, setLocalAccessibleRouteOnly] = useState(false);
+  const accessibleRouteOnly = controlledAccessibleRouteOnly ?? localAccessibleRouteOnly;
+  const changeAccessibleRouteOnly = onAccessibleRouteOnlyChange ?? setLocalAccessibleRouteOnly;
   const [serviceDate, setServiceDate] = useState('');
   const [result, setResult] = useState<{
     readonly key: string;
@@ -115,7 +127,7 @@ export function JourneyPlanner({
         offline={!connected}
       />
       <label className="check-control">
-        <input type="checkbox" checked={accessibleRouteOnly} onChange={(event) => setAccessibleRouteOnly(event.currentTarget.checked)} />
+        <input type="checkbox" checked={accessibleRouteOnly} onChange={(event) => changeAccessibleRouteOnly(event.currentTarget.checked)} />
         Accessible Route Only
       </label>
       {needsServiceDate ? (
@@ -132,6 +144,7 @@ export function JourneyPlanner({
           catalog={catalog}
           canActivate={connected && requestMode !== 'offline-reference'}
           onActivateTrip={onActivateTrip}
+          validationEvidence={validationEvidence}
         />
       ) : null}
     </section>
@@ -143,11 +156,13 @@ function JourneyResults({
   catalog,
   canActivate,
   onActivateTrip,
+  validationEvidence,
 }: {
   readonly response: JourneyEnvelopeDto;
   readonly catalog: readonly CatalogComplexDto[];
   readonly canActivate: boolean;
   readonly onActivateTrip: (itinerary: JourneyItineraryDto, response: JourneyEnvelopeDto) => void;
+  readonly validationEvidence?: ValidationRiderEvidence;
 }) {
   if (response.runtime.availability === 'locked' || response.data === null) {
     return <StatusBanner tone="locked"><p>Journey planning is not released yet.</p></StatusBanner>;
@@ -159,12 +174,16 @@ function JourneyResults({
   const heading = response.data.kind === 'untimed'
     ? response.data.label
     : response.data.label ?? 'Current itinerary';
+  const accessibleRequest = response.data.scope.accessibleRouteOnly;
   return (
     <div className="journey-results">
       <h3>{heading}</h3>
       {response.demonstrationLabel ? <p className="claim-line"><span>{response.demonstrationLabel}</span></p> : null}
       {response.data.itineraries.map((itinerary, index) => {
         const transfer = itinerary.transfers > 0;
+        const riderEvidence = validationEvidenceOwnsItinerary(validationEvidence, response, itinerary)
+          ? validationEvidence
+          : undefined;
         return (
           <article className="journey-card" key={itinerary.id} aria-label={`${index === 0 ? 'Primary' : 'Alternative'} ${transfer ? 'transfer' : 'direct'} itinerary`}>
             <header>
@@ -189,7 +208,18 @@ function JourneyResults({
                 );
               })}
             </ol>
-            {canActivate && itinerary.capture ? (
+            {riderEvidence ? <>
+              <ValidationAccessibilityPanel
+                warning={null}
+                path={riderEvidence.path}
+                equipment={riderEvidence.equipment}
+                alternative={null}
+                onSelectAlternative={() => undefined}
+                decisionTime={riderEvidence.decisionTime}
+              />
+              <ValidationPlatformGuidance guidance={riderEvidence.guidance} decisionTime={riderEvidence.decisionTime} />
+            </> : null}
+            {canActivate && itinerary.capture && (!accessibleRequest || riderEvidence) ? (
               <button type="button" aria-label="Use this trip" onClick={() => onActivateTrip(itinerary, response)}>
                 Use this trip
               </button>
@@ -199,6 +229,24 @@ function JourneyResults({
       })}
     </div>
   );
+}
+
+function validationEvidenceOwnsItinerary(
+  evidence: ValidationRiderEvidence | undefined,
+  response: JourneyEnvelopeDto,
+  itinerary: JourneyItineraryDto,
+): evidence is ValidationRiderEvidence {
+  if (!evidence || !response.data || (response.data.kind !== 'planned' && response.data.kind !== 'untimed')) return false;
+  const firstLeg = itinerary.legs[0];
+  return response.runtime.mode === 'validation'
+    && response.runtime.surface === 'demonstration'
+    && response.demonstrationLabel === JOURNEY_CAPTURE_DISCLOSURE
+    && response.data.scope.accessibleRouteOnly
+    && response.data.scope.originStationId === evidence.path.journeyScope.origin.constituentStationId
+    && response.data.scope.destinationStationId === evidence.path.journeyScope.destination.constituentStationId
+    && firstLeg?.routeId === evidence.path.routeId
+    && firstLeg.direction === evidence.path.direction
+    && firstLeg.actualDestination === evidence.guidance.destination;
 }
 
 function stationName(catalog: readonly CatalogComplexDto[], stationId: string): string {

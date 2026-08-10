@@ -9,6 +9,7 @@ import type { PracticalWalkDecision, PracticalWalkRequest } from './walk/practic
 import { createMapService, type MapReferencesInput, type MapService } from './services/map-service';
 import { createSubscriptionStore } from './notifications/subscription-store';
 import type { NotificationRuntime } from './routes/notifications';
+import { createValidationDependencyOverrides } from './validation/demonstration-dataset';
 
 export interface AppDependencies {
   readonly config: ServerConfig;
@@ -52,23 +53,25 @@ export function createProductionDependencies(
   config: ServerConfig,
   overrides: ProductionDependencyOverrides = {},
 ): AppDependencies {
+  const modeDefaults = config.mode === 'validation' ? createValidationDependencyOverrides() : {};
+  const selected = { ...modeDefaults, ...overrides };
   return Object.freeze({
     config: deepFreeze(structuredClone(config)),
-    clock: overrides.clock ?? systemClock,
+    clock: selected.clock ?? systemClock,
     exposure: evaluateExposure({ mode: config.mode }),
-    catalog: createCatalogService(overrides.catalog ?? { contentVersion: 'catalog-empty-v1', complexes: [] }),
-    nearbyUniverse: captureNearbyUniverse(overrides.nearbyUniverse ?? []),
-    walk: overrides.walk ?? (async () => Object.freeze({ kind: 'unavailable', reason: 'unsupported' })),
-    snapshotProvider: overrides.snapshotProvider ?? Object.freeze({
+    catalog: createCatalogService(selected.catalog ?? { contentVersion: 'catalog-empty-v1', complexes: [] }),
+    nearbyUniverse: captureNearbyUniverse(selected.nearbyUniverse ?? []),
+    walk: selected.walk ?? (async () => Object.freeze({ kind: 'unavailable', reason: 'unsupported' })),
+    snapshotProvider: selected.snapshotProvider ?? Object.freeze({
       capture: () => Object.freeze({
         identity: 'production-empty-v1',
         sourceHealth: Object.freeze([]),
         provenance: Object.freeze([]),
       }),
     }),
-    maps: createMapService(overrides.mapReferences ?? emptyMapReferences()),
-    logger: overrides.logger ?? Object.freeze({ log: (_event: SafeLogEvent) => undefined }),
-    notifications: overrides.notifications ?? Object.freeze({
+    maps: createMapService(selected.mapReferences ?? emptyMapReferences()),
+    logger: selected.logger ?? Object.freeze({ log: (_event: SafeLogEvent) => undefined }),
+    notifications: selected.notifications ?? Object.freeze({
       stage: 'disabled', subscriptions: createSubscriptionStore(),
     }),
   });

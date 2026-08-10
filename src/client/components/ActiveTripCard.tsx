@@ -37,6 +37,12 @@ export function ActiveTripCard({
         : null}
 
       <ValidityContext trip={trip} />
+      <p className="claim-line"><span>Accessible Route Only · {trip.accessibleRouteOnly ? 'On' : 'Off'}</span></p>
+      {offline && trip.accessibleRouteOnly ? (
+        <div className="accessibility-warning" role="alert" aria-live="assertive">
+          <p><strong>Accessible Route Only remains on.</strong> Current elevator status cannot be verified offline.</p>
+        </div>
+      ) : null}
       {completed ? <p className="trip-complete" role="status">Trip complete — rider confirmed</p> : null}
 
       <div className="active-trip-legs">

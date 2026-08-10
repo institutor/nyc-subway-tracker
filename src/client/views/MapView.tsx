@@ -15,6 +15,7 @@ import { StatusBanner } from '../components/StatusBanner';
 import { VectorNetworkMap, type MapViewport } from '../components/VectorNetworkMap';
 import type { StationChoice } from '../state/app-state';
 import type { OfflineJourneyPlanner } from '../offline/plan-offline-journey';
+import type { ValidationRiderEvidence } from '../../shared/validation/rider-evidence';
 
 export interface MapContext {
   readonly serviceMeaning: MapServiceMeaning;
@@ -44,6 +45,9 @@ export function MapView({
   onContextChange,
   planOfflineJourney,
   onActivateTrip,
+  accessibleRouteOnly,
+  onAccessibleRouteOnlyChange,
+  validationEvidence,
 }: {
   readonly api: TransitApiClient;
   readonly bootstrap?: BootstrapEnvelopeDto;
@@ -56,6 +60,9 @@ export function MapView({
   readonly onContextChange: (context: MapContext) => void;
   readonly planOfflineJourney?: OfflineJourneyPlanner;
   readonly onActivateTrip: (itinerary: JourneyItineraryDto, response: JourneyEnvelopeDto) => void;
+  readonly accessibleRouteOnly?: boolean;
+  readonly onAccessibleRouteOnlyChange?: (value: boolean) => void;
+  readonly validationEvidence?: ValidationRiderEvidence;
 }) {
   const [context, setContext] = useState<MapContext>(() => initialContext ?? {
     serviceMeaning: 'actual-now', spatialView: 'schematic', viewport: { centerX: 40.7128, centerY: -74.006, zoom: 1 },
@@ -218,6 +225,9 @@ export function MapView({
           connected={connected}
           planOfflineJourney={planOfflineJourney}
           onActivateTrip={onActivateTrip}
+          accessibleRouteOnly={accessibleRouteOnly}
+          onAccessibleRouteOnlyChange={onAccessibleRouteOnlyChange}
+          validationEvidence={validationEvidence}
         />
       ) : null}
     </section>

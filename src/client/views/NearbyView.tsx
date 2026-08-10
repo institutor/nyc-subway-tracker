@@ -15,6 +15,8 @@ export function NearbyView({
   onRetryLocation,
   onOpenPicker,
   onRefresh,
+  accessibleRouteOnly = false,
+  onAccessibleRouteOnlyChange = () => undefined,
   historical = false,
 }: {
   readonly phase: 'idle' | 'loading' | 'ready' | 'error';
@@ -28,6 +30,8 @@ export function NearbyView({
   readonly onRetryLocation: () => void;
   readonly onOpenPicker: () => void;
   readonly onRefresh: () => void;
+  readonly accessibleRouteOnly?: boolean;
+  readonly onAccessibleRouteOnlyChange?: (value: boolean) => void;
   readonly historical?: boolean;
 }) {
   const showSaved = Boolean(fallback) && savedChoices.length > 0 && !pickerOpen;
@@ -40,6 +44,14 @@ export function NearbyView({
           <h2 id="nearby-heading" className="surface-title">Nearby</h2>
         </div>
       </div>
+      <label className="check-control">
+        <input
+          type="checkbox"
+          checked={accessibleRouteOnly}
+          onChange={(event) => onAccessibleRouteOnlyChange(event.currentTarget.checked)}
+        />
+        Accessible Route Only
+      </label>
 
       {fallback ? (
         <StatusBanner tone="warning" actions={(

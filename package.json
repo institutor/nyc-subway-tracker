@@ -11,6 +11,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest",
     "test:e2e": "playwright test",
+    "test:e2e:production-validation": "playwright test --config playwright.production-validation.config.ts",
     "truth:all": "tsx scripts/truth-validation.ts all",
     "truth:replay:weekday": "tsx scripts/truth-validation.ts normal-weekday",
     "truth:replay:weekend": "tsx scripts/truth-validation.ts weekend-planned-work",

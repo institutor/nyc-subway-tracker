@@ -4,9 +4,11 @@ import type { Direction, SavedRecord } from '../shared/domain/types';
 import type { CommuteRuntimeWindow } from '../shared/domain/commute-window';
 import {
   bindJourneyCapturePackage,
+  JOURNEY_CAPTURE_DISCLOSURE,
   type JourneyCaptureClaimScope,
   type JourneyCapturePackage,
 } from '../shared/domain/journey-capture';
+import { createValidationRiderEvidence, type ValidationRiderEvidence } from '../shared/validation/rider-evidence';
 import {
   createTransitApiClient,
   type BoardEnvelopeDto,
@@ -23,9 +25,11 @@ import {
   type TransitApiClient,
 } from './api/client';
 import { ActiveTripCard } from './components/ActiveTripCard';
+import { ValidationAccessibilityPanel } from './components/AccessibilityPanel';
 import { AppHeader } from './components/AppHeader';
 import { OfflineBanner } from './components/OfflineBanner';
 import { StatusBanner } from './components/StatusBanner';
+import { ValidationPlatformGuidance } from './components/PlatformGuidance';
 import { boardRequestKey, type NearbyBoardState } from './components/StationCard';
 import { ThumbDock } from './components/ThumbDock';
 import {
@@ -179,6 +183,9 @@ export function App({
   const [activeTrip, setActiveTrip] = useState<ActiveTripRecord | null>(local.activeTrip);
   const [activeTripOpen, setActiveTripOpen] = useState(offline);
   const [captureMessage, setCaptureMessage] = useState<string>();
+  const [accessibleRouteOnly, setAccessibleRouteOnly] = useState(local.activeTrip?.accessibleRouteOnly ?? false);
+  const accessibleRouteOnlyRef = useRef(accessibleRouteOnly);
+  accessibleRouteOnlyRef.current = accessibleRouteOnly;
   const [mapContext, setMapContext] = useState<MapContext>(DEFAULT_MAP_CONTEXT);
   const [recoveredMapOverlay, setRecoveredMapOverlay] = useState<MapOverlayEnvelopeDto>();
   const [reconnectionState, setReconnectionState] = useState<ReconnectionState>();
@@ -276,7 +283,7 @@ export function App({
     return () => controller.abort();
   }, [apiClient, connectivityState, local.structural?.contentVersions.journeyGraph]);
 
-  const runNearby = useCallback((fix: LocationFixDto) => {
+  const runNearby = useCallback((fix: LocationFixDto, accessibilityConstraint = accessibleRouteOnlyRef.current) => {
     if (!connectedRef.current) return;
     nearbyAbort.current?.abort();
     const controller = new AbortController();
@@ -286,7 +293,7 @@ export function App({
     dispatch({ type: 'nearby-requested', requestId });
     void (async () => {
       try {
-        const response = await apiClient.nearby(fix, false, controller.signal);
+        const response = await apiClient.nearby(fix, accessibilityConstraint, controller.signal);
         if (controller.signal.aborted || nearbyGeneration.current !== requestId) return;
         connectivity.reportRequestResult('accepted');
         dispatch({ type: 'nearby-resolved', requestId, responseIdentity: response.responseIdentity, response });
@@ -374,7 +381,7 @@ export function App({
     onFix: (requestId, fix) => {
       const explicitSelection = stateRef.current.selectionOwner === 'explicit';
       dispatch({ type: 'location-resolved', requestId, fix });
-      runNearby(fix);
+      runNearby(fix, accessibleRouteOnlyRef.current);
       if (explicitSelection) return;
       setPickerOpen(false);
       setStationOpen(false);
@@ -602,9 +609,15 @@ export function App({
     });
   }, [acceptSavedMutation, savedStore]);
 
+  const validationDecisionTime = selectCurrentValidationDecisionTime(bootstrap);
+  const validationEvidence = useMemo(
+    () => validationDecisionTime ? createValidationRiderEvidence(new Date(validationDecisionTime)) : undefined,
+    [validationDecisionTime],
+  );
+
   const activateTrip = useCallback((itinerary: JourneyItineraryDto, response: JourneyEnvelopeDto) => {
     if (personalResettingRef.current) return;
-    const candidate = captureActiveTrip(itinerary, response, catalog?.data.complexes ?? []);
+    const candidate = captureActiveTrip(itinerary, response, catalog?.data.complexes ?? [], validationEvidence);
     if (!candidate) {
       setCaptureMessage('This trip cannot be stored until every required path and evidence field is available.');
       return;
@@ -612,12 +625,13 @@ export function App({
     const result = activeTripStore.capture(candidate);
     if (result.kind === 'saved') {
       setActiveTrip(result.trip);
+      if (result.trip) setAccessibleRouteOnly(result.trip.accessibleRouteOnly);
       setActiveTripOpen(true);
       setCaptureMessage('Trip saved on this device for underground use.');
     } else {
       setCaptureMessage('This trip could not be stored on this device.');
     }
-  }, [activeTripStore, catalog]);
+  }, [activeTripStore, catalog, validationEvidence]);
 
   const moveTripCursor = useCallback((pointId: string) => {
     if (personalResettingRef.current) return;
@@ -717,6 +731,10 @@ export function App({
   const selectedSaved = selectedStation
     ? savedRecords.some(({ complexId, constituentId }) => complexId === selectedStation.complexId && constituentId === selectedStation.constituentId)
     : false;
+  const activeTripValidationEvidence = activeTrip && validationEvidence
+    && validationEvidenceOwnsActiveTrip(validationEvidence, activeTrip)
+    ? validationEvidence
+    : undefined;
 
   return (
     <main className="app-shell" aria-labelledby="app-title">
@@ -741,7 +759,20 @@ export function App({
             <button type="button" aria-expanded={activeTripOpen} onClick={() => setActiveTripOpen((value) => !value)}>
               {activeTripOpen ? 'Hide active trip' : `Open active trip to ${activeTrip.destination.name}`}
             </button>
-            {activeTripOpen ? <ActiveTripCard trip={activeTrip} offline={!connected} onSetCursor={moveTripCursor} onClear={clearActiveTrip} /> : null}
+            {activeTripOpen ? <>
+              <ActiveTripCard trip={activeTrip} offline={!connected} onSetCursor={moveTripCursor} onClear={clearActiveTrip} />
+              {activeTrip.accessibleRouteOnly && activeTripValidationEvidence ? <>
+                <ValidationAccessibilityPanel
+                  warning={null}
+                  path={connected ? activeTripValidationEvidence.path : undefined}
+                  equipment={connected ? activeTripValidationEvidence.equipment : []}
+                  alternative={null}
+                  onSelectAlternative={() => undefined}
+                  decisionTime={activeTripValidationEvidence.decisionTime}
+                />
+                <ValidationPlatformGuidance guidance={activeTripValidationEvidence.guidance} decisionTime={activeTripValidationEvidence.decisionTime} />
+              </> : null}
+            </> : null}
           </section>
         ) : null}
         <div className="surface-frame">
@@ -793,6 +824,12 @@ export function App({
                 if (stateRef.current.location.fix) runNearby(stateRef.current.location.fix);
                 else location.retry();
               }}
+              accessibleRouteOnly={accessibleRouteOnly}
+              onAccessibleRouteOnlyChange={(value) => {
+                accessibleRouteOnlyRef.current = value;
+                setAccessibleRouteOnly(value);
+                if (connectedRef.current && stateRef.current.location.phase !== 'denied') location.retry();
+              }}
             />
           ) : state.surface === 'map' ? (
             <MapView
@@ -807,6 +844,9 @@ export function App({
               onContextChange={setMapContext}
               planOfflineJourney={offlineJourneyPlanner}
               onActivateTrip={activateTrip}
+              accessibleRouteOnly={accessibleRouteOnly}
+              onAccessibleRouteOnlyChange={setAccessibleRouteOnly}
+              validationEvidence={validationEvidence}
             />
           ) : state.surface === 'saved' ? (
             <SavedView
@@ -903,9 +943,9 @@ export function captureActiveTrip(
   itinerary: JourneyItineraryDto,
   response: JourneyEnvelopeDto,
   catalog: readonly CatalogComplexDto[],
+  validationEvidence?: ValidationRiderEvidence,
 ): ActiveTripRecord | undefined {
-  if (!response.data || (response.data.kind !== 'planned' && response.data.kind !== 'untimed')) return undefined;
-  if (response.data.scope.accessibleRouteOnly || itinerary.legs.length === 0) return undefined;
+  if (!response.data || (response.data.kind !== 'planned' && response.data.kind !== 'untimed') || itinerary.legs.length === 0) return undefined;
   const ownedItinerary = response.data.itineraries.find(({ id }) => id === itinerary.id);
   if (!ownedItinerary?.capture) return undefined;
   let capture: JourneyCapturePackage;
@@ -978,7 +1018,7 @@ export function captureActiveTrip(
       },
       origin,
       destination,
-      accessibleRouteOnly: false,
+      accessibleRouteOnly: response.data.scope.accessibleRouteOnly,
       legs,
       transfers,
       serviceClaims: capture.serviceClaims.map((claim) => ({
@@ -1004,10 +1044,71 @@ export function captureActiveTrip(
           patternBoundary: { ...capture.validity.patternBoundary },
         }),
       },
+      ...(response.data.scope.accessibleRouteOnly && validationEvidence
+        && validationEvidenceOwnsItinerary(validationEvidence, response, ownedItinerary) ? {
+          exitGuidance: {
+            ownerRecordId: validationEvidence.guidance.coverageRowId,
+            exitId: validationEvidence.path.journeyScope.destination.exitId,
+            legId: legs[legs.length - 1]!.id,
+            purpose: validationEvidence.guidance.zoneBenefit.copy,
+            verificationContext: `Board near the ${validationEvidence.guidance.position}. ${validationEvidence.guidance.zoneBenefit.copy}.`,
+            verifiedAt: validationEvidence.guidance.evaluatedAt,
+            limitations: [...validationEvidence.guidance.restrictions],
+          },
+        } : {}),
     };
   } catch {
     return undefined;
   }
+}
+
+/** Dynamic validation decisions belong only to the currently selected validation runtime. */
+export function selectCurrentValidationDecisionTime(
+  bootstrap: BootstrapEnvelopeDto | undefined,
+): string | undefined {
+  return bootstrap?.runtime.mode === 'validation'
+    && bootstrap.runtime.surface === 'demonstration'
+    && bootstrap.runtime.availability === 'available'
+    && bootstrap.demonstrationLabel === JOURNEY_CAPTURE_DISCLOSURE
+    ? bootstrap.decidedAt
+    : undefined;
+}
+
+function validationEvidenceOwnsActiveTrip(
+  evidence: ValidationRiderEvidence,
+  trip: ActiveTripRecord,
+): boolean {
+  const firstLeg = trip.legs[0];
+  return trip.captureContext.kind === 'response-owned'
+    && trip.captureContext.disclosure === JOURNEY_CAPTURE_DISCLOSURE
+    && trip.accessibleRouteOnly
+    && trip.origin.constituentId === evidence.path.journeyScope.origin.constituentStationId
+    && trip.destination.constituentId === evidence.path.journeyScope.destination.constituentStationId
+    && firstLeg?.route.id === evidence.path.routeId
+    && firstLeg.boundDirection === evidence.path.direction
+    && firstLeg.actualDestination === evidence.guidance.destination
+    && trip.exitGuidance?.ownerRecordId === evidence.guidance.coverageRowId
+    && evidence.path.equipmentIds.every((equipmentId) => trip.equipmentClaims.some((claim) => (
+      claim.equipmentId === equipmentId && claim.pathId === evidence.path.pathId
+    )));
+}
+
+function validationEvidenceOwnsItinerary(
+  evidence: ValidationRiderEvidence,
+  response: JourneyEnvelopeDto,
+  itinerary: JourneyItineraryDto,
+): boolean {
+  if (!response.data || (response.data.kind !== 'planned' && response.data.kind !== 'untimed')) return false;
+  const firstLeg = itinerary.legs[0];
+  return response.runtime.mode === 'validation'
+    && response.runtime.surface === 'demonstration'
+    && response.demonstrationLabel === JOURNEY_CAPTURE_DISCLOSURE
+    && response.data.scope.accessibleRouteOnly
+    && response.data.scope.originStationId === evidence.path.journeyScope.origin.constituentStationId
+    && response.data.scope.destinationStationId === evidence.path.journeyScope.destination.constituentStationId
+    && firstLeg?.routeId === evidence.path.routeId
+    && firstLeg.direction === evidence.path.direction
+    && firstLeg.actualDestination === evidence.guidance.destination;
 }
 
 function translateCaptureSchedule(

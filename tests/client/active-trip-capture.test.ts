@@ -71,6 +71,35 @@ describe('response-owned active-trip translation', () => {
     expect(screen.getByText('Current itinerary')).toBeTruthy();
     expect(screen.queryByText('Demonstration data \u2014 not live')).toBeNull();
   });
+
+  test('retains an exact accessible-only constraint and its owned equipment evidence offline', () => {
+    const response = structuredClone(journeyResponse()) as any;
+    response.data.scope.accessibleRouteOnly = true;
+    response.data.itineraries[0].capture.scope.accessibleRouteOnly = true;
+    response.data.itineraries[0].capture.equipmentClaims = [{
+      id: 'equipment-claim-el-a12-01',
+      equipmentId: 'EL-A12-01',
+      connectionId: 'connection-a12-platform',
+      pathId: 'path-a12-r20-accessible',
+      observation: 'working',
+      lastCheckedAt: '2026-08-05T11:58:00.000Z',
+    }];
+    const itinerary = response.data.itineraries[0] as JourneyItineraryDto;
+
+    const trip = captureActiveTrip(itinerary, response as JourneyEnvelopeDto, catalog);
+
+    expect(trip).toMatchObject({
+      accessibleRouteOnly: true,
+      equipmentClaims: [{
+        equipmentId: 'EL-A12-01', pathId: 'path-a12-r20-accessible', observation: 'working',
+      }],
+    });
+    if (!trip) throw new Error('Expected an accessible-only active trip');
+    render(createElement(ActiveTripCard, { trip, offline: true, onSetCursor: () => undefined }));
+    expect(screen.getByText('Accessible Route Only · On', { exact: true })).toBeTruthy();
+    expect(screen.getByRole('alert').textContent).toContain('Current elevator status cannot be verified offline');
+    expect(screen.getByText(/EL-A12-01/).closest('article')?.textContent).toContain('Unknown offline');
+  });
 });
 
 function journeyResponse(): JourneyEnvelopeDto {
