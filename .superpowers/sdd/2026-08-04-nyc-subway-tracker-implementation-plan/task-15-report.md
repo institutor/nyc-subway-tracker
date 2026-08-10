@@ -318,3 +318,56 @@ The serialized proof is deliberately compact and bounded. It contains no full `A
 - This report update is committed separately so the implementation hash and verification evidence remain independently inspectable.
 
 Concern: the official network attempt again returned eight bounded source failures, so a real admitted claim and two-record live comparison could not be produced in this environment. This is recorded as an external-source limitation, not converted into synthetic evidence or a weaker test. Operators still need two exact accepted official observations within fifteen minutes before live admission/comparison evidence exists, and no public stage may open from deterministic coverage alone.
+
+## Fix round 5 (2026-08-10)
+
+### Outcome and files
+
+The final Task 15 review round is implemented in `9d10bd8e514c26c142021a9e8a67d4a47985b4e7` (`join admitted shadow evidence`). It closes the four remaining joins without changing truncation, rider surfaces, storage, notification deletion, or any release gate.
+
+An admitted proof now commits to the SHA-256 of the exact raw issued `serviceChangeGate.alertContextIdentity` supplied to `admitArrivalCandidate`; that commitment is deliberately distinct from the canonical source-provenance alert-context identity and is included in the exact service-decision digest with the claim binding, assessment instant, eligible service kind/disposition, and source context. The raw potentially large issued identity is never serialized.
+
+Vehicle movement evidence now persists the actual vehicle stop ID, current source stop sequence, and canonical stop-call identity. Projection requires those actual fields to canonicalize exactly to the claim's next stop call before invoking arrival admission, including repeated-stop occurrences. The parser recomputes the movement digest from those fields and exact-joins the canonical movement call to the claim.
+
+Service ownership now requires `serviceIdentity.trainIdentity` to equal the claim's operational train identity. GTFS start time accepts exact two- or three-digit hours with minute and second each limited to `00`–`59`; the canonical service-instance digest remains exact. Admitted comparison binding now requires a strictly positive interval no greater than 15 minutes, a strictly later current observation, exact prior-observation/movement/current-source/decision/future-target chronology, and the exact `NEXT_STOP_ADVANCED` progressed comparison row.
+
+Implementation/docs files: `src/server/services/shadow-progress.ts`, `src/server/services/shadow-validation.ts`, `docs/data-sources.md`, and `docs/testing.md`. Governing tests: `tests/server/shadow-round3.test.ts` and `tests/server/shadow-validation.test.ts`. The controller-owned `progress.md` contained five Task 15 ledger lines before this round; it was not edited, staged, or committed and remains the only worktree change.
+
+### Normalized RED evidence
+
+1. Governing command: `npm test -- --run tests/server/shadow-round3.test.ts tests/server/shadow-validation.test.ts` — 2 files, 45 tests: 13 failed, 32 passed.
+2. Exact-proof/schema failures: the new admitted-evidence control was rejected because the parser did not yet own actual movement stop ID/sequence/canonical call or the issued-context commitment. The projection spy proved the stored issued digest differed from the SHA-256 commitment of the exact raw identity actually supplied to admission.
+3. Vehicle ownership failures: mismatched vehicle stop ID, mismatched sequence, null sequence, and a different repeated-stop occurrence all reached admission and produced at least one admitted claim.
+4. Service ownership failures: canonical three-digit-hour service time was rejected, while a service train identity different from the operational train and invalid minute/second values were accepted after recomputing the service instance and claim key.
+5. Bound chronology failures: an interval of 15 minutes plus 1 ms and equal/older current observations remained accepted as admitted proof even though their exact recomputed comparison was inconclusive. The zero-interval case was already rejected independently by the existing exact chronology envelope and remained governing green rather than being counted as a false RED.
+6. Before production changes, the same admitted-proof test contained a field-by-field tamper matrix for missing evidence, earlier record/key/observation/path, movement time/status/stop ID/sequence/canonical call/digest, target time/call/digest, scheduled/actual track/digest, service claim/binding/assessment/source context/issued context/service digest, admitted call, and standalone context.
+
+### GREEN progression and adversarial review
+
+- The exact raw issued alert identity is captured only at the projection boundary and immediately reduced to `issued-alert-context:<sha256>`. A spy asserts byte-for-byte ownership against the `ServiceChangeDecision` supplied to admission, and the serialized claim is asserted not to contain the raw identity. Structural validation requires the commitment's exact bounded form and exact service-decision digest; tampering either is rejected.
+- Vehicle projection canonicalizes only actual `vehicleProgress.stopId` plus `currentStopSequence`; null, mismatched, or wrong repeated occurrence suppresses before arrival admission is called. The compact proof includes those actual constituents, their canonical call, and a digest over source/train/time/status/stop/sequence/call. A self-consistent recomputed digest for a different vehicle call is rejected because it does not own the claim's next call.
+- Service ownership accepts `12:00:00` and `125:59:59`, rejects `12:60:00` and `12:00:60`, binds train identity to the operational claim, and recomputes the exact canonical service instance.
+- Binding validation reproduces the producer interval and observation gates and requires the admitted claim's exact comparison row to be progressed with `NEXT_STOP_ADVANCED`; interval and later-observation inconclusive rows cannot support admission.
+- The final adversarial rebuilt-record pass changed otherwise structurally valid prior source, train, route, direction, and destination ownership one at a time, rebuilt prior bytes/context/comparisons, and confirmed all five are rejected at the admitted binding rather than merely through a stale checksum.
+- Focused final GREEN: `npm test -- --run tests/server/shadow-round3.test.ts tests/server/shadow-validation.test.ts tests/server/shadow-progress.test.ts tests/server/live-shadow.test.ts tests/server/shadow-record.test.ts` — 5 files, 84/84 passed. `npm run typecheck` passed with no diagnostics.
+
+### Full verification and live shadow
+
+- `npm test -- --run`: 74 files, 1,147/1,147 passed.
+- `npm run typecheck`: passed with no diagnostics.
+- `npm run build`: passed; 70 modules transformed, CSS 29.09 kB and JS 421.71 kB before gzip.
+- Installed Chrome (`C:\Program Files\Google\Chrome\Application\chrome.exe`), `npm run test:e2e`: 5/5 passed.
+- `npm run shadow:dry-run` and documented `pnpm run shadow:dry-run`: both passed with exact `shadow-v2`, eight not-run official sources, nine closed gates, null comparison context, zero claims/comparisons, exact zero truncation, and no network.
+- `npm run shadow:live`: exited 0 and atomically wrote ignored artifact `.data/shadow/shadow-2026-08-10T09-39-06.978Z-1107684c-113c-4f98-a602-dd7d5f94fc49.json`, 3,026 bytes. Outcome was truthfully `COMPLETED_WITH_SOURCE_FAILURES`: 0 accepted and 8 failed official sources, 0 claims/comparisons, 9/9 gates closed, `riderExposure=false`, and `boardsExposed=false`.
+- `git diff --check` and staged diff hygiene passed. Runtime `.data` stayed ignored. The live artifact and changed implementation surface contained no coordinate, saved-record, rider-label, active-trip/cursor, permission, push endpoint/token/key, VAPID private key, secret, joinable personal identifier, or crowding construct.
+
+### Visual, React, accessibility, privacy, commits, and concerns
+
+Round 5 changes no rider-facing React component, CSS, layout, navigation, storage, effect, event listener, focus behavior, zoom handling, or reduced motion. The approved dark platform-spine Settings/Data Status surfaces remain unchanged, the installed-Chrome flow stays green, and all nine independent exposure gates remain immutable and closed.
+
+The compact proof persists bounded non-personal operational constituents and SHA-256 commitments only. It does not serialize the full arrival decision, full service decision, raw issued alert identity, official alert text, raw/audit/rider arrays, location, saved or active rider state, permission state, notification credential, secret, personal join, or crowding construct. Shadow validation neither calls a public-board route nor mutates exposure state.
+
+- Fix round 5 implementation/tests/docs: `9d10bd8e514c26c142021a9e8a67d4a47985b4e7` (`join admitted shadow evidence`).
+- This report update is committed separately so the final implementation hash and verification evidence remain independently inspectable.
+
+Concern: all eight official live source attempts failed again in this environment, so no authentic real-network admission or two-record comparison could be observed. The artifact records that limitation exactly and contains no synthetic claim. Two accepted official observations within 15 minutes are still required before live admission/comparison evidence exists; no deterministic test or failed live run may open a public stage.
