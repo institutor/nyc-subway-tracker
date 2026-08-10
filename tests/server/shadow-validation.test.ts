@@ -95,7 +95,7 @@ describe('shadow station-claim decisions', () => {
       && JSON.stringify(claim.decisions.serviceChange.alertContext) === JSON.stringify({
         state: 'accepted', sourceId: 'subway-alerts', observedAt: DECISION_TIME.toISOString(),
         retrievedAt: DECISION_TIME.toISOString(), sha256: 'b'.repeat(64),
-        alertContextIdentity: claim.decisions.serviceChange.alertContext.alertContextIdentity,
+        snapshotState: 'current', alertContextIdentity: sourceAlertIdentity(DECISION_TIME, DECISION_TIME),
       })
       && typeof claim.decisions.serviceChange.alertContext.alertContextIdentity === 'string')).toBe(true);
     expect(() => module.projectShadowClaims({
@@ -114,7 +114,22 @@ describe('shadow station-claim decisions', () => {
       alertSnapshot: staleSnapshot, alertSourceRecord: acceptedAlertSource(staleAt, DECISION_TIME), decisionTime: DECISION_TIME,
     });
     expect(staleClaims.every((claim: any) => claim.decisions.serviceChange.disposition === 'quarantined'
+      && claim.decisions.serviceChange.alertContext.snapshotState === 'stale'
       && claim.suppressionReasonCode === 'SERVICE_CHANGE_NOT_ELIGIBLE')).toBe(true);
+  });
+
+  test('keeps accepted alert evidence current at exactly ten minutes and quarantines it one millisecond later', async () => {
+    const { projectShadowClaims } = await import('../../src/server/services/shadow-validation') as any;
+    const boundary = new Date(DECISION_TIME.getTime() - 600_000);
+    const current = projectShadowClaims({ snapshot: snapshot([trip('train-alert-boundary', true)]), sourceRecord: acceptedSource(),
+      alertSnapshot: alertSnapshot(boundary, DECISION_TIME), alertSourceRecord: acceptedAlertSource(boundary, DECISION_TIME), decisionTime: DECISION_TIME });
+    expect(current.every((claim: any) => claim.decisions.serviceChange.alertContext.snapshotState === 'current'
+      && claim.decisions.serviceChange.disposition === 'eligible')).toBe(true);
+    const stale = new Date(boundary.getTime() - 1);
+    const quarantined = projectShadowClaims({ snapshot: snapshot([trip('train-alert-stale', true)]), sourceRecord: acceptedSource(),
+      alertSnapshot: alertSnapshot(stale, DECISION_TIME), alertSourceRecord: acceptedAlertSource(stale, DECISION_TIME), decisionTime: DECISION_TIME });
+    expect(quarantined.every((claim: any) => claim.decisions.serviceChange.alertContext.snapshotState === 'stale'
+      && claim.decisions.serviceChange.disposition === 'quarantined')).toBe(true);
   });
 
   test('a failed canonical alert source cannot yield eligible service', async () => {
@@ -241,17 +256,25 @@ function trip(trainInstanceId: string, movement: boolean, moment = DECISION_TIME
 }
 
 function priorRecordFor(trainId: string) {
-  const serviceInstanceId = `service:${createHash('sha256').update(encodeCanonicalStringTuple([
-    `trip-${trainId}`, '20260810', '12:00:00', trainId,
+  const serviceIdentity = { tripId: `trip-${trainId}`, startDate: '20260810', startTime: '12:00:00', trainIdentity: trainId };
+  const serviceInstanceId = `service:${createHash('sha256').update(encodeCanonicalStringTuple(Object.values(serviceIdentity))).digest('hex')}`;
+  const claimKey = `claim:${createHash('sha256').update(encodeCanonicalStringTuple([
+    'subway-rt-ace', trainId, '20260810', serviceInstanceId, 'A16N\u0000sequence:2',
   ])).digest('hex')}`;
   return {
     recordId: 'shadow-prior-history', decisionTime: DECISION_TIME.toISOString(), recordedAt: at(1).toISOString(),
     claims: [{
-      sourceId: 'subway-rt-ace', operationalTrainId: trainId, serviceDate: '20260810', serviceInstanceId,
+      claimKey, sourceId: 'subway-rt-ace', operationalTrainId: trainId, serviceDate: '20260810', serviceInstanceId, serviceIdentity,
       routeId: 'A', direction: 'northbound', terminalDestinationStopId: 'A16N',
       nextStopId: 'A14N', nextStopCallIdentity: 'A14N\u0000sequence:1', targetStopId: 'A16N', targetStopCallIdentity: 'A16N\u0000sequence:2',
       remainingStopCallIdentities: ['A14N\u0000sequence:1', 'A16N\u0000sequence:2'],
       observedAt: DECISION_TIME.toISOString(), disposition: 'suppressed',
     }],
   };
+}
+
+function sourceAlertIdentity(observed: Date, retrieved: Date) {
+  return `alert-context:${createHash('sha256').update(encodeCanonicalStringTuple([
+    'subway-alerts', observed.toISOString(), retrieved.toISOString(), 'b'.repeat(64),
+  ])).digest('hex')}`;
 }

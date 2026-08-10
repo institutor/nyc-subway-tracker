@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 
 import { encodeCanonicalStringTuple } from '../../shared/domain/canonical';
+import { CURRENT_ALERT_MAX_AGE_MS } from '../../shared/domain/alert-scope';
 import { evaluateExposure } from '../release/exposure-gates';
 import { MAX_SHADOW_RECORD_BYTES } from './shadow-record';
 
@@ -18,19 +19,38 @@ export type ShadowSuppressionReason =
 
 type AlertContext = {
   readonly state: 'accepted'; readonly sourceId: 'subway-alerts'; readonly observedAt: string;
-  readonly retrievedAt: string; readonly sha256: string; readonly alertContextIdentity: string;
+  readonly retrievedAt: string; readonly sha256: string; readonly snapshotState: 'current' | 'stale';
+  readonly alertContextIdentity: string;
 } | {
   readonly state: 'failed'; readonly sourceId: 'subway-alerts';
   readonly reasonCode: 'SOURCE_RETRIEVAL_OR_VALIDATION_FAILED';
 };
 
+export interface ShadowServiceIdentity {
+  readonly tripId: string; readonly startDate: string; readonly startTime: string; readonly trainIdentity: string;
+}
+
+export interface ShadowAdmissionEvidence {
+  readonly earlierRecordId: string; readonly priorClaimKey: string; readonly priorObservedAt: string;
+  readonly priorRemainingStopCallIdentities: readonly string[];
+  readonly movementTimestamp: string; readonly movementStatus: 'INCOMING_AT' | 'STOPPED_AT' | 'IN_TRANSIT_TO';
+  readonly movementEvidenceIdentity: string; readonly targetEventAt: string; readonly targetStopCallIdentity: string;
+  readonly targetEvidenceIdentity: string; readonly scheduledTrack: string; readonly actualTrack: string;
+  readonly trackEvidenceIdentity: string; readonly serviceClaimId: string;
+  readonly serviceClaimBindingDigest: string; readonly serviceAssessmentAt: string;
+  readonly serviceAlertContextIdentity: string; readonly issuedAlertContextDigest: string;
+  readonly serviceDecisionDigest: string; readonly admittedStopCallIdentity: string;
+}
+
 export interface ShadowProgressClaim {
   readonly claimId: string; readonly claimKey: string; readonly sourceId: string; readonly observedAt: string;
   readonly operationalTrainId: string; readonly serviceDate: string | null; readonly serviceInstanceId: string | null;
+  readonly serviceIdentity: ShadowServiceIdentity | null;
   readonly routeId: string; readonly direction: 'northbound' | 'southbound'; readonly terminalDestinationStopId: string;
   readonly nextStopId: string; readonly nextStopCallIdentity: string; readonly targetStopId: string;
   readonly targetStopCallIdentity: string; readonly remainingStopCallIdentities: readonly string[]; readonly decisionTime: string;
   readonly disposition: ShadowDisposition; readonly suppressionReasonCode?: ShadowSuppressionReason;
+  readonly admissionEvidence?: ShadowAdmissionEvidence;
   readonly provenance: { readonly source: 'gtfs-rt'; readonly sourceId: string; readonly feedGroupId: string;
     readonly observedAt: string; readonly retrievedAt: string; readonly sha256: string };
   readonly decisions: {
@@ -85,6 +105,53 @@ const COMPARISON_PARTITION_BYTES = 340_000;
 export function canonicalShadowClaimIdentity(parts: readonly (string | null)[]): { claimId: string; claimKey: string } {
   const digest = createHash('sha256').update(encodeCanonicalStringTuple(parts)).digest('hex');
   return { claimId: `claim-id:${digest}`, claimKey: `claim:${digest}` };
+}
+
+export function canonicalShadowServiceInstance(identity: ShadowServiceIdentity): string {
+  return `service:${digestTuple([identity.tripId, identity.startDate, identity.startTime, identity.trainIdentity])}`;
+}
+
+export function canonicalShadowAlertContextIdentity(input: {
+  readonly sourceId: string; readonly observedAt: string; readonly retrievedAt: string; readonly sha256: string;
+}): string {
+  return `alert-context:${digestTuple([input.sourceId, input.observedAt, input.retrievedAt, input.sha256])}`;
+}
+
+export function canonicalMovementEvidenceIdentity(input: {
+  readonly sourceId: string; readonly trainIdentity: string; readonly movementTimestamp: string;
+  readonly movementStatus: string; readonly stopCallIdentity: string;
+}): string {
+  return `movement:${digestTuple([input.sourceId, input.trainIdentity, input.movementTimestamp, input.movementStatus, input.stopCallIdentity])}`;
+}
+
+export function canonicalTargetEvidenceIdentity(input: {
+  readonly sourceId: string; readonly trainIdentity: string; readonly targetStopCallIdentity: string; readonly targetEventAt: string;
+}): string {
+  return `target:${digestTuple([input.sourceId, input.trainIdentity, input.targetStopCallIdentity, input.targetEventAt])}`;
+}
+
+export function canonicalTrackEvidenceIdentity(input: {
+  readonly sourceId: string; readonly trainIdentity: string; readonly targetStopCallIdentity: string;
+  readonly scheduledTrack: string; readonly actualTrack: string;
+}): string {
+  return `track:${digestTuple([input.sourceId, input.trainIdentity, input.targetStopCallIdentity,
+    input.scheduledTrack, input.actualTrack])}`;
+}
+
+export function canonicalServiceClaimBindingDigest(claim: ShadowProgressClaim): string {
+  return `service-claim:${digestTuple([claim.claimId, claim.routeId, claim.targetStopId, claim.direction,
+    claim.serviceIdentity?.tripId ?? null, claim.operationalTrainId])}`;
+}
+
+export function canonicalServiceDecisionDigest(evidence: Pick<ShadowAdmissionEvidence,
+  'serviceClaimId' | 'serviceClaimBindingDigest' | 'serviceAssessmentAt' | 'serviceAlertContextIdentity' | 'issuedAlertContextDigest'>): string {
+  return `service-decision:${digestTuple(['eligible-context', 'eligible', evidence.serviceClaimId,
+    evidence.serviceClaimBindingDigest, evidence.serviceAssessmentAt, evidence.serviceAlertContextIdentity, evidence.issuedAlertContextDigest])}`;
+}
+
+export function canonicalIssuedAlertContextDigest(input: Pick<ShadowAdmissionEvidence,
+  'serviceAlertContextIdentity' | 'serviceAssessmentAt'>): string {
+  return `issued-alert:${digestTuple([input.serviceAlertContextIdentity, input.serviceAssessmentAt])}`;
 }
 
 export function createShadowComparisonContext(input: {
@@ -168,11 +235,44 @@ export function validateShadowComparisonBinding(value: unknown, earlierBytes: st
   const expectedContext = createShadowComparisonContext({ earlier, earlierBytes, later: current });
   if (!sameJson(current.comparisonContext, expectedContext)) throw new Error('Invalid bound comparison context');
   const expected = compareShadowProgress(earlier, current);
-  if (current.truncation.comparisons.consideredCount !== expected.length
-    || !sameJson(current.progressComparisons, expected.slice(0, current.progressComparisons.length))) {
-    throw new Error('Invalid bound comparison rows');
-  }
+  const rebuilt = rebuildComparisonPartition(current, expected);
+  if (!sameJson(current.progressComparisons, rebuilt.progressComparisons)
+    || !sameJson(current.truncation.comparisons, rebuilt.truncation.comparisons)) throw new Error('Invalid bound comparison rows');
+  validateAdmittedClaims(current, earlier);
   return current;
+}
+
+function rebuildComparisonPartition(current: ShadowProgressRecord, expected: readonly ShadowProgressComparison[]): ShadowProgressRecord {
+  const retained = new Set(current.claims.map((claim) => claim.claimKey));
+  const eligible = expected.filter((row) => row.laterClaimKey === null || retained.has(row.laterClaimKey));
+  const comparisons = deterministicPrefix(eligible, (row) => row.earlierClaimKey, COMPARISON_PARTITION_BYTES);
+  const compose = (): ShadowProgressRecord => ({ ...current, progressComparisons: comparisons,
+    truncation: { claims: current.truncation.claims, comparisons: truncationDetail(expected.length, comparisons.length) } });
+  let rebuilt = compose();
+  while (byteLength(rebuilt) > MAX_SHADOW_RECORD_BYTES && comparisons.length > 0) { comparisons.pop(); rebuilt = compose(); }
+  if (byteLength(rebuilt) > MAX_SHADOW_RECORD_BYTES) throw new Error('Invalid bound comparison envelope');
+  return rebuilt;
+}
+
+function validateAdmittedClaims(current: ShadowProgressRecord, earlier: ShadowProgressRecord): void {
+  for (const claim of current.claims.filter((item) => item.disposition === 'admitted')) {
+    const evidence = claim.admissionEvidence!;
+    const prior = earlier.claims.find((item) => item.claimKey === evidence.priorClaimKey);
+    const currentIndex = prior?.remainingStopCallIdentities.indexOf(claim.nextStopCallIdentity) ?? -1;
+    if (!current.comparisonContext || evidence.earlierRecordId !== earlier.recordId || !prior
+      || prior.observedAt !== evidence.priorObservedAt
+      || !sameStrings(prior.remainingStopCallIdentities, evidence.priorRemainingStopCallIdentities)
+      || prior.sourceId !== claim.sourceId || prior.operationalTrainId !== claim.operationalTrainId
+      || prior.serviceDate !== claim.serviceDate || prior.serviceInstanceId !== claim.serviceInstanceId
+      || prior.targetStopCallIdentity !== claim.targetStopCallIdentity || prior.routeId !== claim.routeId
+      || prior.direction !== claim.direction || prior.terminalDestinationStopId !== claim.terminalDestinationStopId
+      || currentIndex <= 0 || !sameStrings(prior.remainingStopCallIdentities.slice(currentIndex), claim.remainingStopCallIdentities)
+      || Date.parse(evidence.movementTimestamp) <= Date.parse(prior.observedAt)
+      || Date.parse(evidence.movementTimestamp) > Date.parse(claim.decisionTime)
+      || Date.parse(claim.decisionTime) - Date.parse(evidence.movementTimestamp) > 90_000
+      || Date.parse(evidence.targetEventAt) <= Date.parse(claim.decisionTime)
+      || evidence.serviceAssessmentAt !== claim.decisionTime) throw new Error('Invalid admitted shadow comparison binding');
+  }
 }
 
 export function parseShadowProgressRecord(value: unknown): ShadowProgressRecord {
@@ -190,10 +290,13 @@ export function parseShadowProgressRecord(value: unknown): ShadowProgressRecord 
     const sources = row.sources.map((source, index) => validateSourceRecord(source, index, String(row.outcome), decisionTime, recordedAt));
     validateOutcome(sources, String(row.outcome)); row.gates.forEach(validateGateRecord);
     const claims = row.claims.map((claim) => validateClaim(claim, decisionTime, recordedAt, sources)); assertUniqueClaims(claims);
+    if (!canonicallyOrdered(claims, (claim) => claim.claimKey)) throw new Error();
     const comparisonContext = row.comparisonContext === null ? null : validateComparisonContext(row.comparisonContext, row, recordedAt);
     const truncation = validateTruncation(row.truncation, claims.length, row.progressComparisons.length);
     const progressComparisons = row.progressComparisons.map((item) => validateComparisonRecord(item, comparisonContext, claims));
     assertUniqueComparisons(progressComparisons);
+    if (!canonicallyOrdered(progressComparisons, (item) => item.earlierClaimKey)) throw new Error();
+    if (claims.some((claim) => claim.disposition === 'admitted') && comparisonContext === null) throw new Error();
     if (comparisonContext === null && progressComparisons.length !== 0) throw new Error();
     if (String(row.outcome) === 'DRY_RUN_NO_NETWORK' && (comparisonContext !== null || claims.length !== 0 || progressComparisons.length !== 0
       || truncation.claims.consideredCount !== 0 || truncation.comparisons.consideredCount !== 0)) throw new Error();
@@ -205,14 +308,14 @@ export function parseShadowProgressRecord(value: unknown): ShadowProgressRecord 
 
 function validateClaim(value: unknown, decisionTime: string, recordedAt: string, sources: readonly Record<string, unknown>[]): ShadowProgressClaim {
   const raw = value as Record<string, unknown>; const disposition = raw?.disposition;
-  const row = exactRecord(value, ['claimId', 'claimKey', 'sourceId', 'observedAt', 'operationalTrainId', 'serviceDate', 'serviceInstanceId',
+  const row = exactRecord(value, ['claimId', 'claimKey', 'sourceId', 'observedAt', 'operationalTrainId', 'serviceDate', 'serviceInstanceId', 'serviceIdentity',
     'routeId', 'direction', 'terminalDestinationStopId', 'nextStopId', 'nextStopCallIdentity', 'targetStopId', 'targetStopCallIdentity',
-    'remainingStopCallIdentities', 'decisionTime', 'disposition', ...(disposition === 'suppressed' ? ['suppressionReasonCode'] : []), 'provenance', 'decisions']);
+    'remainingStopCallIdentities', 'decisionTime', 'disposition', ...(disposition === 'suppressed' ? ['suppressionReasonCode'] : ['admissionEvidence']), 'provenance', 'decisions']);
   const strings = ['claimId', 'claimKey', 'sourceId', 'observedAt', 'operationalTrainId', 'routeId', 'terminalDestinationStopId',
     'nextStopId', 'nextStopCallIdentity', 'targetStopId', 'targetStopCallIdentity'] as const;
   if (!strings.every((key) => boundedString(row[key])) || !iso(row.observedAt) || row.decisionTime !== decisionTime
     || !ordered(row.observedAt, decisionTime, recordedAt) || !['northbound', 'southbound'].includes(String(row.direction))
-    || !((row.serviceDate === null && row.serviceInstanceId === null) || (validServiceDate(row.serviceDate) && validServiceInstance(row.serviceInstanceId)))
+    || !validServiceOwnership(row.serviceDate, row.serviceInstanceId, row.serviceIdentity)
     || !['admitted', 'suppressed'].includes(String(disposition)) || !Array.isArray(row.remainingStopCallIdentities)
     || row.remainingStopCallIdentities.length === 0 || row.remainingStopCallIdentities.length > 64
     || !row.remainingStopCallIdentities.every(validStopCallIdentity) || new Set(row.remainingStopCallIdentities).size !== row.remainingStopCallIdentities.length
@@ -234,11 +337,13 @@ function validateClaim(value: unknown, decisionTime: string, recordedAt: string,
   const service = exactRecord(decisions.serviceChange, ['kind', 'disposition', 'alertContext']);
   if (!validServiceDecision(String(service.kind), String(service.disposition))) throw new Error();
   validateAlertContext(service.alertContext, sources, decisionTime, recordedAt);
-  if ((service.alertContext as Record<string, unknown>).state === 'failed' && service.disposition === 'eligible') throw new Error();
+  const alertContext = service.alertContext as Record<string, unknown>;
+  if ((alertContext.state === 'failed' || alertContext.snapshotState !== 'current') && service.disposition === 'eligible') throw new Error();
   const admission = exactRecord(decisions.admission, ['kind', 'disposition', 'reasonCode']);
   if (disposition === 'admitted') {
     if (admission.kind !== 'admitted' || admission.disposition !== 'admitted' || admission.reasonCode !== 'GOVERNED_ADMISSION'
       || feed.kind !== 'current' || service.disposition !== 'eligible' || !row.serviceDate || !row.serviceInstanceId) throw new Error();
+    validateAdmissionEvidence(row.admissionEvidence, row as unknown as ShadowProgressClaim, decisionTime);
   } else if (admission.kind !== 'rejected' || admission.disposition !== 'suppressed' || admission.reasonCode !== suppression
     || (suppression === 'FEED_NOT_CURRENT') !== (feed.kind !== 'current')
     || (suppression === 'SERVICE_CHANGE_NOT_ELIGIBLE') !== (feed.kind === 'current' && service.disposition !== 'eligible')
@@ -295,10 +400,12 @@ function validateComparisonRecord(value: unknown, context: ShadowComparisonConte
 function validateAlertContext(value: unknown, sources: readonly Record<string, unknown>[], decisionTime: string, recordedAt: string): void {
   const raw = value as Record<string, unknown>;
   if (raw?.state === 'accepted') {
-    const row = exactRecord(value, ['state', 'sourceId', 'observedAt', 'retrievedAt', 'sha256', 'alertContextIdentity']);
+    const row = exactRecord(value, ['state', 'sourceId', 'observedAt', 'retrievedAt', 'sha256', 'snapshotState', 'alertContextIdentity']);
     const owner = sources.at(-1)!;
     if (row.sourceId !== 'subway-alerts' || owner.outcome !== 'accepted' || row.observedAt !== owner.observedAt
-      || row.retrievedAt !== owner.retrievedAt || row.sha256 !== owner.sha256 || !/^alert-context:[a-f0-9]{64}$/u.test(String(row.alertContextIdentity))
+      || row.retrievedAt !== owner.retrievedAt || row.sha256 !== owner.sha256
+      || row.alertContextIdentity !== canonicalShadowAlertContextIdentity({ sourceId: String(row.sourceId), observedAt: String(row.observedAt), retrievedAt: String(row.retrievedAt), sha256: String(row.sha256) })
+      || row.snapshotState !== (Date.parse(decisionTime) - Date.parse(String(row.observedAt)) <= CURRENT_ALERT_MAX_AGE_MS ? 'current' : 'stale')
       || !ordered(row.observedAt, row.retrievedAt, decisionTime, recordedAt)) throw new Error();
   } else {
     const row = exactRecord(value, ['state', 'sourceId', 'reasonCode']); const owner = sources.at(-1)!;
@@ -363,6 +470,42 @@ function isSuppressionReason(value: unknown): value is ShadowSuppressionReason {
 function validFeedPair(kind: unknown, reason: unknown): boolean { return (kind === 'current' && reason === 'accepted-current') || (kind === 'degraded' && reason === 'snapshot-age-degraded') || (kind === 'unavailable' && reason === 'snapshot-age-unavailable'); }
 function validServiceDecision(kind: string, disposition: string): boolean { return (kind === 'eligible-context' && disposition === 'eligible') || (kind === 'resolved-suppression' && disposition === 'resolved-ineligible') || (kind === 'arrival-claim-unavailable' && disposition === 'high-impact-unresolved') || (kind === 'quarantine-or-limitation' && disposition === 'quarantined'); }
 function validComparisonPair(result: unknown, reason: unknown): boolean { const reasons = ['NEXT_STOP_ADVANCED', 'NEXT_STOP_UNCHANGED', 'TRAIN_NOT_PRESENT_IN_LATER_SNAPSHOT', 'LATER_OBSERVATION_NOT_LATER', 'TARGET_NOT_IN_LATER_PATH', 'PATH_CHANGED_OR_REROUTED', 'COMPARISON_INTERVAL_EXCEEDED', 'SERVICE_OWNERSHIP_UNAVAILABLE', 'SERVICE_INSTANCE_CHANGED', 'CURRENT_CLAIMS_TRUNCATED']; return reasons.includes(String(reason)) && (result === 'progressed') === (reason === 'NEXT_STOP_ADVANCED') && (result === 'not-observed') === (reason === 'NEXT_STOP_UNCHANGED'); }
+function validServiceOwnership(serviceDate: unknown, serviceInstanceId: unknown, value: unknown): boolean {
+  if (serviceDate === null || serviceInstanceId === null || value === null) return serviceDate === null && serviceInstanceId === null && value === null;
+  if (!validServiceDate(serviceDate) || !validServiceInstance(serviceInstanceId)) return false;
+  try {
+    const row = exactRecord(value, ['tripId', 'startDate', 'startTime', 'trainIdentity']);
+    if (![row.tripId, row.startDate, row.startTime, row.trainIdentity].every(boundedString) || row.startDate !== serviceDate
+      || !/^\d{2}:\d{2}:\d{2}$/u.test(String(row.startTime))) return false;
+    return canonicalShadowServiceInstance(row as unknown as ShadowServiceIdentity) === serviceInstanceId;
+  } catch { return false; }
+}
+function validateAdmissionEvidence(value: unknown, claim: ShadowProgressClaim, decisionTime: string): void {
+  const row = exactRecord(value, ['earlierRecordId', 'priorClaimKey', 'priorObservedAt', 'priorRemainingStopCallIdentities',
+    'movementTimestamp', 'movementStatus', 'movementEvidenceIdentity', 'targetEventAt', 'targetStopCallIdentity',
+    'targetEvidenceIdentity', 'scheduledTrack', 'actualTrack', 'trackEvidenceIdentity', 'serviceClaimId', 'serviceClaimBindingDigest', 'serviceAssessmentAt',
+    'serviceAlertContextIdentity', 'issuedAlertContextDigest', 'serviceDecisionDigest', 'admittedStopCallIdentity']);
+  if (!boundedString(row.earlierRecordId) || !/^claim:[a-f0-9]{64}$/u.test(String(row.priorClaimKey)) || !iso(row.priorObservedAt)
+    || !Array.isArray(row.priorRemainingStopCallIdentities) || row.priorRemainingStopCallIdentities.length === 0
+    || row.priorRemainingStopCallIdentities.length > 64 || !row.priorRemainingStopCallIdentities.every(validStopCallIdentity)
+    || !iso(row.movementTimestamp) || !['INCOMING_AT', 'STOPPED_AT', 'IN_TRANSIT_TO'].includes(String(row.movementStatus))
+    || row.movementEvidenceIdentity !== canonicalMovementEvidenceIdentity({ sourceId: claim.sourceId,
+      trainIdentity: claim.operationalTrainId, movementTimestamp: String(row.movementTimestamp), movementStatus: String(row.movementStatus),
+      stopCallIdentity: claim.nextStopCallIdentity })
+    || !iso(row.targetEventAt) || Date.parse(String(row.targetEventAt)) <= Date.parse(decisionTime)
+    || row.targetStopCallIdentity !== claim.targetStopCallIdentity || row.admittedStopCallIdentity !== claim.targetStopCallIdentity
+    || row.targetEvidenceIdentity !== canonicalTargetEvidenceIdentity({ sourceId: claim.sourceId,
+      trainIdentity: claim.operationalTrainId, targetStopCallIdentity: claim.targetStopCallIdentity,
+      targetEventAt: String(row.targetEventAt) })
+    || !boundedString(row.scheduledTrack) || row.actualTrack !== row.scheduledTrack
+    || row.trackEvidenceIdentity !== canonicalTrackEvidenceIdentity({ sourceId: claim.sourceId,
+      trainIdentity: claim.operationalTrainId, targetStopCallIdentity: claim.targetStopCallIdentity,
+      scheduledTrack: String(row.scheduledTrack), actualTrack: String(row.actualTrack) }) || row.serviceClaimId !== claim.claimId
+    || row.serviceClaimBindingDigest !== canonicalServiceClaimBindingDigest(claim) || row.serviceAssessmentAt !== decisionTime
+    || row.serviceAlertContextIdentity !== (claim.decisions.serviceChange.alertContext as Extract<AlertContext, { state: 'accepted' }>).alertContextIdentity
+    || row.issuedAlertContextDigest !== canonicalIssuedAlertContextDigest(row as unknown as ShadowAdmissionEvidence)
+    || row.serviceDecisionDigest !== canonicalServiceDecisionDigest(row as unknown as ShadowAdmissionEvidence)) throw new Error();
+}
 function validServiceDate(value: unknown): value is string { if (typeof value !== 'string' || !/^\d{8}$/u.test(value)) return false; const year = Number(value.slice(0, 4)); const month = Number(value.slice(4, 6)); const day = Number(value.slice(6, 8)); const date = new Date(Date.UTC(year, month - 1, day)); return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day; }
 function validServiceInstance(value: unknown): value is string { return typeof value === 'string' && /^service:[a-f0-9]{64}$/u.test(value); }
 function boundedString(value: unknown): value is string { return typeof value === 'string' && value.length > 0 && value.length <= 256; }
@@ -373,3 +516,5 @@ function ordered(...values: unknown[]): boolean { return values.every(iso) && va
 function byteLength(value: unknown): number { return Buffer.byteLength(JSON.stringify(value), 'utf8'); }
 function sameStrings(left: readonly string[], right: readonly string[]): boolean { return left.length === right.length && left.every((value, index) => value === right[index]); }
 function sameJson(left: unknown, right: unknown): boolean { return JSON.stringify(left) === JSON.stringify(right); }
+function canonicallyOrdered<T>(rows: readonly T[], key: (row: T) => string): boolean { return rows.every((row, index) => index === 0 || key(rows[index - 1]).localeCompare(key(row)) < 0); }
+function digestTuple(values: readonly (string | null)[]): string { return createHash('sha256').update(encodeCanonicalStringTuple(values)).digest('hex'); }

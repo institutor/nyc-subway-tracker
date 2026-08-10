@@ -41,7 +41,7 @@ describe('exact shadow-v2 parsing and later-stop comparison', () => {
         nextStopId: 'A14N',
         nextStopCallIdentity: stopCall('A14N', 2),
         remainingStopCallIdentities: [stopCall('A14N', 2), stopCall('A16N', 3)],
-        disposition: 'admitted',
+        disposition: 'suppressed',
       })],
     });
 
@@ -52,8 +52,8 @@ describe('exact shadow-v2 parsing and later-stop comparison', () => {
         targetStopId: 'A16N',
         targetStopCallIdentity: stopCall('A16N', 3),
         earlierDisposition: 'suppressed',
-        laterDisposition: 'admitted',
-        dispositionTransition: 'suppressed-to-admitted',
+        laterDisposition: 'suppressed',
+        dispositionTransition: 'suppressed-to-suppressed',
         result: 'progressed',
         reasonCode: 'NEXT_STOP_ADVANCED',
       }),
@@ -216,7 +216,7 @@ function shadowRecord(input: {
       claims: { consideredCount: input.claims.length, includedCount: input.claims.length, omittedCount: 0, reasonCode: 'NOT_TRUNCATED' },
       comparisons: { consideredCount: 0, includedCount: 0, omittedCount: 0, reasonCode: 'NOT_TRUNCATED' },
     },
-    claims: input.claims,
+    claims: [...input.claims].sort((left, right) => left.claimKey.localeCompare(right.claimKey)),
     progressComparisons: [],
   };
 }
@@ -243,7 +243,8 @@ function claim(overrides: Record<string, unknown> = {}) {
     observedAt: claimObservedAt,
     operationalTrainId: 'train-1',
     serviceDate: '20260810',
-    serviceInstanceId: `service:${sha256}`,
+    serviceInstanceId: `service:${createHash('sha256').update(encodeCanonicalStringTuple(['trip-1', '20260810', '12:00:00', 'train-1'])).digest('hex')}`,
+    serviceIdentity: { tripId: 'trip-1', startDate: '20260810', startTime: '12:00:00', trainIdentity: 'train-1' },
     routeId: 'A',
     direction: 'northbound',
     terminalDestinationStopId: 'A16N',
@@ -263,7 +264,8 @@ function claim(overrides: Record<string, unknown> = {}) {
       feedHealth: { kind: 'current', reasonCode: 'accepted-current' },
       serviceChange: { kind: 'eligible-context', disposition: 'eligible', alertContext: {
         state: 'accepted', sourceId: 'subway-alerts', observedAt: claimObservedAt, retrievedAt: claimObservedAt,
-        sha256, alertContextIdentity: `alert-context:${sha256}`,
+        sha256, snapshotState: 'current',
+        alertContextIdentity: `alert-context:${createHash('sha256').update(encodeCanonicalStringTuple(['subway-alerts', claimObservedAt, claimObservedAt, sha256])).digest('hex')}`,
       } },
       admission: { kind: 'rejected', disposition: 'suppressed', reasonCode: 'TRUSTED_HISTORY_UNAVAILABLE' },
     },

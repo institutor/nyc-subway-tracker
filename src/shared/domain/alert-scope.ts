@@ -120,7 +120,7 @@ export interface AlertScopeDecision {
   readonly rawOfficialAudit: RawOfficialAlertAudit;
 }
 
-const CURRENT_ALERT_MAX_AGE_MS = 600_000;
+export const CURRENT_ALERT_MAX_AGE_MS = 600_000;
 
 export function classifyAlertSnapshot(input: AlertSnapshotInput, assessedAt: Date): AlertSnapshotDecision {
   const assessedAtMs = validDate(assessedAt, 'alert assessment instant');

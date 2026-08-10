@@ -8,7 +8,11 @@ import { evaluateServiceChanges, type ServiceChangeDecision } from '../../shared
 import { canonicalStopCallIdentity } from '../../shared/domain/train-identity';
 import type { AlertSnapshot, NormalizedAlert } from '../gtfs/alert-loader';
 import type { NormalizedTripUpdate, RealtimeSnapshot } from '../gtfs/realtime-normalizer';
-import { canonicalShadowClaimIdentity, MAX_SHADOW_COMPARISON_INTERVAL_MS, type ShadowProgressClaim, type ShadowProgressRecord, type ShadowSuppressionReason } from './shadow-progress';
+import { canonicalIssuedAlertContextDigest, canonicalMovementEvidenceIdentity, canonicalServiceClaimBindingDigest, canonicalServiceDecisionDigest,
+  canonicalTargetEvidenceIdentity, canonicalTrackEvidenceIdentity,
+  canonicalShadowAlertContextIdentity, canonicalShadowClaimIdentity, canonicalShadowServiceInstance,
+  MAX_SHADOW_COMPARISON_INTERVAL_MS, type ShadowAdmissionEvidence, type ShadowProgressClaim,
+  type ShadowProgressRecord, type ShadowServiceIdentity, type ShadowSuppressionReason } from './shadow-progress';
 
 export type ShadowClaim = ShadowProgressClaim;
 
@@ -27,7 +31,7 @@ export type ShadowAlertSource = {
 export function projectShadowClaims(input: {
   readonly snapshot: RealtimeSnapshot; readonly sourceRecord: AcceptedShadowRealtimeSource;
   readonly alertSnapshot: AlertSnapshot | null; readonly alertSourceRecord: ShadowAlertSource;
-  readonly priorRecord?: Pick<ShadowProgressRecord, 'decisionTime' | 'recordedAt' | 'claims'>;
+  readonly priorRecord?: Pick<ShadowProgressRecord, 'recordId' | 'decisionTime' | 'recordedAt' | 'claims'>;
   readonly decisionTime: Date;
 }): readonly ShadowClaim[] {
   assertSourceOwnership(input.snapshot, input.sourceRecord);
@@ -53,7 +57,8 @@ function projectUpdateClaims(
   try { stopCallIdentities = stops.map(canonicalStopCallIdentity); } catch { return []; }
   const terminalDestinationStopId = stops.at(-1)!.stopId;
   const serviceDate = /^\d{8}$/u.test(update.trip.startDate ?? '') ? update.trip.startDate : null;
-  const serviceInstanceId = serviceIdentity(update, serviceDate);
+  const serviceIdentity = serviceIdentityFor(update, serviceDate);
+  const serviceInstanceId = serviceIdentity ? canonicalShadowServiceInstance(serviceIdentity) : null;
   return stops.flatMap((target, targetIndex): readonly ShadowClaim[] => {
     const targetStopCallIdentity = stopCallIdentities[targetIndex]; const remainingStopCallIdentities = stopCallIdentities.slice(0, targetIndex + 1);
     const identity = canonicalShadowClaimIdentity([input.snapshot.sourceId, update.trainInstanceId, serviceDate, serviceInstanceId, targetStopCallIdentity]);
@@ -63,21 +68,26 @@ function projectUpdateClaims(
     } });
     const serviceChange = alertEvidence.usable ? evaluatedService
       : { kind: 'quarantine-or-limitation' as const, disposition: 'quarantined' as const };
-    const serviceContext = alertEvidence.context.state === 'accepted'
-      ? { ...alertEvidence.context, alertContextIdentity: `alert-context:${createHash('sha256').update(evaluatedService.alertContextIdentity).digest('hex')}` }
-      : alertEvidence.context;
+    const serviceContext = alertEvidence.context;
     const trackDisposition = target.actualTrack && target.scheduledTrack && target.actualTrack === target.scheduledTrack ? 'eligible' as const : 'quarantined' as const;
     const reasonCode = suppressionReason(update, input.decisionTime, feedHealth, serviceChange, trackDisposition, serviceDate, serviceInstanceId);
-    const admitted = reasonCode === 'TRUSTED_HISTORY_UNAVAILABLE' && hasGovernedAdmission(input, update, serviceDate, serviceInstanceId,
+    const provisionalClaim = {
+      ...identity, sourceId: input.snapshot.sourceId, observedAt: input.snapshot.feedTimestamp.toISOString(),
+      operationalTrainId: update.trainInstanceId, serviceDate, serviceInstanceId, serviceIdentity, routeId, direction,
+      terminalDestinationStopId, nextStopId: stops[0].stopId, nextStopCallIdentity: stopCallIdentities[0],
+      targetStopId: target.stopId, targetStopCallIdentity, remainingStopCallIdentities, decisionTime: input.decisionTime.toISOString(),
+    } as unknown as ShadowProgressClaim;
+    const admissionEvidence = reasonCode === 'TRUSTED_HISTORY_UNAVAILABLE' ? governedAdmissionEvidence(input, update, provisionalClaim,
       targetStopCallIdentity, target, remainingStopCallIdentities, terminalDestinationStopId, direction, evaluatedService,
-      serviceContext, identity.claimId, trackDisposition);
+      serviceContext, identity.claimId, trackDisposition) : null;
+    const admitted = admissionEvidence !== null;
     return [Object.freeze({
       ...identity, sourceId: input.snapshot.sourceId, observedAt: input.snapshot.feedTimestamp.toISOString(),
-      operationalTrainId: update.trainInstanceId, serviceDate, serviceInstanceId, routeId, direction, terminalDestinationStopId,
+      operationalTrainId: update.trainInstanceId, serviceDate, serviceInstanceId, serviceIdentity, routeId, direction, terminalDestinationStopId,
       nextStopId: stops[0].stopId, nextStopCallIdentity: stopCallIdentities[0], targetStopId: target.stopId,
       targetStopCallIdentity, remainingStopCallIdentities, decisionTime: input.decisionTime.toISOString(),
       disposition: admitted ? 'admitted' as const : 'suppressed' as const,
-      ...(!admitted ? { suppressionReasonCode: reasonCode } : {}),
+      ...(!admitted ? { suppressionReasonCode: reasonCode } : { admissionEvidence }),
       provenance: { source: 'gtfs-rt' as const, sourceId: input.sourceRecord.sourceId, feedGroupId: input.sourceRecord.feedGroupId,
         observedAt: input.sourceRecord.observedAt, retrievedAt: input.sourceRecord.retrievedAt, sha256: input.sourceRecord.sha256 },
       decisions: {
@@ -91,31 +101,32 @@ function projectUpdateClaims(
   });
 }
 
-function hasGovernedAdmission(
-  input: Parameters<typeof projectShadowClaims>[0], update: NormalizedTripUpdate, serviceDate: string | null,
-  serviceInstanceId: string | null, targetIdentity: string, target: NormalizedTripUpdate['remainingStopCalls'][number],
+function governedAdmissionEvidence(
+  input: Parameters<typeof projectShadowClaims>[0], update: NormalizedTripUpdate, claim: ShadowProgressClaim,
+  targetIdentity: string, target: NormalizedTripUpdate['remainingStopCalls'][number],
   currentPath: readonly string[], destination: string, direction: 'northbound' | 'southbound',
   service: ServiceChangeDecision, alertContext: ReturnType<typeof alertDecisionFor>['context'], serviceClaimId: string,
   track: 'eligible' | 'quarantined',
-): boolean {
-  if (!input.priorRecord || !serviceDate || !serviceInstanceId || service.disposition !== 'eligible' || track !== 'eligible'
-    || alertContext.state !== 'accepted') return false;
+): ShadowAdmissionEvidence | null {
+  if (!input.priorRecord || !claim.serviceDate || !claim.serviceInstanceId || service.disposition !== 'eligible' || track !== 'eligible'
+    || alertContext.state !== 'accepted' || alertContext.snapshotState !== 'current') return null;
   const interval = input.decisionTime.getTime() - Date.parse(input.priorRecord.decisionTime);
-  if (interval <= 0 || interval > MAX_SHADOW_COMPARISON_INTERVAL_MS) return false;
-  const prior = input.priorRecord.claims.find((claim) => claim.sourceId === input.snapshot.sourceId
-    && claim.operationalTrainId === update.trainInstanceId && claim.serviceDate === serviceDate && claim.serviceInstanceId === serviceInstanceId
-    && claim.targetStopCallIdentity === targetIdentity && claim.routeId === update.trip.routeId && claim.direction === direction
-    && claim.terminalDestinationStopId === destination);
-  if (!prior || Date.parse(prior.observedAt) >= input.snapshot.feedTimestamp.getTime()) return false;
+  if (interval <= 0 || interval > MAX_SHADOW_COMPARISON_INTERVAL_MS) return null;
+  const prior = input.priorRecord.claims.find((candidate) => candidate.sourceId === input.snapshot.sourceId
+    && candidate.operationalTrainId === update.trainInstanceId && candidate.serviceDate === claim.serviceDate
+    && candidate.serviceInstanceId === claim.serviceInstanceId && candidate.targetStopCallIdentity === targetIdentity
+    && candidate.routeId === update.trip.routeId && candidate.direction === direction
+    && candidate.terminalDestinationStopId === destination);
+  if (!prior || Date.parse(prior.observedAt) >= input.snapshot.feedTimestamp.getTime()) return null;
   const currentIndex = prior.remainingStopCallIdentities.indexOf(currentPath[0]);
-  if (currentIndex <= 0 || !sameStrings(prior.remainingStopCallIdentities.slice(currentIndex), currentPath)) return false;
+  if (currentIndex <= 0 || !sameStrings(prior.remainingStopCallIdentities.slice(currentIndex), currentPath)) return null;
   const movement = update.vehicleProgress;
   if (!movement || movement.currentStatus === 'UNKNOWN' || !movement.movementTimestamp
     || movement.movementTimestamp.getTime() <= Date.parse(prior.observedAt)
     || input.decisionTime.getTime() - movement.movementTimestamp.getTime() > 90_000
-    || movement.movementTimestamp.getTime() > input.decisionTime.getTime()) return false;
+    || movement.movementTimestamp.getTime() > input.decisionTime.getTime()) return null;
   const arrivalAt = target.arrivalTime ?? target.departureTime;
-  if (!arrivalAt || arrivalAt.getTime() <= input.decisionTime.getTime()) return false;
+  if (!arrivalAt || arrivalAt.getTime() <= input.decisionTime.getTime() || !target.scheduledTrack || target.actualTrack !== target.scheduledTrack) return null;
   const decision = admitArrivalCandidate({
     stableTrainIdentity: update.trainInstanceId, publishedTripId: update.trip.tripId ?? update.trainInstanceId,
     patternIdentity: createHash('sha256').update(encodeCanonicalStringTuple(currentPath)).digest('hex'),
@@ -130,7 +141,27 @@ function hasGovernedAdmission(
       observedAt: input.snapshot.feedTimestamp, retrievedAt: input.snapshot.retrievedAt },
   }, { feedGroupId: input.snapshot.feedGroupId, exactStopId: target.stopId, direction, destination, comparisonAt: input.decisionTime,
     serviceAssessmentAt: input.decisionTime, serviceAlertContextIdentity: service.alertContextIdentity });
-  return decision.kind === 'admitted' && decision.stopCallIdentity === targetIdentity;
+  if (decision.kind !== 'admitted' || decision.stopCallIdentity !== targetIdentity) return null;
+  const movementTimestamp = movement.movementTimestamp.toISOString();
+  const movementStatus = movement.currentStatus;
+  const base = {
+    earlierRecordId: input.priorRecord.recordId, priorClaimKey: prior.claimKey, priorObservedAt: prior.observedAt,
+    priorRemainingStopCallIdentities: prior.remainingStopCallIdentities, movementTimestamp, movementStatus,
+    movementEvidenceIdentity: canonicalMovementEvidenceIdentity({ sourceId: claim.sourceId, trainIdentity: claim.operationalTrainId,
+      movementTimestamp, movementStatus, stopCallIdentity: claim.nextStopCallIdentity }),
+    targetEventAt: arrivalAt.toISOString(), targetStopCallIdentity: targetIdentity,
+    targetEvidenceIdentity: canonicalTargetEvidenceIdentity({ sourceId: claim.sourceId, trainIdentity: claim.operationalTrainId,
+      targetStopCallIdentity: targetIdentity, targetEventAt: arrivalAt.toISOString() }), scheduledTrack: target.scheduledTrack,
+    actualTrack: target.actualTrack, trackEvidenceIdentity: canonicalTrackEvidenceIdentity({ sourceId: claim.sourceId,
+      trainIdentity: claim.operationalTrainId, targetStopCallIdentity: targetIdentity,
+      scheduledTrack: target.scheduledTrack, actualTrack: target.actualTrack }),
+    serviceClaimId, serviceClaimBindingDigest: canonicalServiceClaimBindingDigest(claim),
+    serviceAssessmentAt: input.decisionTime.toISOString(), serviceAlertContextIdentity: alertContext.alertContextIdentity,
+    issuedAlertContextDigest: '',
+    admittedStopCallIdentity: decision.stopCallIdentity,
+  };
+  base.issuedAlertContextDigest = canonicalIssuedAlertContextDigest(base);
+  return Object.freeze({ ...base, serviceDecisionDigest: canonicalServiceDecisionDigest(base) });
 }
 
 function alertDecisionFor(snapshot: AlertSnapshot | null, source: ShadowAlertSource, decisionTime: Date) {
@@ -147,8 +178,8 @@ function alertDecisionFor(snapshot: AlertSnapshot | null, source: ShadowAlertSou
   }
   const decision = classifyAlertSnapshot(alertInput(snapshot), decisionTime);
   const context = { state: 'accepted' as const, sourceId: 'subway-alerts' as const, observedAt: source.observedAt,
-    retrievedAt: source.retrievedAt, sha256: source.sha256,
-    alertContextIdentity: `alert-context:${createHash('sha256').update(encodeCanonicalStringTuple([source.sourceId, source.observedAt, source.retrievedAt, source.sha256])).digest('hex')}` };
+    retrievedAt: source.retrievedAt, sha256: source.sha256, snapshotState: decision.kind === 'current' ? 'current' as const : 'stale' as const,
+    alertContextIdentity: canonicalShadowAlertContextIdentity(source) };
   return { usable: decision.kind === 'current', decision, context };
 }
 
@@ -170,11 +201,9 @@ function assertAlertSource(source: ShadowAlertSource): void {
     throw new Error('Invalid canonical alert source record');
   }
 }
-function serviceIdentity(update: NormalizedTripUpdate, serviceDate: string | null): string | null {
+function serviceIdentityFor(update: NormalizedTripUpdate, serviceDate: string | null): ShadowServiceIdentity | null {
   if (!serviceDate || !update.trip.tripId || !update.trip.startTime || !update.trainInstanceId) return null;
-  return `service:${createHash('sha256').update(encodeCanonicalStringTuple([
-    update.trip.tripId, serviceDate, update.trip.startTime, update.trainInstanceId,
-  ])).digest('hex')}`;
+  return { tripId: update.trip.tripId, startDate: serviceDate, startTime: update.trip.startTime, trainIdentity: update.trainInstanceId };
 }
 function shadowFeed(feed: FeedHealthDecision): ShadowProgressClaim['decisions']['feedHealth'] {
   return feed.kind === 'current' ? { kind: 'current', reasonCode: 'accepted-current' }

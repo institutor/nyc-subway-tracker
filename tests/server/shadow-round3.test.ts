@@ -10,6 +10,27 @@ const SHA = 'a'.repeat(64);
 const ALERT_SHA = 'b'.repeat(64);
 
 describe('bound shadow comparison evidence', () => {
+  test('binds compact admitted evidence to the exact prior claim and rejects every tampered admission constituent', async () => {
+    const module = await import('../../src/server/services/shadow-progress') as any;
+    const { earlierBytes, later } = admittedPair(module);
+    expect(() => module.validateShadowComparisonBinding(later, earlierBytes)).not.toThrow();
+    for (const [label, alter] of [
+      ['missing evidence', (value: any) => { delete value.claims[0].admissionEvidence; }],
+      ['movement', (value: any) => { value.claims[0].admissionEvidence.movementTimestamp = plus(LATER, -1); }],
+      ['target event', (value: any) => { value.claims[0].admissionEvidence.targetEventAt = LATER; }],
+      ['different future target event', (value: any) => { value.claims[0].admissionEvidence.targetEventAt = plus(LATER, 60_001); }],
+      ['track', (value: any) => { value.claims[0].admissionEvidence.actualTrack = '2'; }],
+      ['different eligible track', (value: any) => { value.claims[0].admissionEvidence.actualTrack = '2'; value.claims[0].admissionEvidence.scheduledTrack = '2'; }],
+      ['service digest', (value: any) => { value.claims[0].admissionEvidence.serviceDecisionDigest = `service-decision:${'e'.repeat(64)}`; }],
+      ['prior key', (value: any) => { value.claims[0].admissionEvidence.priorClaimKey = `claim:${'f'.repeat(64)}`; }],
+      ['standalone context', (value: any) => { value.comparisonContext = null; value.progressComparisons = []; value.truncation.comparisons = { consideredCount: 0, includedCount: 0, omittedCount: 0, reasonCode: 'NOT_TRUNCATED' }; }],
+    ] as const) {
+      const tampered = structuredClone(later);
+      alter(tampered);
+      expect(() => module.validateShadowComparisonBinding(tampered, earlierBytes), label).toThrow(/invalid|bound|comparison/i);
+    }
+  });
+
   test('binds exact prior bytes and every row to earlier/current records and claim keys', async () => {
     const module = await import('../../src/server/services/shadow-progress') as any;
     expect(typeof module.createShadowComparisonContext).toBe('function');
@@ -78,7 +99,7 @@ describe('bound shadow comparison evidence', () => {
     const earlier = record({ recordId: 'shadow-service-earlier', at: EARLIER, claims: [claim()] });
     const tooLate = '2026-08-10T12:15:00.001Z';
     const changedService = claim({
-      at: tooLate, serviceDate: '20260811', serviceInstanceId: serviceInstance('20260811'),
+      at: tooLate, serviceDate: '20260811', serviceIdentity: serviceIdentity('20260811'),
       nextStopId: 'A14N', nextStopCallIdentity: stopCall('A14N', 2),
       remainingStopCallIdentities: [stopCall('A14N', 2), stopCall('A16N', 3)],
     });
@@ -106,6 +127,85 @@ describe('bound shadow comparison evidence', () => {
 });
 
 describe('exact shadow chronology and bounded composition', () => {
+  test('rejects a standalone admitted claim when no exact prior comparison context exists', async () => {
+    const { parseShadowProgressRecord } = await import('../../src/server/services/shadow-progress') as any;
+    const admitted = claim();
+    admitted.disposition = 'admitted';
+    delete admitted.suppressionReasonCode;
+    admitted.decisions.admission = { kind: 'admitted', disposition: 'admitted', reasonCode: 'GOVERNED_ADMISSION' };
+    const value = record({ recordId: 'shadow-standalone-admitted', at: EARLIER, claims: [admitted] });
+    expect(() => parseShadowProgressRecord(value)).toThrow(/invalid prior shadow record/i);
+  });
+
+  test.each([
+    ['an arbitrary valid-hex service identity', (value: any) => {
+      value.claims[0].serviceInstanceId = `service:${'c'.repeat(64)}`; canonicalizeClaim(value.claims[0]);
+    }],
+    ['an arbitrary valid-hex alert context identity', (value: any) => {
+      value.claims[0].decisions.serviceChange.alertContext.alertContextIdentity = `alert-context:${'d'.repeat(64)}`;
+    }],
+  ])('rejects %s that is not recomputed from its canonical constituents', async (_label, alter) => {
+    const { parseShadowProgressRecord } = await import('../../src/server/services/shadow-progress') as any;
+    const value = record({ recordId: 'shadow-derived-identity', at: EARLIER, claims: [claim()] });
+    expect(() => parseShadowProgressRecord(value)).not.toThrow();
+    alter(value);
+    expect(() => parseShadowProgressRecord(value)).toThrow(/invalid prior shadow record/i);
+  });
+
+  test('rejects eligible service from an accepted alert older than the shared ten-minute threshold', async () => {
+    const { parseShadowProgressRecord } = await import('../../src/server/services/shadow-progress') as any;
+    const value = record({ recordId: 'shadow-stale-alert', at: EARLIER, claims: [claim()] });
+    const stale = plus(EARLIER, -600_001);
+    value.sources[7].observedAt = stale;
+    value.claims[0].decisions.serviceChange.alertContext.observedAt = stale;
+    expect(() => parseShadowProgressRecord(value)).toThrow(/invalid prior shadow record/i);
+  });
+
+  test('requires canonical claim and comparison ordering', async () => {
+    const module = await import('../../src/server/services/shadow-progress') as any;
+    const first = claim({ targetStopId: 'A14N', targetStopCallIdentity: stopCall('A14N', 2), remainingStopCallIdentities: [stopCall('A12N', 1), stopCall('A14N', 2)] });
+    const second = claim();
+    const unordered = record({ recordId: 'shadow-unordered-claims', at: EARLIER, claims: [first, second].sort((a, b) => b.claimKey.localeCompare(a.claimKey)) });
+    expect(() => module.parseShadowProgressRecord(unordered)).toThrow(/invalid prior shadow record/i);
+  });
+
+  test('rejects omitted comparison metadata that is not the exact deterministic rebuild', async () => {
+    const module = await import('../../src/server/services/shadow-progress') as any;
+    const earlier = record({ recordId: 'shadow-trunc-earlier', at: EARLIER, claims: [
+      claim({ targetStopId: 'A14N', targetStopCallIdentity: stopCall('A14N', 2), remainingStopCallIdentities: [stopCall('A12N', 1), stopCall('A14N', 2)] }), claim(),
+    ] });
+    earlier.claims.sort((a: any, b: any) => a.claimKey.localeCompare(b.claimKey));
+    const earlierBytes = JSON.stringify(earlier);
+    const laterBase = record({ recordId: 'shadow-trunc-later', at: LATER, claims: earlier.claims.map((row: any) => claim({
+      at: LATER, targetStopId: row.targetStopId, targetStopCallIdentity: row.targetStopCallIdentity,
+      remainingStopCallIdentities: row.remainingStopCallIdentities,
+    })) });
+    laterBase.claims.sort((a: any, b: any) => a.claimKey.localeCompare(b.claimKey));
+    const context = module.createShadowComparisonContext({ earlier, earlierBytes, later: laterBase });
+    const comparisons = module.compareShadowProgress(earlier, { ...laterBase, comparisonContext: context });
+    const later = module.buildBoundedShadowRecord({ ...laterBase, comparisonContext: context, progressComparisons: comparisons });
+    later.progressComparisons.pop();
+    later.truncation.comparisons = { consideredCount: comparisons.length, includedCount: comparisons.length - 1, omittedCount: 1, reasonCode: 'BYTE_BUDGET_EXHAUSTED' };
+    expect(() => module.validateShadowComparisonBinding(later, earlierBytes)).toThrow(/invalid|bound|comparison/i);
+  });
+
+  test('rejects shuffled comparison rows even when every row is otherwise exact', async () => {
+    const module = await import('../../src/server/services/shadow-progress') as any;
+    const earlier = record({ recordId: 'shadow-order-earlier', at: EARLIER, claims: [
+      claim({ targetStopId: 'A14N', targetStopCallIdentity: stopCall('A14N', 2), remainingStopCallIdentities: [stopCall('A12N', 1), stopCall('A14N', 2)] }), claim(),
+    ].sort((a, b) => a.claimKey.localeCompare(b.claimKey)) });
+    const earlierBytes = JSON.stringify(earlier);
+    const laterBase = record({ recordId: 'shadow-order-later', at: LATER, claims: earlier.claims.map((row: any) => claim({
+      at: LATER, targetStopId: row.targetStopId, targetStopCallIdentity: row.targetStopCallIdentity,
+      remainingStopCallIdentities: row.remainingStopCallIdentities,
+    })).sort((a: any, b: any) => a.claimKey.localeCompare(b.claimKey)) });
+    const context = module.createShadowComparisonContext({ earlier, earlierBytes, later: laterBase });
+    const comparisons = module.compareShadowProgress(earlier, { ...laterBase, comparisonContext: context });
+    const later = module.buildBoundedShadowRecord({ ...laterBase, comparisonContext: context, progressComparisons: comparisons });
+    later.progressComparisons.reverse();
+    expect(() => module.parseShadowProgressRecord(later)).toThrow(/invalid prior shadow record/i);
+  });
+
   test.each([
     ['an impossible Gregorian service date', (value: any) => { value.claims[0].serviceDate = '20260231'; canonicalizeClaim(value.claims[0]); }],
     ['a noncanonical service-instance identity', (value: any) => { value.claims[0].serviceInstanceId = 'service:arbitrary'; canonicalizeClaim(value.claims[0]); }],
@@ -176,10 +276,11 @@ function record(input: { recordId: string; at: string; claims: any[] }) {
 function claim(overrides: Record<string, unknown> = {}) {
   const at = typeof overrides.at === 'string' ? overrides.at : EARLIER;
   const serviceDate = Object.hasOwn(overrides, 'serviceDate') ? overrides.serviceDate : '20260810';
-  const serviceInstanceId = Object.hasOwn(overrides, 'serviceInstanceId') ? overrides.serviceInstanceId : serviceInstance();
+  const ownedService = Object.hasOwn(overrides, 'serviceIdentity') ? overrides.serviceIdentity : serviceDate ? serviceIdentity(String(serviceDate)) : null;
+  const serviceInstanceId = Object.hasOwn(overrides, 'serviceInstanceId') ? overrides.serviceInstanceId : ownedService ? serviceInstanceFrom(ownedService as any) : null;
   const row: any = {
     claimId: '', claimKey: '', sourceId: 'subway-rt-ace', observedAt: at, operationalTrainId: 'train-1',
-    serviceDate, serviceInstanceId, routeId: 'A', direction: 'northbound', terminalDestinationStopId: 'A16N',
+    serviceDate, serviceInstanceId, serviceIdentity: ownedService, routeId: 'A', direction: 'northbound', terminalDestinationStopId: 'A16N',
     nextStopId: 'A12N', nextStopCallIdentity: stopCall('A12N', 1), targetStopId: 'A16N', targetStopCallIdentity: stopCall('A16N', 3),
     remainingStopCallIdentities: [stopCall('A12N', 1), stopCall('A14N', 2), stopCall('A16N', 3)],
     decisionTime: at, disposition: 'suppressed', suppressionReasonCode: serviceDate && serviceInstanceId ? 'TRUSTED_HISTORY_UNAVAILABLE' : 'SERVICE_OWNERSHIP_UNAVAILABLE',
@@ -188,7 +289,8 @@ function claim(overrides: Record<string, unknown> = {}) {
       feedHealth: { kind: 'current', reasonCode: 'accepted-current' },
       serviceChange: {
         kind: 'eligible-context', disposition: 'eligible',
-        alertContext: { state: 'accepted', sourceId: 'subway-alerts', observedAt: at, retrievedAt: at, sha256: ALERT_SHA, alertContextIdentity: `alert-context:${ALERT_SHA}` },
+        alertContext: { state: 'accepted', sourceId: 'subway-alerts', observedAt: at, retrievedAt: at, sha256: ALERT_SHA,
+          snapshotState: 'current', alertContextIdentity: sourceAlertIdentity(at) },
       },
       admission: { kind: 'rejected', disposition: 'suppressed', reasonCode: serviceDate && serviceInstanceId ? 'TRUSTED_HISTORY_UNAVAILABLE' : 'SERVICE_OWNERSHIP_UNAVAILABLE' },
     },
@@ -211,7 +313,7 @@ function maximalClaim(index: number) {
   const row = claim({
     at: LATER,
     operationalTrainId: `${String(index).padStart(3, '0')}${'T'.repeat(220)}`,
-    serviceInstanceId: serviceInstance(`20260810-${index}`),
+    serviceIdentity: serviceIdentity('20260810', `${String(index).padStart(3, '0')}${'T'.repeat(220)}`, `trip-${index}`),
     terminalDestinationStopId: stopIds.at(-1), nextStopId: stopIds[0], nextStopCallIdentity: stopCall(stopIds[0], 1),
     targetStopId: stopIds.at(-1), targetStopCallIdentity: stopCall(stopIds.at(-1)!, 64),
     remainingStopCallIdentities: stopIds.map((stopId, stopIndex) => stopCall(stopId, stopIndex + 1)),
@@ -253,8 +355,45 @@ function gates() {
   return Object.entries(evaluateExposure({ mode: 'shadow' }).public).map(([stage, gate]) => ({ stage, ...gate }));
 }
 
-function serviceInstance(seed = '20260810') {
-  return `service:${sha256(encodeCanonicalStringTuple(['trip-1', seed, '12:00:00', 'train-1']))}`;
+function serviceIdentity(startDate = '20260810', trainIdentity = 'train-1', tripId = 'trip-1') { return { tripId, startDate, startTime: '12:00:00', trainIdentity }; }
+function serviceInstance(seed = '20260810') { return serviceInstanceFrom(serviceIdentity(seed)); }
+function serviceInstanceFrom(value: any) { return `service:${sha256(encodeCanonicalStringTuple([value.tripId, value.startDate, value.startTime, value.trainIdentity]))}`; }
+function sourceAlertIdentity(at: string) { return `alert-context:${sha256(encodeCanonicalStringTuple(['subway-alerts', at, at, ALERT_SHA]))}`; }
+
+function admittedPair(module: any) {
+  const earlierClaim = claim();
+  const earlier = record({ recordId: 'shadow-admission-earlier', at: EARLIER, claims: [earlierClaim] });
+  const earlierBytes = JSON.stringify(earlier);
+  const laterClaim = claim({ at: LATER, nextStopId: 'A14N', nextStopCallIdentity: stopCall('A14N', 2),
+    remainingStopCallIdentities: [stopCall('A14N', 2), stopCall('A16N', 3)] });
+  laterClaim.disposition = 'admitted'; delete laterClaim.suppressionReasonCode;
+  laterClaim.decisions.admission = { kind: 'admitted', disposition: 'admitted', reasonCode: 'GOVERNED_ADMISSION' };
+  const evidence: any = {
+    earlierRecordId: earlier.recordId, priorClaimKey: earlierClaim.claimKey, priorObservedAt: earlierClaim.observedAt,
+    priorRemainingStopCallIdentities: earlierClaim.remainingStopCallIdentities,
+    movementTimestamp: LATER, movementStatus: 'IN_TRANSIT_TO',
+    movementEvidenceIdentity: module.canonicalMovementEvidenceIdentity({ sourceId: laterClaim.sourceId,
+      trainIdentity: laterClaim.operationalTrainId, movementTimestamp: LATER, movementStatus: 'IN_TRANSIT_TO', stopCallIdentity: laterClaim.nextStopCallIdentity }),
+    targetEventAt: plus(LATER, 60_000), targetStopCallIdentity: laterClaim.targetStopCallIdentity,
+    targetEvidenceIdentity: '', scheduledTrack: '1', actualTrack: '1', trackEvidenceIdentity: '', serviceClaimId: laterClaim.claimId,
+    serviceClaimBindingDigest: module.canonicalServiceClaimBindingDigest(laterClaim), serviceAssessmentAt: LATER,
+    serviceAlertContextIdentity: laterClaim.decisions.serviceChange.alertContext.alertContextIdentity,
+    issuedAlertContextDigest: '', admittedStopCallIdentity: laterClaim.targetStopCallIdentity,
+  };
+  evidence.targetEvidenceIdentity = module.canonicalTargetEvidenceIdentity({ sourceId: laterClaim.sourceId,
+    trainIdentity: laterClaim.operationalTrainId, targetStopCallIdentity: laterClaim.targetStopCallIdentity,
+    targetEventAt: evidence.targetEventAt });
+  evidence.trackEvidenceIdentity = module.canonicalTrackEvidenceIdentity({ sourceId: laterClaim.sourceId,
+    trainIdentity: laterClaim.operationalTrainId, targetStopCallIdentity: laterClaim.targetStopCallIdentity,
+    scheduledTrack: evidence.scheduledTrack, actualTrack: evidence.actualTrack });
+  evidence.issuedAlertContextDigest = module.canonicalIssuedAlertContextDigest(evidence);
+  evidence.serviceDecisionDigest = module.canonicalServiceDecisionDigest(evidence);
+  laterClaim.admissionEvidence = evidence;
+  const laterBase = record({ recordId: 'shadow-admission-later', at: LATER, claims: [laterClaim] });
+  const comparisonContext = module.createShadowComparisonContext({ earlier, earlierBytes, later: laterBase });
+  const comparisons = module.compareShadowProgress(earlier, { ...laterBase, comparisonContext });
+  const later = module.buildBoundedShadowRecord({ ...laterBase, comparisonContext, progressComparisons: comparisons });
+  return { earlierBytes, later };
 }
 
 function stopCall(stopId: string, sequence: number) { return `${stopId}\u0000sequence:${sequence}`; }
