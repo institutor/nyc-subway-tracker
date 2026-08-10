@@ -56,10 +56,11 @@ export type AppAction =
 export function createInitialAppState(input: {
   readonly lastUsedStation?: StationChoice;
   readonly savedStations: readonly StationChoice[];
+  readonly initialSurface?: AppState['surface'];
 }): AppState {
   const lastUsedStation = input.lastUsedStation ? captureStation(input.lastUsedStation) : undefined;
   return freeze({
-    surface: 'nearby',
+    surface: input.initialSurface ?? 'nearby',
     ...(lastUsedStation ? { selectedStation: lastUsedStation, selectionOwner: 'fallback' as const, lastUsedStation } : {}),
     savedStations: input.savedStations.map(captureStation),
     location: { phase: 'idle', requestId: 0 },

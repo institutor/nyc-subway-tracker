@@ -66,6 +66,50 @@ self.addEventListener('fetch', (event) => {
   event.respondWith(networkFirstHistorical(event.request));
 });
 
+self.addEventListener('push', (event) => {
+  event.waitUntil(showCommuteNotification(event.data));
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  event.waitUntil(openCommuteSurface(event.notification.data));
+});
+
+async function showCommuteNotification(data) {
+  let payload;
+  try { payload = data?.json(); } catch { return; }
+  if (!validPushPayload(payload)) return;
+  await self.registration.showNotification(payload.title, {
+    body: payload.body,
+    data: { url: '/commute', episodeId: payload.episodeId },
+    tag: `commute:${payload.episodeId}`,
+    renotify: false,
+  });
+}
+
+async function openCommuteSurface(data) {
+  if (!data || data.url !== '/commute' || typeof data.episodeId !== 'string') return;
+  const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+  for (const client of windows) {
+    if (typeof client.focus === 'function') {
+      if (typeof client.navigate === 'function') await client.navigate('/commute');
+      await client.focus();
+      return;
+    }
+  }
+  await self.clients.openWindow('/commute');
+}
+
+function validPushPayload(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const keys = Object.keys(value);
+  if (keys.length !== 4 || !['title', 'body', 'url', 'episodeId'].every((key) => keys.includes(key))) return false;
+  return typeof value.title === 'string' && value.title.length > 0 && value.title.length <= 160
+    && typeof value.body === 'string' && value.body.length > 0 && value.body.length <= 1_024
+    && value.url === '/commute'
+    && typeof value.episodeId === 'string' && /^[A-Za-z0-9._:-]{1,128}$/.test(value.episodeId);
+}
+
 function classifyRequest(request) {
   if (!request || request.method !== 'GET') return null;
   const url = new URL(request.url);

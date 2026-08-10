@@ -7,6 +7,21 @@ import { describe, expect, test, vi } from 'vitest';
 const SW_PATH = new URL('../../public/sw.js', import.meta.url);
 
 describe('offline service-worker policy', () => {
+  test('shows a bounded commute push and opens only the commute surface', async () => {
+    const worker = createWorker();
+    await worker.dispatchPush({
+      title: '14 St stop change',
+      body: 'F southbound trains are not stopping at 14 St. Open current details.',
+      url: '/commute', episodeId: 'episode-a',
+    });
+    expect(worker.showNotification).toHaveBeenCalledWith('14 St stop change', {
+      body: 'F southbound trains are not stopping at 14 St. Open current details.',
+      data: { url: '/commute', episodeId: 'episode-a' }, tag: 'commute:episode-a', renotify: false,
+    });
+    await worker.dispatchNotificationClick({ url: '/commute', episodeId: 'episode-a' });
+    expect(worker.openWindow).toHaveBeenCalledWith('/commute');
+  });
+
   test('precaches the reloadable app shell in its own versioned cohort', async () => {
     const worker = createWorker([], ['/assets/index-app.js', '/assets/index-theme.css']);
 
@@ -212,6 +227,8 @@ function createWorker(initialCaches: readonly string[] = [], buildAssets: readon
   const fetcher = vi.fn<(request: ControlledRequest) => Promise<Response>>();
   const skipWaiting = vi.fn(async () => undefined);
   const claimClients = vi.fn(async () => undefined);
+  const showNotification = vi.fn(async () => undefined);
+  const openWindow = vi.fn(async () => undefined);
   const workerScope: Record<string, unknown> = {
     URL,
     Headers,
@@ -224,7 +241,8 @@ function createWorker(initialCaches: readonly string[] = [], buildAssets: readon
     caches,
     fetch: fetcher,
     location: { origin: 'https://subway.test' },
-    clients: { claim: claimClients },
+    clients: { claim: claimClients, matchAll: vi.fn(async () => []), openWindow },
+    registration: { showNotification },
     skipWaiting,
     addEventListener: (type: string, listener: (event: Record<string, unknown>) => void) => listeners.set(type, listener),
   };
@@ -235,6 +253,8 @@ function createWorker(initialCaches: readonly string[] = [], buildAssets: readon
     fetcher,
     skipWaiting,
     claimClients,
+    showNotification,
+    openWindow,
     deleted: caches.deleted,
     cache: (name: string) => caches.cache(name),
     cacheNames: () => caches.names(),
@@ -251,6 +271,18 @@ function createWorker(initialCaches: readonly string[] = [], buildAssets: readon
         respondWith: (promise: Promise<Response>) => { response = promise; },
       });
       return response ? response : undefined;
+    },
+    async dispatchPush(payload: Record<string, unknown>) {
+      let work: Promise<unknown> | undefined;
+      listeners.get('push')?.({ data: { json: () => payload }, waitUntil: (promise: Promise<unknown>) => { work = promise; } });
+      await work;
+    },
+    async dispatchNotificationClick(data: Record<string, unknown>) {
+      let work: Promise<unknown> | undefined;
+      listeners.get('notificationclick')?.({
+        notification: { data, close: vi.fn() }, waitUntil: (promise: Promise<unknown>) => { work = promise; },
+      });
+      await work;
     },
   };
 }

@@ -6,6 +6,10 @@ const lastStation = { complexId: 'A12', constituentId: 'A12', name: '125 St' } a
 const chosenStation = { complexId: 'R20', constituentId: 'R20', name: 'Canal St' } as const;
 
 describe('rider-owned application state', () => {
+  test('can initialize directly on the commute destination for notification deep links', () => {
+    expect(createInitialAppState({ savedStations: [], initialSurface: 'commute' }).surface).toBe('commute');
+  });
+
   test('never lets a late location result replace an explicit station choice', () => {
     let state = createInitialAppState({ lastUsedStation: lastStation, savedStations: [] });
     state = appReducer(state, { type: 'location-requested', requestId: 1 });

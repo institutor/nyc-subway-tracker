@@ -1166,6 +1166,76 @@ select:disabled {
   max-width: 54rem;
 }
 
+.surface--commute .quiet-copy {
+  max-width: 50rem;
+}
+
+.commute-window-stack {
+  display: grid;
+  gap: var(--space-4);
+  margin-block-start: var(--space-4);
+}
+
+.commute-window {
+  position: relative;
+  overflow: hidden;
+  padding: var(--space-4);
+  border: 1px solid var(--line);
+  background: var(--platform);
+  box-shadow: 0 0.65rem 1.4rem var(--shadow);
+}
+
+.commute-window__spine {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  width: 0.3rem;
+  background: var(--signal);
+}
+
+.commute-window__header {
+  display: flex;
+  gap: var(--space-3);
+  align-items: start;
+  justify-content: space-between;
+}
+
+.commute-window__header h3 {
+  margin-block-end: var(--space-2);
+  font-family: var(--display-face);
+  font-size: var(--step-2);
+  letter-spacing: 0.01em;
+}
+
+.commute-window__strip {
+  display: grid;
+  grid-template-columns: minmax(6rem, 0.7fr) minmax(8rem, 0.8fr) minmax(12rem, 1.6fr);
+  gap: 1px;
+  margin-block: var(--space-2) var(--space-3);
+  border: 1px solid var(--line);
+  background: var(--line);
+}
+
+.commute-window__strip > span {
+  min-width: 0;
+  padding: var(--space-2) var(--space-3);
+  overflow-wrap: anywhere;
+  background: #0b202b;
+}
+
+.commute-window__days,
+.commute-window__time {
+  color: var(--enamel);
+  font-family: var(--utility-face);
+  font-size: var(--step--1);
+  font-weight: 750;
+}
+
+.commute-window > p:last-child {
+  margin: 0;
+  color: var(--steel);
+}
+
 .saved-stack {
   display: grid;
   gap: var(--space-4);
@@ -1502,6 +1572,18 @@ select:disabled {
   .saved-editor__actions > button,
   .map-axis-controls > button {
     flex: 1 1 8rem;
+  }
+
+  .commute-window {
+    padding: var(--space-3);
+  }
+
+  .commute-window__strip {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .commute-window__strip > span:last-child {
+    grid-column: 1 / -1;
   }
 
   .network-map svg {

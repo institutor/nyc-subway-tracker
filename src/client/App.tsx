@@ -61,6 +61,7 @@ import {
 } from './storage/browser-store';
 import { createBrowserStructuralStore } from './storage/structural-store';
 import { MapView, type MapContext } from './views/MapView';
+import { CommuteView } from './views/CommuteView';
 import { NearbyView } from './views/NearbyView';
 import { SavedView } from './views/SavedView';
 import { StationView } from './views/StationView';
@@ -78,6 +79,7 @@ export interface AppProps {
   readonly connectivityOptions?: UseConnectivityOptions;
   readonly recoveryNow?: () => Date;
   readonly onReconnectionTransition?: (transition: ReconnectionTransition) => void;
+  readonly initialSurface?: AppState['surface'];
 }
 
 interface SelectedBoardState {
@@ -99,6 +101,7 @@ export function App({
   connectivityOptions,
   recoveryNow,
   onReconnectionTransition,
+  initialSurface,
 }: AppProps = {}) {
   const apiClient = useMemo(() => api ?? createTransitApiClient(), [api]);
   const storage = useMemo(() => providedStorage ?? browserStorage(), [providedStorage]);
@@ -119,6 +122,7 @@ export function App({
 
   const [state, dispatch] = useReducer(appReducer, undefined, () => createInitialAppState({
     lastUsedStation: local.lastUsedStation,
+    initialSurface: initialSurface ?? browserInitialSurface(),
     savedStations: local.savedRecords.map((record) => ({
       complexId: record.complexId, constituentId: record.constituentId, name: record.constituentId,
     })),
@@ -676,7 +680,9 @@ export function App({
               onReset={resetSaved}
               onDelete={deleteSaved}
             />
-          ) : <FutureSurface />}
+          ) : (
+            <CommuteView records={savedRecords} stage="disabled" gateOpen={false} />
+          )}
         </div>
       </div>
       <ThumbDock
@@ -690,6 +696,11 @@ export function App({
   );
 }
 
+function browserInitialSurface(): AppState['surface'] {
+  if (typeof window !== 'undefined' && window.location.pathname === '/commute') return 'commute';
+  return 'nearby';
+}
+
 function OfflineNearbyEmpty({ hasSaved, hasTrip }: { readonly hasSaved: boolean; readonly hasTrip: boolean }) {
   return (
     <section className="surface offline-empty" aria-labelledby="nearby-heading">
@@ -701,16 +712,6 @@ function OfflineNearbyEmpty({ hasSaved, hasTrip }: { readonly hasSaved: boolean;
           ? 'Your saved stations and active trip remain available without claiming current service.'
           : 'Map references become available only after an eligible stored map has been deliberately opened.'}</p>
       </StatusBanner>
-    </section>
-  );
-}
-
-function FutureSurface() {
-  return (
-    <section className="surface future-surface" aria-labelledby="commute-heading">
-      <p className="section-kicker">Safety-gated subway tool</p>
-      <h2 id="commute-heading">Commute</h2>
-      <StatusBanner tone="locked"><p>Commute alerts remain locked until their safety stage is enabled.</p></StatusBanner>
     </section>
   );
 }

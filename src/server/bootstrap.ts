@@ -7,6 +7,8 @@ import { compareCanonicalIdentity, normalizeBoundedIdentity } from '../shared/do
 import type { DecisionSnapshotProvider } from './api/decision-snapshot';
 import type { PracticalWalkDecision, PracticalWalkRequest } from './walk/practical-walk-adapter';
 import { createMapService, type MapReferencesInput, type MapService } from './services/map-service';
+import { createSubscriptionStore } from './notifications/subscription-store';
+import type { NotificationRuntime } from './routes/notifications';
 
 export interface AppDependencies {
   readonly config: ServerConfig;
@@ -21,6 +23,7 @@ export interface AppDependencies {
   readonly snapshotProvider: DecisionSnapshotProvider;
   readonly maps: MapService;
   readonly logger: SafeLogger;
+  readonly notifications: NotificationRuntime;
 }
 
 export interface SafeLogEvent {
@@ -42,6 +45,7 @@ export interface ProductionDependencyOverrides {
   readonly snapshotProvider?: DecisionSnapshotProvider;
   readonly mapReferences?: MapReferencesInput;
   readonly logger?: SafeLogger;
+  readonly notifications?: NotificationRuntime;
 }
 
 export function createProductionDependencies(
@@ -64,6 +68,9 @@ export function createProductionDependencies(
     }),
     maps: createMapService(overrides.mapReferences ?? emptyMapReferences()),
     logger: overrides.logger ?? Object.freeze({ log: (_event: SafeLogEvent) => undefined }),
+    notifications: overrides.notifications ?? Object.freeze({
+      stage: 'disabled', gateOpen: false, subscriptions: createSubscriptionStore(),
+    }),
   });
 }
 
