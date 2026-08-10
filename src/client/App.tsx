@@ -377,7 +377,12 @@ export function App({
   const location = useLocation({
     geolocation,
     autoStart: connected,
-    onRequest: (requestId) => dispatch({ type: 'location-requested', requestId }),
+    onRequest: (requestId) => {
+      nearbyAbort.current?.abort();
+      nearbyAbort.current = undefined;
+      nearbyGeneration.current += 1;
+      dispatch({ type: 'location-requested', requestId });
+    },
     onFix: (requestId, fix) => {
       const explicitSelection = stateRef.current.selectionOwner === 'explicit';
       dispatch({ type: 'location-resolved', requestId });

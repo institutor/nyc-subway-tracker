@@ -237,10 +237,15 @@ export class ControlledGeolocation implements Pick<Geolocation, 'getCurrentPosit
   readonly requests: Array<{
     readonly success: PositionCallback;
     readonly failure: PositionErrorCallback | null | undefined;
+    readonly options: PositionOptions | undefined;
   }> = [];
 
-  getCurrentPosition(success: PositionCallback, failure?: PositionErrorCallback | null): void {
-    this.requests.push({ success, failure });
+  getCurrentPosition(
+    success: PositionCallback,
+    failure?: PositionErrorCallback | null,
+    options?: PositionOptions,
+  ): void {
+    this.requests.push({ success, failure, options });
   }
 
   succeed(

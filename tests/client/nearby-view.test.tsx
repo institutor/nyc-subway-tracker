@@ -346,6 +346,65 @@ describe('zero-tap Nearby rider view', () => {
     expect([...storage.values.values()].join('\n')).not.toMatch(/40\.700123|-74\.000456|40\.711234|-73\.991234/u);
   });
 
+  test.each([
+    { control: 'refresh', accessibleRouteOnly: false },
+    { control: 'accessibility', accessibleRouteOnly: true },
+  ] as const)(
+    'invalidates a delayed Nearby response as soon as $control starts location reacquisition',
+    async ({ control, accessibleRouteOnly }) => {
+      const delayed = deferred<NearbyEnvelopeDto>();
+      const staleResponse: NearbyEnvelopeDto = {
+        ...nearbyEnvelope,
+        responseIdentity: `response:nearby:stale:${control}`,
+        data: nearbyEnvelope.data?.kind === 'ranked' ? {
+          ...nearbyEnvelope.data,
+          cards: nearbyEnvelope.data.cards.map((card, index) => index === 0
+            ? { ...card, complexName: 'Stale location result' }
+            : card),
+        } : nearbyEnvelope.data,
+      };
+      let call = 0;
+      const nearby = vi.fn((
+        _fix: Parameters<TransitApiClient['nearby']>[0],
+        _accessibleRouteOnly: boolean,
+        _signal?: AbortSignal,
+      ) => {
+        call += 1;
+        return call === 1 ? delayed.promise : Promise.resolve(nearbyEnvelope);
+      });
+      const geolocation = new ControlledGeolocation();
+      render(<App api={createClientApi({ nearby })} geolocation={geolocation} storage={new MemoryStorage()} />);
+      await waitFor(() => expect(geolocation.requests).toHaveLength(1));
+      await act(async () => geolocation.succeed(0, 12));
+      await waitFor(() => expect(nearby).toHaveBeenCalledTimes(1));
+      const staleSignal = nearby.mock.calls[0][2];
+
+      if (control === 'refresh') {
+        fireEvent.click(screen.getByRole('button', { name: 'Refresh nearby stations' }));
+      } else {
+        fireEvent.click(screen.getByRole('checkbox', { name: 'Accessible Route Only' }));
+      }
+
+      expect.soft(staleSignal?.aborted).toBe(true);
+      expect(geolocation.requests).toHaveLength(2);
+      await act(async () => {
+        delayed.resolve(staleResponse);
+        await delayed.promise;
+      });
+      expect(screen.queryByRole('heading', { name: 'Stale location result' })).toBeNull();
+      expect(nearby).toHaveBeenCalledTimes(1);
+
+      await act(async () => geolocation.succeed(1, 18));
+      await waitFor(() => expect(nearby).toHaveBeenCalledTimes(2));
+      expect(nearby).toHaveBeenLastCalledWith(
+        expect.any(Object),
+        accessibleRouteOnly,
+        expect.any(AbortSignal),
+      );
+      expect(await screen.findAllByTestId('nearby-station-card')).toHaveLength(3);
+    },
+  );
+
   test('does not re-prompt from denial controls and instead gives device-settings guidance', async () => {
     const geolocation = new ControlledGeolocation();
     render(<App api={createClientApi()} geolocation={geolocation} storage={new MemoryStorage()} />);
@@ -454,6 +513,14 @@ describe('zero-tap Nearby rider view', () => {
     expect(board.mock.calls.some(([stationId]) => stationId === 'CX')).toBe(false);
   });
 });
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((complete) => {
+    resolve = complete;
+  });
+  return { promise, resolve };
+}
 
 function rankedNearbyData(): Extract<NearbyEnvelopeDto['data'], { readonly kind: 'ranked' }> {
   if (nearbyEnvelope.data?.kind !== 'ranked') throw new Error('Expected ranked Nearby fixture.');

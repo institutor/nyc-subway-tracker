@@ -24,6 +24,11 @@ describe('zero-tap location request', () => {
 
     act(() => frames.runNext());
     expect(geolocation.requests).toHaveLength(1);
+    expect(geolocation.requests[0].options).toEqual({
+      enableHighAccuracy: false,
+      timeout: 8_000,
+      maximumAge: 0,
+    });
   });
 
   test.each([5, 1_000])('paints the purpose first and treats %s meter fixes identically', async (accuracy) => {
@@ -160,10 +165,15 @@ class ControlledGeolocation implements Pick<Geolocation, 'getCurrentPosition'> {
   readonly requests: Array<{
     readonly success: PositionCallback;
     readonly failure: PositionErrorCallback | null | undefined;
+    readonly options: PositionOptions | undefined;
   }> = [];
 
-  getCurrentPosition(success: PositionCallback, failure?: PositionErrorCallback | null): void {
-    this.requests.push({ success, failure });
+  getCurrentPosition(
+    success: PositionCallback,
+    failure?: PositionErrorCallback | null,
+    options?: PositionOptions,
+  ): void {
+    this.requests.push({ success, failure, options });
   }
 
   succeed(index: number, accuracy: number): void {

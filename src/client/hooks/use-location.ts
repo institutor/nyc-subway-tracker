@@ -56,7 +56,7 @@ export function useLocation(options: UseLocationOptions): LocationController {
         if (error.code === 1) current.onDenied(requestId);
         else current.onFailure(requestId);
       },
-      { enableHighAccuracy: false, timeout: 8_000, maximumAge: 30_000 },
+      { enableHighAccuracy: false, timeout: 8_000, maximumAge: 0 },
     );
   }, []);
 
