@@ -10,11 +10,12 @@ const stylesheet = readFileSync(
 );
 
 describe('mobile layout contract', () => {
-  it('uses the active surface gutter for the sticky context dock', () => {
+  it('contains the sticky dock inside a fixed structural gutter at narrow widths', () => {
     expect(stylesheet).not.toContain('min-width: 20rem;');
     expect(stylesheet).toContain('--surface-gutter: var(--space-4);');
     expect(stylesheet).toContain('margin-inline: calc(var(--surface-gutter) * -1);');
     expect(stylesheet).toContain('padding-inline: var(--surface-gutter);');
-    expect(stylesheet).toContain('--surface-gutter: var(--space-3);');
+    expect(stylesheet).toContain('--surface-gutter: 12px;');
+    expect(stylesheet).toMatch(/@media \(max-width: 25rem\)[\s\S]*?\.context-dock \{\s*margin-inline: 0;\s*padding-inline: 8px;/u);
   });
 });
