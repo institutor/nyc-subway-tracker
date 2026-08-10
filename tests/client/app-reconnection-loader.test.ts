@@ -5,6 +5,7 @@ import {
   createAppReconnectionStageLoader,
   type AppReconnectionArtifacts,
 } from '../../src/client/recovery/app-reconnection-loader';
+import { runReconnection } from '../../src/client/recovery/run-reconnection';
 import type { ActiveTripRecord } from '../../src/client/storage/active-trip-store';
 import type { PreservedReconnectionContext } from '../../src/shared/domain/reconnection';
 import { boardEnvelope, createClientApi, disclosure } from '../helpers/client-fixtures';
@@ -54,6 +55,7 @@ describe('App reconnection owner loader', () => {
         disposition: 'resolved',
         vetoesApplied: true,
         gate: {
+          evidenceId: 'service-owner:alerts:mta-service-alerts:2026-08-05T12:00:00.000Z:2026-08-05T12:00:01.000Z:2026-08-05T12:00:01.000Z',
           evidenceAt: '2026-08-05T12:00:01.000Z',
           acceptedAt: ACCEPTED_AT,
           scopeMembership: [{ kind: 'leg', id: 'leg-1' }],
@@ -104,6 +106,92 @@ describe('App reconnection owner loader', () => {
       { stage: 2, context: recoveryContext(), state: null as any },
       new AbortController().signal,
     )).resolves.toBeUndefined();
+  });
+
+  test.each(serviceOwnerFailureCases())(
+    'fails closed station service changes with fresh GTFS-RT but %s',
+    async (_caseName, corrupt) => {
+      const board = stationServiceBoard();
+      corrupt(board);
+      const loader = createAppReconnectionStageLoader({
+        api: createClientApi({ board: vi.fn(async () => board) }),
+        stationId: 'A12',
+        filters: { routeIds: ['A'], direction: 'southbound' },
+        hasUnrelatedSavedRecords: false,
+        artifacts: {},
+        activeTrip: null,
+        now: () => new Date(ACCEPTED_AT),
+      });
+
+      await expect(loader(
+        { stage: 2, context: stationRecoveryContext(), state: null as any },
+        new AbortController().signal,
+      )).resolves.toBeUndefined();
+    },
+  );
+
+  test.each(serviceOwnerFailureCases())(
+    'fails closed active-trip service changes with fresh response data but %s',
+    async (_caseName, corrupt) => {
+      const journey = currentJourney(false);
+      corrupt(journey);
+      const loader = createAppReconnectionStageLoader({
+        api: createClientApi({ planJourney: vi.fn(async () => journey) }),
+        stationId: 'A12',
+        filters: { routeIds: ['A'], direction: 'southbound' },
+        hasUnrelatedSavedRecords: false,
+        artifacts: {},
+        activeTrip: timedActiveTrip(),
+        now: () => new Date(ACCEPTED_AT),
+      });
+
+      await expect(loader(
+        { stage: 2, context: recoveryContext(), state: null as any },
+        new AbortController().signal,
+      )).resolves.toBeUndefined();
+    },
+  );
+
+  test('withholds stage 3 despite fresh advancing GTFS-RT when active-trip stage 2 lacks an alert owner', async () => {
+    const first = {
+      ...withRealtimeOwner(storedTrainBoard(), FIRST_REALTIME_OWNER), responseIdentity: 'blocked-snapshot-1',
+      decidedAt: '2026-08-05T12:00:01.000Z', serverTime: '2026-08-05T12:00:01.000Z',
+    };
+    const second = {
+      ...withRealtimeOwner(storedTrainBoard(), SECOND_REALTIME_OWNER), responseIdentity: 'blocked-snapshot-2',
+      decidedAt: '2026-08-05T12:00:02.000Z', serverTime: '2026-08-05T12:00:02.000Z',
+    };
+    const boards = [first, second];
+    const loader = createAppReconnectionStageLoader({
+      api: createClientApi({
+        planJourney: vi.fn(async () => {
+          const journey = currentJourney(false);
+          serviceOwnerFailureCases().find(([name]) => name === 'a fresh wrapper over a pre-recovery alert receipt')![1](journey);
+          return journey;
+        }),
+        board: vi.fn(async () => boards.shift()!),
+      }),
+      stationId: 'A12', filters: { routeIds: ['A'], direction: 'southbound' },
+      hasUnrelatedSavedRecords: false, artifacts: {}, activeTrip: timedActiveTrip(),
+      now: () => new Date(ACCEPTED_AT),
+    });
+
+    const result = await runReconnection({
+      context: recoveryContext(),
+      initial: { historicalPositioningGuidance: false, historicalTransferGuidance: false },
+      loadStage: loader,
+      now: () => new Date(ACCEPTED_AT),
+    });
+
+    expect(result.state.stages.find(({ stage }) => stage === 2)?.result).toMatchObject({
+      serviceChanges: { disposition: 'unresolved-fail-closed' },
+      tripServicePattern: 'unverified',
+    });
+    expect(result.state.stages.find(({ stage }) => stage === 3)?.result).toMatchObject({
+      arrivals: { disposition: 'withheld' },
+      storedTrainChoice: 'unverified',
+    });
+    expect(result.state.visible.currentArrivalsRestored).toBe(false);
   });
 
   test('attributes a later-leg-only service pattern change to that later remaining leg', async () => {
@@ -502,6 +590,143 @@ describe('App reconnection owner loader', () => {
     });
   });
 });
+
+function serviceOwnerFailureCases(): readonly [string, (response: any) => void][] {
+  return [
+    ['missing alert ownership', (response) => {
+      for (const container of serviceEvidenceContainers(response)) {
+        container.provenance = container.provenance.filter(({ source }: any) => source !== 'alerts');
+        container.sourceHealth = container.sourceHealth.filter(({ source }: any) => source !== 'alerts');
+      }
+      addSupplementOwner(response, 'current');
+    }],
+    ['a pre-recovery alert observation', (response) => {
+      for (const container of serviceEvidenceContainers(response)) {
+        for (const row of container.provenance.filter(({ source }: any) => source === 'alerts')) {
+          row.observedAt = '2026-08-05T11:59:59.999Z';
+        }
+      }
+    }],
+    ['a stale alert retrieval', (response) => {
+      for (const container of serviceEvidenceContainers(response)) {
+        for (const row of container.provenance.filter(({ source }: any) => source === 'alerts')) {
+          row.retrievedAt = '2026-08-05T11:59:59.999Z';
+        }
+      }
+    }],
+    ['a stale alert last acceptance', (response) => {
+      for (const container of serviceEvidenceContainers(response)) {
+        for (const row of container.sourceHealth.filter(({ source }: any) => source === 'alerts')) {
+          row.lastAcceptedAt = '2026-08-05T11:59:59.999Z';
+        }
+      }
+    }],
+    ['an unavailable alert owner', (response) => {
+      for (const container of serviceEvidenceContainers(response)) {
+        for (const row of container.sourceHealth.filter(({ source }: any) => source === 'alerts')) {
+          row.state = 'unavailable';
+          row.reasonCode = 'SOURCE_UNAVAILABLE';
+        }
+      }
+      addSupplementOwner(response, 'current');
+    }],
+    ['ambiguous alert provenance', (response) => {
+      response.provenance.push({ ...response.provenance.find(({ source }: any) => source === 'alerts') });
+    }],
+    ['ambiguous alert health', (response) => {
+      response.sourceHealth.push({ ...response.sourceHealth.find(({ source }: any) => source === 'alerts') });
+    }],
+    ['a fresh wrapper over a pre-recovery alert receipt', (response) => {
+      for (const container of serviceEvidenceContainers(response)) {
+        for (const row of container.provenance.filter(({ source }: any) => source === 'alerts')) {
+          row.observedAt = '2026-08-05T11:59:58.000Z';
+          row.retrievedAt = '2026-08-05T11:59:59.000Z';
+        }
+        for (const row of container.sourceHealth.filter(({ source }: any) => source === 'alerts')) {
+          row.lastAcceptedAt = '2026-08-05T11:59:59.000Z';
+          row.assessedAt = '2026-08-05T12:00:00.500Z';
+        }
+      }
+      response.responseIdentity = 'fresh-wrapper-pre-recovery-alert';
+    }],
+    ['contradictory supplemented and alert ownership', (response) => {
+      addSupplementOwner(response, 'unavailable');
+    }],
+  ];
+}
+
+function addSupplementOwner(response: any, state: 'current' | 'unavailable'): void {
+  const provenance = {
+    source: 'supplemented-gtfs', sourceId: 'mta-supplemented-schedule',
+    observedAt: '2026-08-05T12:00:00.100Z', retrievedAt: '2026-08-05T12:00:00.200Z',
+  };
+  const health = {
+    source: 'supplemented-gtfs', sourceId: 'mta-supplemented-schedule', state,
+    assessedAt: '2026-08-05T12:00:00.300Z', lastAcceptedAt: '2026-08-05T12:00:00.200Z',
+    reasonCode: state === 'current' ? 'SOURCE_CURRENT' : 'SOURCE_UNAVAILABLE',
+  };
+  for (const container of serviceEvidenceContainers(response)) {
+    container.provenance.push({ ...provenance });
+    container.sourceHealth.push({ ...health });
+  }
+  if (response.data?.kind === 'planned') {
+    response.data.itineraries[0].capture.validity.schedule.editionId = 'supplemented-gtfs:edition-current';
+  } else if (response.data?.alerts) {
+    response.data.alerts.push({
+      ...response.data.alerts[0], id: 'supplement-owned-service-decision', provenance: { ...provenance },
+    });
+  }
+}
+
+function serviceEvidenceContainers(response: any): any[] {
+  const containers = [response];
+  if (Array.isArray(response.data?.provenance) && Array.isArray(response.data?.sourceHealth)) {
+    containers.push(response.data);
+  }
+  return containers;
+}
+
+function stationServiceBoard(): BoardEnvelopeDto {
+  const board = withRealtimeOwner(boardEnvelope(), FIRST_REALTIME_OWNER);
+  const provenance = {
+    source: 'alerts' as const, sourceId: 'mta-service-alerts',
+    observedAt: FIRST_REALTIME_OWNER.observedAt, retrievedAt: FIRST_REALTIME_OWNER.retrievedAt,
+  };
+  const health = {
+    source: 'alerts' as const, sourceId: 'mta-service-alerts', state: 'current' as const,
+    assessedAt: FIRST_REALTIME_OWNER.assessedAt, lastAcceptedAt: FIRST_REALTIME_OWNER.lastAcceptedAt,
+    reasonCode: 'SOURCE_CURRENT' as const,
+  };
+  return {
+    ...board,
+    responseIdentity: 'station-service-current',
+    decidedAt: '2026-08-05T12:00:01.000Z', serverTime: '2026-08-05T12:00:01.000Z',
+    provenance: [...(board.provenance ?? []), provenance],
+    sourceHealth: [...(board.sourceHealth ?? []), health],
+    data: board.data ? {
+      ...board.data,
+      provenance: [...board.data.provenance, provenance],
+      sourceHealth: [...board.data.sourceHealth, health],
+      alerts: board.data.alerts.map((alert) => ({ ...alert, provenance })),
+    } : null,
+  };
+}
+
+function stationRecoveryContext(): PreservedReconnectionContext {
+  const base = recoveryContext();
+  const serviceScope = [{ kind: 'station' as const, id: 'A12' }];
+  return {
+    ...base,
+    activeTripId: null,
+    manualCursor: null,
+    hasStoredTrainChoice: false,
+    recovery: {
+      ...base.recovery,
+      activeTripId: null,
+      ownerScopes: { ...base.recovery.ownerScopes, 'service-change': serviceScope },
+    },
+  };
+}
 
 function mapOverlayWithOwner(evidence: {
   readonly observedAt: string;

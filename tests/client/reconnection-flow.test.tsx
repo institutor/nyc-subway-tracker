@@ -473,18 +473,33 @@ function recoveryBoard(identity: string, instant: string): BoardEnvelopeDto {
     lastAcceptedAt: instant,
     reasonCode: 'SOURCE_CURRENT' as const,
   };
+  const alertOwner = {
+    source: 'alerts' as const,
+    sourceId: 'mta-service-alerts',
+    observedAt: instant,
+    retrievedAt: instant,
+  };
+  const alertHealth = {
+    source: 'alerts' as const,
+    sourceId: 'mta-service-alerts',
+    state: 'current' as const,
+    assessedAt: instant,
+    lastAcceptedAt: instant,
+    reasonCode: 'SOURCE_CURRENT' as const,
+  };
   return {
     ...base,
     responseIdentity: identity,
     decidedAt: instant,
     serverTime: instant,
     cacheState: 'network',
-    provenance: [realtimeOwner],
-    sourceHealth: [realtimeHealth],
+    provenance: [realtimeOwner, alertOwner],
+    sourceHealth: [realtimeHealth, alertHealth],
     data: base.data ? {
       ...base.data,
-      provenance: [realtimeOwner],
-      sourceHealth: [realtimeHealth],
+      provenance: [realtimeOwner, alertOwner],
+      sourceHealth: [realtimeHealth, alertHealth],
+      alerts: base.data.alerts.map((alert) => ({ ...alert, provenance: alertOwner })),
       directions: base.data.directions.map((direction) => ({
         ...direction,
         primary: direction.primary.map((arrival) => arrival.kind === 'live'

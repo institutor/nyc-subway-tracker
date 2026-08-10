@@ -310,14 +310,15 @@ export function acceptReconnectionStage(
 
 function validateStageDependencies(state: ReconnectionState, result: ReconnectionStageResult): void {
   if (result.stage !== 3
-    || state.context.activeTripId === null
     || result.arrivals.disposition !== 'current') return;
 
   const serviceResult = stageRecord(state, 2).result;
   if (serviceResult?.stage !== 2
     || serviceResult.serviceChanges.disposition !== 'resolved'
-    || serviceResult.serviceChanges.gate.disposition !== 'accepted-fresh'
-    || serviceResult.tripServicePattern !== 'verified') {
+    || serviceResult.serviceChanges.gate.disposition !== 'accepted-fresh') {
+    throw new Error('Stage 2 service-change resolution is required before restoring current arrivals');
+  }
+  if (state.context.activeTripId !== null && serviceResult.tripServicePattern !== 'verified') {
     throw new Error('The active trip service pattern must be verified before restoring current arrivals');
   }
 }

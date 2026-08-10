@@ -196,6 +196,15 @@ function validResult(stage: ReconnectionStageResult['stage']): ReconnectionStage
   }
 }
 
+function stationOwnedResult<T>(value: T): T {
+  if (Array.isArray(value)) return value.map(stationOwnedResult) as T;
+  if (value === null || typeof value !== 'object') return value;
+  const result: Record<string, unknown> = {};
+  for (const [key, entry] of Object.entries(value)) result[key] = stationOwnedResult(entry);
+  if ('domain' in result && 'ownerId' in result && 'activeTripId' in result) result.activeTripId = null;
+  return result as T;
+}
+
 function finishStage(state: ReconnectionState, stage: ReconnectionStageResult['stage']): ReconnectionState {
   const requested = requestReconnectionStage(state, stage);
   const accepted = acceptReconnectionStage(requested, validResult(stage));
@@ -581,6 +590,36 @@ describe('owner-gated reconnection ordering', () => {
 
     expect(() => acceptReconnectionStage(state, validResult(3)))
       .toThrow(/active trip service pattern.*current arrivals/i);
+  });
+
+  test('prevents current station arrivals when stage 2 service ownership failed closed', () => {
+    const stationContext: PreservedReconnectionContext = {
+      ...CONTEXT,
+      activeTripId: null,
+      recovery: { ...CONTEXT.recovery, activeTripId: null },
+    };
+    let state = createReconnectionState(stationContext, { historicalPositioningGuidance: true });
+    state = requestReconnectionStage(state, 1);
+    state = acceptReconnectionStage(state, stationOwnedResult(validResult(1)));
+    state = commitReconnectionStage(state, 1);
+    state = presentReconnectionStage(state, 1);
+    state = requestReconnectionStage(state, 2);
+    state = acceptReconnectionStage(state, stationOwnedResult({
+      stage: 2,
+      serviceChanges: {
+        gate: gate('service-change', 'governed-fail-closed'),
+        disposition: 'unresolved-fail-closed',
+        vetoesApplied: true,
+      },
+      tripServicePattern: 'not-applicable',
+      invalidation: null,
+    }));
+    state = commitReconnectionStage(state, 2);
+    state = presentReconnectionStage(state, 2);
+    state = requestReconnectionStage(state, 3);
+
+    expect(() => acceptReconnectionStage(state, stationOwnedResult(validResult(3))))
+      .toThrow(/service-change resolution.*current arrivals/i);
   });
 
   test('one fresh arrival snapshot restores nothing until feed recovery and train readmission are both owner-complete', () => {

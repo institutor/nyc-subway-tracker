@@ -9,6 +9,7 @@ import type {
 import type { ActiveTripRecord } from '../storage/active-trip-store';
 import type { Direction } from '../../shared/domain/types';
 import { serviceDateTimeToInstant } from '../../shared/domain/clock';
+import { encodeCanonicalStringTuple } from '../../shared/domain/canonical';
 import type {
   OwnerAcceptance,
   PreservedReconnectionContext,
@@ -90,9 +91,13 @@ async function loadServiceChanges(
   if (!options.stationId) return undefined;
   const board = await options.api.board(options.stationId, options.filters, signal);
   if (!isFreshBoard(board, context, options.stationId)) return undefined;
+  const serviceOwners = freshStationServiceOwners(board, context);
+  const serviceEvidence = serviceOwners && serviceSourceOwnerEvidence(serviceOwners);
+  if (!serviceEvidence) return undefined;
   const acceptedAt = exactNow(options.now);
   const serviceChanges = acceptedGate(
-    context, 'service-change', board.responseIdentity, board.decidedAt, acceptedAt, ownerScope(context, 'service-change'),
+    context, 'service-change', serviceEvidence.evidenceId, serviceEvidence.evidenceAt,
+    acceptedAt, ownerScope(context, 'service-change'),
   );
   return {
     stage: 2,
@@ -119,13 +124,16 @@ async function loadActiveTripServiceChanges(
     accessibleRouteOnly: trip.accessibleRouteOnly,
   }, signal);
   if (!isFreshJourney(response, context, trip)) return undefined;
+  const serviceOwners = freshJourneyServiceOwners(response, context);
+  const serviceEvidence = serviceOwners && serviceSourceOwnerEvidence(serviceOwners);
+  if (!serviceEvidence) return undefined;
 
   const acceptedAt = exactNow(options.now);
   const serviceChanges = acceptedGate(
     context,
     'service-change',
-    response.responseIdentity,
-    response.decidedAt,
+    serviceEvidence.evidenceId,
+    serviceEvidence.evidenceAt,
     acceptedAt,
     ownerScope(context, 'service-change'),
   );
@@ -167,20 +175,120 @@ function isFreshJourney(
     && scope.originStationId === trip.origin.constituentId
     && scope.destinationStationId === trip.destination.constituentId
     && scope.accessibleRouteOnly === trip.accessibleRouteOnly
-    && hasCurrentServiceOwner(response)
     && freshInstant(response.decidedAt, context.recovery.startedAt)
     && freshInstant(response.serverTime, context.recovery.startedAt);
 }
 
-function hasCurrentServiceOwner(response: JourneyEnvelopeDto): boolean {
-  const provenance = response.provenance ?? [];
-  return response.sourceHealth?.some((health) => (
-    (health.source === 'alerts' || health.source === 'supplemented-gtfs')
-    && health.state === 'current'
-    && provenance.some((evidence) => (
-      evidence.source === health.source && evidence.sourceId === health.sourceId
-    ))
-  )) === true;
+function freshJourneyServiceOwners(
+  response: JourneyEnvelopeDto,
+  context: PreservedReconnectionContext,
+): readonly OperationalSourceOwnerReceipt[] | undefined {
+  const ownerSources = new Set<string>(['alerts']);
+  if (response.data?.kind === 'planned' || response.data?.kind === 'untimed') {
+    if (response.data.itineraries.some(({ capture }) => {
+      const schedule = capture?.validity.schedule;
+      return schedule && schedule.kind !== 'none' && schedule.editionId.startsWith('supplemented-gtfs:');
+    })) ownerSources.add('supplemented-gtfs');
+  }
+  const ownerRefs = serviceOwnerRefs(ownerSources, response.provenance ?? [], response.sourceHealth ?? []);
+  if ([...ownerSources].some((source) => !ownerRefs.some((ref) => ref.source === source))) return undefined;
+  return admitOperationalSourceOwners({
+    ownerRefs,
+    provenance: response.provenance ?? [],
+    sourceHealth: response.sourceHealth ?? [],
+    decidedAt: response.decidedAt,
+    serverTime: response.serverTime,
+    notBefore: context.recovery.startedAt,
+  });
+}
+
+function freshStationServiceOwners(
+  board: BoardEnvelopeDto,
+  context: PreservedReconnectionContext,
+): readonly OperationalSourceOwnerReceipt[] | undefined {
+  if (!board.data) return undefined;
+  const decisionProvenance = [
+    ...board.data.alerts.map(({ provenance }) => provenance),
+    ...board.data.explanations.flatMap(({ provenance }) => provenance ? [provenance] : []),
+    ...board.data.directions.flatMap(({ primary, secondary, explanations }) => [
+      ...primary.map(({ provenance }) => provenance),
+      ...secondary.map(({ provenance }) => provenance),
+      ...explanations.flatMap(({ provenance }) => provenance ? [provenance] : []),
+    ]),
+  ];
+  const ownerSources = new Set<string>(['alerts']);
+  if (decisionProvenance.some(({ source }) => source === 'supplemented-gtfs')) {
+    ownerSources.add('supplemented-gtfs');
+  }
+  const ownerRefs = serviceOwnerRefs(
+    ownerSources,
+    board.provenance ?? [],
+    board.sourceHealth ?? [],
+    board.data.provenance,
+    board.data.sourceHealth,
+    decisionProvenance,
+  );
+  if ([...ownerSources].some((source) => !ownerRefs.some((ref) => ref.source === source))) return undefined;
+  const envelopeOwners = admitOperationalSourceOwners({
+    ownerRefs,
+    provenance: board.provenance ?? [],
+    sourceHealth: board.sourceHealth ?? [],
+    decidedAt: board.decidedAt,
+    serverTime: board.serverTime,
+    notBefore: context.recovery.startedAt,
+  });
+  if (!envelopeOwners) return undefined;
+  const dataOwners = admitOperationalSourceOwners({
+    ownerRefs,
+    provenance: board.data.provenance,
+    sourceHealth: board.data.sourceHealth,
+    decidedAt: board.decidedAt,
+    serverTime: board.serverTime,
+    claimedReceipts: envelopeOwners,
+    notBefore: context.recovery.startedAt,
+  });
+  if (!dataOwners || decisionProvenance.some((provenance) => (
+    isServiceSource(provenance.source)
+    && !dataOwners.some((owner) => owner.source === provenance.source
+      && owner.sourceId === provenance.sourceId
+      && owner.observedAt === provenance.observedAt
+      && owner.retrievedAt === provenance.retrievedAt)
+  ))) return undefined;
+  return dataOwners;
+}
+
+function serviceOwnerRefs(
+  ownerSources: ReadonlySet<string>,
+  ...groups: readonly (readonly { readonly source: string; readonly sourceId: string }[])[]
+): readonly { readonly source: string; readonly sourceId: string }[] {
+  const refs = groups.flat().filter(({ source }) => ownerSources.has(source) && isServiceSource(source));
+  return refs.filter((ref, index) => refs.findIndex((candidate) => (
+    candidate.source === ref.source && candidate.sourceId === ref.sourceId
+  )) === index);
+}
+
+function isServiceSource(source: string): boolean {
+  return source === 'alerts' || source === 'supplemented-gtfs';
+}
+
+function serviceSourceOwnerEvidence(
+  owners: readonly OperationalSourceOwnerReceipt[],
+): { readonly evidenceId: string; readonly evidenceAt: string } | undefined {
+  if (owners.length === 0) return undefined;
+  const evidenceAt = owners.map(({ lastAcceptedAt }) => lastAcceptedAt).sort().at(-1)!;
+  if (owners.length === 1) {
+    const owner = owners[0]!;
+    return {
+      evidenceId: `service-owner:${owner.source}:${owner.sourceId}:${owner.observedAt}:${owner.retrievedAt}:${owner.lastAcceptedAt}`,
+      evidenceAt,
+    };
+  }
+  return {
+    evidenceId: `service-owner-set:${encodeCanonicalStringTuple(owners.flatMap((owner) => [
+      owner.source, owner.sourceId, owner.observedAt, owner.retrievedAt, owner.lastAcceptedAt,
+    ]))}`,
+    evidenceAt,
+  };
 }
 
 function sameOwnedActiveTripPattern(
