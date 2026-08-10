@@ -65,8 +65,14 @@ test('the ordinary app carries Accessible Route Only through planning, active tr
 
   await page.reload({ waitUntil: 'domcontentloaded' });
   await page.getByRole('button', { name: 'Open active trip to Canal St' }).click();
-  await expect(page.getByRole('region', { name: 'Device-held active trip' })
-    .getByText('Accessible Route Only · On', { exact: true })).toBeVisible();
+  const reloadedTrip = page.getByRole('region', { name: 'Device-held active trip' });
+  await expect(reloadedTrip.getByText('Accessible Route Only · On', { exact: true })).toBeVisible();
+  await expect(reloadedTrip).toContainText('Device-held historical guidance — current status unverified');
+  await expect(reloadedTrip).toContainText('Historical equipment — current status unverified');
+  await expect(reloadedTrip.getByRole('region', { name: 'Step-free path' })).toHaveCount(0);
+  await expect(reloadedTrip.getByRole('region', { name: 'Platform guidance' })).toHaveCount(0);
+  await expect(reloadedTrip.getByText('Complete path verified', { exact: true })).toHaveCount(0);
+  await expect(reloadedTrip.getByText(/No official outage reported/)).toHaveCount(0);
   await context.setOffline(true);
   await page.evaluate(() => window.dispatchEvent(new Event('offline')));
   const offlineTrip = page.getByRole('region', { name: 'Device-held active trip' });
@@ -74,6 +80,11 @@ test('the ordinary app carries Accessible Route Only through planning, active tr
   await expect(offlineTrip.getByRole('alert')).toContainText('Current elevator status cannot be verified offline');
   await expect(offlineTrip.locator('article').filter({ hasText: 'EL-A34-01' })).toContainText('Unknown offline');
   await expect(offlineTrip.getByRole('heading', { name: 'Exit guidance' })).toBeVisible();
+  await expect(offlineTrip).toContainText('Device-held historical guidance — current status unverified');
+  await expect(offlineTrip).toContainText('Historical equipment — current status unverified');
+  await expect(offlineTrip.getByRole('region', { name: 'Step-free path' })).toHaveCount(0);
+  await expect(offlineTrip.getByRole('region', { name: 'Platform guidance' })).toHaveCount(0);
+  await expect(offlineTrip.getByText('Complete path verified', { exact: true })).toHaveCount(0);
   await expect(offlineTrip.getByText(/No official outage reported/)).toHaveCount(0);
 });
 

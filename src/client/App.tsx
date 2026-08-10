@@ -132,6 +132,13 @@ interface SelectedBoardState {
   readonly board?: BoardEnvelopeDto;
 }
 
+/** Process-local capability: never serialize or reconstruct this owner from device storage. */
+interface ResponseBoundValidationTripOwner {
+  readonly tripId: string;
+  readonly sourceEvidence: ValidationRiderEvidence;
+  readonly evidence: BoundValidationRiderEvidence;
+}
+
 const DEFAULT_MAP_CONTEXT: MapContext = Object.freeze({
   serviceMeaning: 'actual-now',
   spatialView: 'schematic',
@@ -187,6 +194,7 @@ export function App({
   const [serviceWorkerClaimGeneration, setServiceWorkerClaimGeneration] = useState(0);
   const [savedRecords, setSavedRecords] = useState<readonly SavedRecord[]>(local.savedRecords);
   const [activeTrip, setActiveTrip] = useState<ActiveTripRecord | null>(local.activeTrip);
+  const [responseBoundValidationTrip, setResponseBoundValidationTrip] = useState<ResponseBoundValidationTripOwner>();
   const [activeTripOpen, setActiveTripOpen] = useState(offline);
   const [captureMessage, setCaptureMessage] = useState<string>();
   const [accessibleRouteOnly, setAccessibleRouteOnly] = useState(local.activeTrip?.accessibleRouteOnly ?? false);
@@ -403,6 +411,7 @@ export function App({
 
   useEffect(() => {
     if (connected) return;
+    setResponseBoundValidationTrip(undefined);
     nearbyAbort.current?.abort();
     selectedAbort.current?.abort();
     for (const controller of savedAbort.current.values()) controller.abort();
@@ -627,6 +636,9 @@ export function App({
 
   const activateTrip = useCallback((itinerary: JourneyItineraryDto, response: JourneyEnvelopeDto) => {
     if (personalResettingRef.current) return;
+    const responseBoundEvidence = validationEvidence
+      ? bindValidationRiderEvidenceToItinerary(validationEvidence, response, itinerary)
+      : undefined;
     const candidate = captureActiveTrip(itinerary, response, catalog?.data.complexes ?? [], validationEvidence);
     if (!candidate) {
       setCaptureMessage('This trip cannot be stored until every required path and evidence field is available.');
@@ -635,6 +647,11 @@ export function App({
     const result = activeTripStore.capture(candidate);
     if (result.kind === 'saved') {
       setActiveTrip(result.trip);
+      setResponseBoundValidationTrip(result.trip && responseBoundEvidence && validationEvidence ? {
+        tripId: result.trip.id,
+        sourceEvidence: validationEvidence,
+        evidence: responseBoundEvidence,
+      } : undefined);
       if (result.trip) setAccessibleRouteOnly(result.trip.accessibleRouteOnly);
       setActiveTripOpen(true);
       setCaptureMessage('Trip saved on this device for underground use.');
@@ -653,6 +670,7 @@ export function App({
     const result = activeTripStore.clear();
     if (result.kind === 'saved') {
       setActiveTrip(null);
+      setResponseBoundValidationTrip(undefined);
       setActiveTripOpen(false);
       setCaptureMessage(undefined);
     }
@@ -707,6 +725,7 @@ export function App({
     setNearbyBoards(new Map());
     setSelectedBoard({ phase: 'idle' });
     setActiveTrip(null);
+    setResponseBoundValidationTrip(undefined);
     setActiveTripOpen(false);
     setCaptureMessage(undefined);
     setMapContext(DEFAULT_MAP_CONTEXT);
@@ -741,9 +760,10 @@ export function App({
   const selectedSaved = selectedStation
     ? savedRecords.some(({ complexId, constituentId }) => complexId === selectedStation.complexId && constituentId === selectedStation.constituentId)
     : false;
-  const activeTripValidationEvidence = activeTrip && validationEvidence
-    && validationEvidenceOwnsActiveTrip(validationEvidence, activeTrip)
-    ? validationEvidence
+  const activeTripValidationEvidence = connected && activeTrip && validationEvidence
+    && responseBoundValidationTrip?.tripId === activeTrip.id
+    && responseBoundValidationTrip.sourceEvidence === validationEvidence
+    ? responseBoundValidationTrip.evidence
     : undefined;
 
   return (
@@ -770,7 +790,16 @@ export function App({
               {activeTripOpen ? 'Hide active trip' : `Open active trip to ${activeTrip.destination.name}`}
             </button>
             {activeTripOpen ? <>
-              <ActiveTripCard trip={activeTrip} offline={!connected} onSetCursor={moveTripCursor} onClear={clearActiveTrip} />
+              <ActiveTripCard
+                trip={activeTrip}
+                offline={!connected}
+                validationEvidenceState={activeTrip.captureContext.kind === 'response-owned'
+                  && activeTrip.captureContext.disclosure === JOURNEY_CAPTURE_DISCLOSURE
+                  ? activeTripValidationEvidence ? 'response-bound-current' : 'device-held-historical'
+                  : undefined}
+                onSetCursor={moveTripCursor}
+                onClear={clearActiveTrip}
+              />
               {activeTrip.accessibleRouteOnly && activeTripValidationEvidence ? <>
                 <ValidationAccessibilityPanel
                   warning={null}
@@ -1112,47 +1141,6 @@ function validationRiderEvidenceOwner(
     disclosure: bootstrap.demonstrationLabel,
     contentVersions: bootstrap.data.contentVersions,
   };
-}
-
-function validationEvidenceOwnsActiveTrip(
-  evidence: ValidationRiderEvidence,
-  trip: ActiveTripRecord,
-): boolean {
-  const receipt = trip.captureContext.kind === 'response-owned'
-    ? trip.captureContext.validationEvidenceReceipt
-    : undefined;
-  const onlyLeg = trip.legs.length === 1 ? trip.legs[0] : undefined;
-  const orderedStations = onlyLeg?.points.map(({ constituentId }) => constituentId) ?? [];
-  return trip.captureContext.kind === 'response-owned'
-    && trip.captureContext.disclosure === JOURNEY_CAPTURE_DISCLOSURE
-    && Boolean(receipt)
-    && receipt?.bootstrapDecisionIdentity === evidence.receipt.bootstrapDecisionIdentity
-    && receipt.decisionSnapshotIdentity === evidence.receipt.decisionSnapshotIdentity
-    && receipt.stationCatalogVersion === evidence.receipt.stationCatalogVersion
-    && receipt.journeyGraphVersion === evidence.receipt.journeyGraphVersion
-    && receipt.mapDayVersion === evidence.receipt.mapDayVersion
-    && receipt.mapNightVersion === evidence.receipt.mapNightVersion
-    && receipt.canonicalItineraryIdentity === trip.captureContext.itineraryId
-    && receipt.pathId === evidence.receipt.pathId
-    && receipt.originPlatformId === evidence.receipt.originPlatformId
-    && receipt.destinationPlatformId === evidence.receipt.destinationPlatformId
-    && trip.accessibleRouteOnly
-    && trip.transfers.length === 0
-    && trip.origin.constituentId === evidence.receipt.originStationId
-    && trip.destination.constituentId === evidence.receipt.destinationStationId
-    && orderedStations.length === 2
-    && orderedStations[0] === evidence.receipt.originStationId
-    && orderedStations[1] === evidence.receipt.destinationStationId
-    && onlyLeg?.route.id === evidence.receipt.routeId
-    && onlyLeg.boundDirection === evidence.receipt.direction
-    && onlyLeg.actualDestination === evidence.receipt.actualDestination
-    && trip.exitGuidance?.ownerRecordId === evidence.guidance.coverageRowId
-    && trip.exitGuidance.destinationScope?.stationComplexId === evidence.receipt.destinationStationId
-    && trip.exitGuidance.destinationScope.constituentStationId === evidence.receipt.destinationStationId
-    && trip.exitGuidance.destinationScope.platformId === evidence.receipt.destinationPlatformId
-    && evidence.path.equipmentIds.every((equipmentId) => trip.equipmentClaims.some((claim) => (
-      claim.equipmentId === equipmentId && claim.pathId === evidence.receipt.pathId
-    )));
 }
 
 function activeTripValidationReceipt(evidence: BoundValidationRiderEvidence) {

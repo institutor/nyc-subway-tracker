@@ -9,17 +9,20 @@ import { RouteToken } from './RouteToken';
 export function ActiveTripCard({
   trip,
   offline,
+  validationEvidenceState,
   onSetCursor,
   onClear,
 }: {
   readonly trip: ActiveTripRecord;
   readonly offline: boolean;
+  readonly validationEvidenceState?: 'response-bound-current' | 'device-held-historical';
   readonly onSetCursor: (pointId: string) => void;
   readonly onClear?: () => void;
 }) {
   const points = trip.legs.flatMap((leg) => leg.points);
   const cursorIndex = Math.max(0, points.findIndex(({ id }) => id === trip.cursor.pointId));
   const completed = cursorIndex === points.length - 1;
+  const historicalValidationEvidence = validationEvidenceState === 'device-held-historical';
 
   return (
     <section className="active-trip-card" aria-labelledby="active-trip-heading">
@@ -95,6 +98,9 @@ export function ActiveTripCard({
 
       {trip.equipmentClaims.length > 0 ? <section className="trip-evidence" aria-label="Historical equipment context">
         <h3>Equipment context</h3>
+        {historicalValidationEvidence
+          ? <p className="claim-line"><span>Historical equipment — current status unverified</span></p>
+          : null}
         {trip.equipmentClaims.map((claim) => (
           <article key={claim.id}>
             <p><strong>{claim.equipmentId}</strong> · {offline ? 'Unknown offline' : `Last observed ${titleWords(claim.observation)}`}</p>
@@ -107,6 +113,9 @@ export function ActiveTripCard({
       {trip.exitGuidance ? (
         <section className="trip-module">
           <h3>Exit guidance</h3>
+          {historicalValidationEvidence
+            ? <p className="claim-line"><span>Device-held historical guidance — current status unverified</span></p>
+            : null}
           <p><strong>{trip.exitGuidance.exitId}</strong> · {trip.exitGuidance.purpose}</p>
           {trip.exitGuidance.destinationScope ? <p>
             At {trip.exitGuidance.destinationScope.stationName} · Platform {trip.exitGuidance.destinationScope.platformId}

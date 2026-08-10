@@ -798,6 +798,16 @@ function validateTripReferences(trip: ActiveTripRecord): void {
       throw new Error('Capture context contradicts retained validity');
     }
     const receipt = trip.captureContext.validationEvidenceReceipt;
+    const validationEvidenceMarkers = trip.equipmentClaims.some(({ pathId }) => (
+      pathId === VALIDATION_RIDER_EVIDENCE_MANIFEST.pathId
+    )) || (trip.exitGuidance?.destinationScope?.stationComplexId
+      === VALIDATION_RIDER_EVIDENCE_MANIFEST.destinationStationId
+      && trip.exitGuidance.destinationScope.platformId
+      === VALIDATION_RIDER_EVIDENCE_MANIFEST.destinationPlatformId);
+    if ((receipt || validationEvidenceMarkers)
+      && (!receipt || trip.captureContext.disclosure !== JOURNEY_CAPTURE_DISCLOSURE)) {
+      throw new Error('Validation evidence cannot be downgraded to generic stored context');
+    }
     if (receipt) {
       const manifest = VALIDATION_RIDER_EVIDENCE_MANIFEST;
       const onlyLeg = trip.legs.length === 1 ? trip.legs[0] : undefined;

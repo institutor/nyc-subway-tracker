@@ -130,6 +130,23 @@ describe('strict one-trip device store', () => {
     });
   });
 
+  test.each([
+    ['receipt', (value: any) => { delete value.captureContext.validationEvidenceReceipt; }],
+    ['disclosure', (value: any) => { delete value.captureContext.disclosure; }],
+    ['receipt and disclosure', (value: any) => {
+      delete value.captureContext.validationEvidenceReceipt;
+      delete value.captureContext.disclosure;
+    }],
+    ['altered disclosure', (value: any) => { value.captureContext.disclosure = 'Validation result'; }],
+  ])('rejects a validation-owned stored record after its %s is downgraded', (_name, mutate) => {
+    const candidate = structuredClone(validationTrip()) as any;
+    mutate(candidate);
+
+    expect(createBrowserActiveTripStore(new MemoryStorage()).capture(candidate)).toEqual({
+      kind: 'unavailable', reason: 'invalid-trip',
+    });
+  });
+
   test('opens a v3 trip without mutation and returns immutable detached evidence', () => {
     const storage = new MemoryStorage();
     storage.values.set(ACTIVE_TRIP_STORE_KEY, JSON.stringify({ version: 3, trip: trip() }));
