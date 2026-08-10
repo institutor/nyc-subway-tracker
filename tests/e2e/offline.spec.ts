@@ -25,6 +25,18 @@ test('saves a station, plans a map route, activates one trip, and supports forwa
   await expect(page.getByText('Trip complete — rider confirmed', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: "I'm at this stop: 125 St" }).click();
   await expect(page.getByText('Trip complete — rider confirmed', { exact: true })).toHaveCount(0);
+
+  await page.getByRole('button', { name: 'Saved', exact: true }).click();
+  await page.getByRole('button', { name: 'Edit saved station 125 St' }).click();
+  await page.getByRole('checkbox', { name: 'Accessible Route Only' }).check();
+  await page.getByRole('button', { name: 'Save changes for 125 St' }).click();
+  await expect(page.getByText('On', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Pause personalization for 125 St' }).click();
+  await expect(page.getByText('Paused', { exact: true }).first()).toBeVisible();
+  await page.getByRole('button', { name: 'Reset station preferences for 125 St' }).click();
+  await expect(page.getByText('All station routes', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Delete saved station 125 St' }).click();
+  await expect(page.getByText('No saved stations yet. Open a station board to save exact rider intent.', { exact: true })).toBeVisible();
   await expectNoCrowding(page);
 });
 
@@ -48,6 +60,7 @@ test('presents the exact five owner stages and stage 1–4 invalidations before 
   await openValidationDeck(page);
   await chooseScenario(page, 'Reconnect · stage 1 path invalidation');
   await expectStageOrder(page);
+  await expectServerTransitionOrder(page, 'Reconnect · stage 1 path invalidation');
   await expect(page.getByRole('alert').first()).toContainText('required accessible path');
 
   for (const [scenario, fragment] of [
@@ -57,11 +70,13 @@ test('presents the exact five owner stages and stage 1–4 invalidations before 
   ] as const) {
     await chooseScenario(page, scenario);
     await expectStageOrder(page);
+    await expectServerTransitionOrder(page, scenario);
     await expect(page.getByRole('alert').first()).toContainText(fragment);
   }
 
   await chooseScenario(page, 'Reconnect · optional guidance removed');
   await expectStageOrder(page);
+  await expectServerTransitionOrder(page, 'Reconnect · optional guidance removed');
   await expect(page.getByRole('alert')).toHaveCount(0);
   await expect(page.getByText('Optional guidance removed; trip remains valid.', { exact: true })).toBeVisible();
 });
@@ -73,6 +88,22 @@ async function expectStageOrder(page: Page): Promise<void> {
     '3 · Train choice and arrivals',
     '4 · Required guidance',
     '5 · Maps and unrelated saved stations',
+  ]);
+}
+
+async function expectServerTransitionOrder(page: Page, scenario: string): Promise<void> {
+  await expect.poll(async () => {
+    const response = await page.request.get(`${FIXTURE_ORIGIN}/__test/transitions`);
+    const body = await response.json() as { transitions: Array<{ scenario: string; phase: string; stage: number }> };
+    return body.transitions
+      .filter((transition) => transition.scenario === scenario)
+      .map(({ phase, stage }) => `${phase}:${stage}`);
+  }).toEqual([
+    'requested:1', 'presented:1',
+    'requested:2', 'presented:2',
+    'requested:3', 'presented:3',
+    'requested:4', 'presented:4',
+    'requested:5', 'presented:5',
   ]);
 }
 

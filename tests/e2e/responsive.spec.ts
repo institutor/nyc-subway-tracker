@@ -15,6 +15,17 @@ test('reflows at 320 pixels and 200% text without hiding thumb controls', async 
   }
 });
 
+test('keeps the production Nearby surface inside the viewport at 200% text', async ({ context, page }) => {
+  await context.grantPermissions(['geolocation'], { origin: 'http://127.0.0.1:4173' });
+  await context.setGeolocation({ latitude: 40.811, longitude: -73.952, accuracy: 18 });
+  await page.setViewportSize({ width: 320, height: 720 });
+  await page.goto('/');
+  await expect(page.getByTestId('nearby-station-card')).toHaveCount(3);
+  await page.addStyleTag({ content: 'html { font-size: 200% !important; }' });
+  await expectNoHorizontalOverflow(page);
+  await expect(page.getByRole('navigation', { name: 'Primary' })).toBeVisible();
+});
+
 test('supports keyboard-only navigation with visible focus', async ({ page }) => {
   await openValidationDeck(page);
   await chooseScenario(page, 'Location allowed · practical walk ranking');

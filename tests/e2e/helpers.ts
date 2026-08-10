@@ -14,10 +14,37 @@ export async function chooseScenario(page: Page, name: string): Promise<void> {
 }
 
 export async function expectNoHorizontalOverflow(page: Page): Promise<void> {
-  await expect.poll(() => page.evaluate(() => ({
-    document: document.documentElement.scrollWidth - document.documentElement.clientWidth,
-    body: document.body.scrollWidth - document.body.clientWidth,
-  }))).toEqual({ document: 0, body: 0 });
+  await expect.poll(() => page.evaluate(() => {
+    const viewportWidth = document.documentElement.clientWidth;
+    const tolerance = 1;
+    const violations: string[] = [];
+    for (const element of [...document.querySelectorAll<HTMLElement>('body *')]) {
+      const style = getComputedStyle(element);
+      const rect = element.getBoundingClientRect();
+      const visible = style.display !== 'none'
+        && style.visibility !== 'hidden'
+        && Number.parseFloat(style.opacity || '1') > 0
+        && rect.width > 0
+        && rect.height > 0;
+      if (!visible) continue;
+      const intentionalScroller = style.overflowX === 'auto' || style.overflowX === 'scroll';
+      const outsideViewport = rect.left < -tolerance || rect.right > viewportWidth + tolerance;
+      const internallyClipped = !intentionalScroller && element.scrollWidth > element.clientWidth + tolerance;
+      if (outsideViewport || internallyClipped) {
+        const identity = [element.tagName.toLowerCase(), element.id && `#${element.id}`, ...[...element.classList].map((name) => `.${name}`)]
+          .filter(Boolean)
+          .join('');
+        violations.push(`${identity}: rect=${rect.left.toFixed(1)}..${rect.right.toFixed(1)} client=${element.clientWidth} scroll=${element.scrollWidth} overflow=${style.overflowX}`);
+      }
+    }
+    if (document.documentElement.scrollWidth > viewportWidth + tolerance) {
+      violations.unshift(`html: client=${viewportWidth} scroll=${document.documentElement.scrollWidth}`);
+    }
+    if (document.body.scrollWidth > viewportWidth + tolerance) {
+      violations.unshift(`body: client=${viewportWidth} scroll=${document.body.scrollWidth}`);
+    }
+    return violations.slice(0, 20);
+  })).toEqual([]);
 }
 
 export async function expectNoCrowding(page: Page, scope?: Locator): Promise<void> {
