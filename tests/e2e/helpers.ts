@@ -2,6 +2,11 @@ import { expect, type Locator, type Page } from '@playwright/test';
 
 export const FIXTURE_ORIGIN = 'http://127.0.0.1:4173';
 
+const CROWDING_UI = /crowding|car(?:riage)?[\s_-]*(?:occupancy|capacity|load|diagram)|standing room|seats? (?:available|likely)|room to stand|very crowded|load factor|passenger (?:load|count)|consist length/i;
+const CROWDING_SCHEMA = /crowdingState|occupancyStatus|carOccupancy|carCapacity|carLoad|loadFactor|passengerLoad|passengerCount|seatsAvailable|standingRoom|consistLength|carCount/i;
+const CROWDING_PLACEHOLDER = /(?:crowd(?:ing)?|occupancy|car[\s_-]*(?:capacity|load)).{0,60}(?:module|badge|legend|placeholder|unavailable|unknown|coming soon)|(?:module|badge|legend|placeholder|unavailable|unknown|coming soon).{0,60}(?:crowd(?:ing)?|occupancy|car[\s_-]*(?:capacity|load))/i;
+const CROWDING_PROXY = /(?:headway gaps?|bunching|station density|platform density|rider reports?|engagement|schedules?|service conditions?).{0,60}(?:crowd(?:ing)?|occupancy|car[\s_-]*(?:capacity|load))|(?:crowd(?:ing)?|occupancy|car[\s_-]*(?:capacity|load)).{0,60}(?:headway gaps?|bunching|station density|platform density|rider reports?|engagement|schedules?|service conditions?)/i;
+
 export async function openValidationDeck(page: Page): Promise<void> {
   await page.goto('/__validation/');
   await expect(page.getByRole('heading', { name: 'Subway rider validation deck' })).toBeVisible();
@@ -64,26 +69,58 @@ export async function expectNoCrowding(page: Page, scope?: Locator): Promise<voi
     visit(element);
     return values.join(' ');
   });
-  expect(serialized).not.toMatch(/crowding|occupancy|standing room|car.?load|load factor|seats available/i);
-  await expect(root.locator('[data-crowding], [aria-label*="crowd" i]')).toHaveCount(0);
-  expect(await root.ariaSnapshot()).not.toMatch(/crowding|occupancy|standing room|car.?load|load factor|seats available/i);
+  expectNoCrowdingInEvidence([serialized, await root.ariaSnapshot()]);
+  await expect(root.locator([
+    '[data-crowding]', '[data-occupancy]', '[data-car-load]', '[data-capacity]',
+    '[class*="crowd" i]', '[class*="occupancy" i]', '[id*="crowd" i]', '[id*="occupancy" i]',
+    '[aria-label*="crowd" i]', '[aria-label*="occupancy" i]',
+  ].join(', '))).toHaveCount(0);
+}
+
+export function expectNoCrowdingInEvidence(evidence: readonly unknown[]): void {
+  const serialized = JSON.stringify(evidence);
+  expect(serialized).not.toMatch(CROWDING_UI);
+  expect(serialized).not.toMatch(CROWDING_SCHEMA);
+  expect(serialized).not.toMatch(CROWDING_PLACEHOLDER);
+  expect(serialized).not.toMatch(CROWDING_PROXY);
+}
+
+export interface BrowserRetainedEvidence {
+  readonly local: Readonly<Record<string, string | null>>;
+  readonly session: Readonly<Record<string, string | null>>;
+  readonly cached: readonly {
+    readonly cacheName: string;
+    readonly request: string;
+    readonly headers: Readonly<Record<string, string>>;
+    readonly body: string;
+  }[];
+  readonly serviceWorkers: readonly { readonly scriptURL: string; readonly body: string }[];
+  readonly indexedDatabases: readonly string[];
+  readonly cookies: readonly { readonly name: string; readonly value: string; readonly domain: string; readonly path: string }[];
+  readonly resourceUrls: readonly string[];
 }
 
 export async function expectNoCrowdingOrPersonalCoordinatesAnywhere(
   page: Page,
   apiPayloads: readonly unknown[],
   personalCoordinates: readonly string[],
-): Promise<void> {
+  additionalEvidence: readonly unknown[] = [],
+): Promise<BrowserRetainedEvidence> {
   await expectNoCrowding(page);
-  const deviceHeld = await page.evaluate(async () => {
+  const browserHeld = await page.evaluate(async () => {
     const local = Object.fromEntries(Object.keys(localStorage).map((key) => [key, localStorage.getItem(key)]));
     const session = Object.fromEntries(Object.keys(sessionStorage).map((key) => [key, sessionStorage.getItem(key)]));
-    const cached: Array<{ request: string; body: string }> = [];
+    const cached: Array<{ cacheName: string; request: string; headers: Record<string, string>; body: string }> = [];
     for (const cacheName of await caches.keys()) {
       const cache = await caches.open(cacheName);
       for (const request of await cache.keys()) {
         const response = await cache.match(request);
-        cached.push({ request: request.url, body: response ? await response.clone().text() : '' });
+        cached.push({
+          cacheName,
+          request: request.url,
+          headers: response ? Object.fromEntries(response.headers.entries()) : {},
+          body: response ? await response.clone().text() : '',
+        });
       }
     }
     const registrations = await navigator.serviceWorker.getRegistrations();
@@ -91,9 +128,31 @@ export async function expectNoCrowdingOrPersonalCoordinatesAnywhere(
       const scriptURL = active?.scriptURL ?? installing?.scriptURL ?? waiting?.scriptURL ?? '';
       return { scriptURL, body: scriptURL ? await fetch(scriptURL).then((response) => response.text()) : '' };
     }));
-    return { local, session, cached, serviceWorkers };
+    const indexedDatabases = typeof indexedDB.databases === 'function'
+      ? (await indexedDB.databases()).flatMap(({ name }) => name ? [name] : [])
+      : [];
+    const resourceUrls = performance.getEntriesByType('resource').map(({ name }) => name);
+    return { local, session, cached, serviceWorkers, indexedDatabases, resourceUrls };
   });
-  const serialized = JSON.stringify({ apiPayloads, deviceHeld });
-  expect(serialized).not.toMatch(/crowding|occupancy|standing room|car.?load|load factor|seats available/i);
-  for (const coordinate of personalCoordinates) expect(serialized).not.toContain(coordinate);
+  const cookies = (await page.context().cookies()).map(({ name, value, domain, path }) => ({ name, value, domain, path }));
+  const deviceHeld: BrowserRetainedEvidence = { ...browserHeld, cookies };
+  const retained = { apiPayloads, deviceHeld, additionalEvidence };
+  expectNoCrowdingInEvidence([retained]);
+  const serialized = JSON.stringify(retained);
+  for (const coordinate of coordinateLeakTokens(personalCoordinates)) expect(serialized).not.toContain(coordinate);
+  return deviceHeld;
+}
+
+function coordinateLeakTokens(values: readonly string[]): readonly string[] {
+  const tokens = new Set<string>();
+  for (const value of values) {
+    const coordinate = Number(value);
+    if (!Number.isFinite(coordinate)) continue;
+    for (let digits = 4; digits <= 7; digits += 1) {
+      tokens.add(coordinate.toFixed(digits));
+      const scale = 10 ** digits;
+      tokens.add((Math.trunc(coordinate * scale) / scale).toFixed(digits));
+    }
+  }
+  return [...tokens];
 }
