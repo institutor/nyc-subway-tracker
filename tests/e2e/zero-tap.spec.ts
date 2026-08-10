@@ -65,3 +65,38 @@ test('opens the practical-walk picker instead of inventing a nearby ranking', as
   await expect(page.getByTestId('nearby-station-card')).toHaveCount(0);
   await expect(page.getByRole('heading', { name: 'Choose a station' })).toBeVisible();
 });
+
+test('uses the real App denial path to expose a closed-keyboard picker when nothing is stored', async ({ context, page }) => {
+  await context.clearPermissions();
+  await page.goto('/');
+  await expect(page.getByRole('heading', { name: 'Choose a station' })).toBeVisible();
+  await expect(page.getByText('Location is optional. Pick a station without typing.', { exact: true })).toBeVisible();
+  await expect(page.getByRole('textbox')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '125 St', exact: true })).toBeVisible();
+});
+
+test('uses real walk-unavailable API evidence and never invents a root-app ranking', async ({ context, page, request }) => {
+  const configured = await request.post(`${FIXTURE_ORIGIN}/__test/state`, { data: { walkTransport: 'unavailable' } });
+  expect(configured.ok()).toBe(true);
+  await context.grantPermissions(['geolocation'], { origin: FIXTURE_ORIGIN });
+  await context.setGeolocation({ latitude: 40.811, longitude: -73.952, accuracy: 18 });
+  await page.goto('/');
+  await expect(page.getByText('Comparable walking information is unavailable, so no station was ranked automatically.', { exact: true })).toBeVisible();
+  await expect(page.getByTestId('nearby-station-card')).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: 'Choose a station' })).toBeVisible();
+});
+
+test('does not let delayed location ownership replace an explicit station choice', async ({ context, page, request }) => {
+  const configured = await request.post(`${FIXTURE_ORIGIN}/__test/state`, { data: { walkDelayMs: 1_200 } });
+  expect(configured.ok()).toBe(true);
+  await context.grantPermissions(['geolocation'], { origin: FIXTURE_ORIGIN });
+  await context.setGeolocation({ latitude: 40.811, longitude: -73.952, accuracy: 18 });
+  await page.goto('/');
+  const controls = page.getByRole('toolbar', { name: 'Nearby controls' });
+  await controls.getByRole('button', { name: 'Choose a station' }).click();
+  await page.getByRole('button', { name: 'Canal St', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Canal St', exact: true, level: 2 })).toBeVisible();
+  await page.waitForTimeout(1_400);
+  await expect(page.getByRole('heading', { name: 'Canal St', exact: true, level: 2 })).toBeVisible();
+  await expect(page.getByTestId('nearby-station-card')).toHaveCount(0);
+});

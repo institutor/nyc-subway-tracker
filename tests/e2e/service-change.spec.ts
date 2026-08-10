@@ -27,6 +27,11 @@ test('shows Scheduled clock times only in separated fallback mode', async ({ pag
 
 test('removes exact precision on first healthy absence without creating a substitute', async ({ page }) => {
   await chooseScenario(page, 'Board · first healthy absence');
+  const row = page.getByTestId('primary-arrival');
+  await expect(row).toHaveCount(1);
+  await expect(row).toContainText('F');
+  await expect(row.getByText('Live', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Apply first healthy absence' }).click();
   await expect(page.getByText('First healthy absence: exact precision removed; no replacement shown.', { exact: true })).toBeVisible();
   await expect(page.getByTestId('primary-arrival')).toHaveCount(0);
   await expect(page.getByText(/Live|Expected|Scheduled/, { exact: true })).toHaveCount(0);
@@ -46,10 +51,16 @@ test('vetoes a bypassed train, preserves an unaffected sibling, and recovers onl
   await expect(page.getByTestId('primary-arrival')).toContainText('E');
 
   await chooseScenario(page, 'Board · two-update recovery');
-  await expect(page.getByText('Recovery confirmation required', { exact: true })).toBeVisible();
-  await expect(page.getByText('Recovered F arrival', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('Bypass veto active', { exact: true })).toBeVisible();
+  await expect(page.getByTestId('primary-arrival')).toHaveCount(1);
+  await expect(page.getByTestId('primary-arrival')).toContainText('E');
+  await page.getByRole('button', { name: 'Accept next coherent update' }).click();
+  await expect(page.getByText('One clean update · F still withheld', { exact: true })).toBeVisible();
+  await expect(page.getByTestId('primary-arrival')).toHaveCount(1);
+  await expect(page.getByTestId('primary-arrival')).not.toContainText('F');
   await page.getByRole('button', { name: 'Accept next coherent update' }).click();
   await expect(page.getByText('Two coherent recovery updates', { exact: true })).toBeVisible();
-  await expect(page.getByText('Recovered F arrival', { exact: true })).toBeVisible();
+  await expect(page.getByTestId('primary-arrival')).toHaveCount(2);
+  await expect(page.getByTestId('primary-arrival').filter({ hasText: 'F' }).getByText('Live', { exact: true })).toBeVisible();
   await expectNoCrowding(page);
 });

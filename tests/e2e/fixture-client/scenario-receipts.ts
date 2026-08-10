@@ -1,5 +1,6 @@
 import type { BoardEnvelopeDto } from '../../../src/client/api/client';
 import { runReconnection } from '../../../src/client/recovery/run-reconnection';
+import type { ReconnectionTransition } from '../../../src/client/recovery/run-reconnection';
 import {
   admitArrivalCandidate,
   type ArrivalAdmissionCandidate,
@@ -35,9 +36,6 @@ import { buildScheduleFallback } from '../../../src/shared/domain/schedule-fallb
 import type { BoardDecision, SavedRecord } from '../../../src/shared/domain/types';
 import type { NormalizedStaticGtfs, StaticGtfsEditionCandidate } from '../../../src/server/gtfs/static-normalizer';
 import { buildBoardDto } from '../../../src/server/services/board-service';
-import { createCommuteMonitor } from '../../../src/server/notifications/commute-monitor';
-import { createCommuteEvaluationAuthorization } from '../../../src/server/notifications/notification-authorization';
-import { createSubscriptionStore } from '../../../src/server/notifications/subscription-store';
 import { boardEnvelope } from '../../helpers/client-fixtures';
 
 export const RECONNECTION_SCENARIOS = [
@@ -139,7 +137,9 @@ export function scheduledFallbackBoard(): BoardEnvelopeDto {
   };
 }
 
-export function firstAbsenceDecision(): TrainRecoveryDecision {
+export function firstAbsenceTimeline(): { readonly before: BoardEnvelopeDto; readonly absence: TrainRecoveryDecision } {
+  const admission = admitTimelineArrival('live', 'train-f-absence', 'F', 170, 190);
+  if (admission.kind !== 'admitted') throw new Error('Initial train for first-absence timeline was not admitted');
   const governor = new TrainRecoveryGovernor({
     feedGroupId: 'subway-rt-bdfm',
     trainIdentity: 'train-f-1',
@@ -147,7 +147,11 @@ export function firstAbsenceDecision(): TrainRecoveryDecision {
     initialEvidence: evidence('train-initial', 0),
     movementAt: at(-10),
   });
-  return governor.observeHealthySnapshot({ provenance: evidence('train-absence-1', 30), entity: { kind: 'absent' } });
+  const absence = governor.observeHealthySnapshot({ provenance: evidence('train-absence-1', 30), entity: { kind: 'absent' } });
+  return {
+    before: serviceBoardFromAdmissions([admission], 'F train evidence is current before the next healthy snapshot.'),
+    absence,
+  };
 }
 
 export function bypassDecisions(): {
@@ -197,10 +201,15 @@ export function serviceRecoveryDecisions(): {
   readonly two: ServiceChangeDecision;
   readonly oneAdmission: ArrivalAdmissionDecision;
   readonly twoAdmission: ArrivalAdmissionDecision;
+  readonly adverseBoard: BoardEnvelopeDto;
+  readonly oneBoard: BoardEnvelopeDto;
   readonly twoBoard: BoardEnvelopeDto;
 } {
-  const adverse = evaluateServiceChanges({ snapshot: alertSnapshot([bypassAlert()]), claim: serviceClaim('F') });
+  const adverseSnapshot = alertSnapshot([bypassAlert()]);
+  const adverse = evaluateServiceChanges({ snapshot: adverseSnapshot, claim: serviceClaim('F') });
   if (!adverse.carryover) throw new Error('Bypass fixture did not create a risk boundary');
+  const adverseAdmission = admitServiceArrival(adverse);
+  const adverseSibling = admitServiceArrival(evaluateServiceChanges({ snapshot: adverseSnapshot, claim: serviceClaim('E') }));
   const clear = classifyAlertSnapshot({ status: 'accepted', feedTimestamp: at(30), retrievedAt: at(30), alerts: [] }, at(30));
   const updates = [recoveryUpdate('recovery-1', 10), recoveryUpdate('recovery-2', 20)];
   const one = evaluateServiceChanges({
@@ -211,12 +220,15 @@ export function serviceRecoveryDecisions(): {
   });
   const oneAdmission = admitServiceArrival(one);
   const twoAdmission = admitServiceArrival(two, 'live-readmission-eligible');
+  const siblingAdmission = admitServiceArrival(evaluateServiceChanges({ snapshot: clear, claim: serviceClaim('E') }));
   return {
     one,
     two,
     oneAdmission,
     twoAdmission,
-    twoBoard: serviceBoardFromAdmissions([twoAdmission], 'F trains have resumed making scheduled stops at 14 St.'),
+    adverseBoard: serviceBoardFromAdmissions([adverseAdmission, adverseSibling], adverse.riderCopy ?? 'F trains bypass 14 St.'),
+    oneBoard: serviceBoardFromAdmissions([oneAdmission, siblingAdmission], 'One clean update has been accepted; F remains withheld.'),
+    twoBoard: serviceBoardFromAdmissions([twoAdmission, siblingAdmission], 'F trains have resumed making scheduled stops at 14 St.'),
   };
 }
 
@@ -252,42 +264,9 @@ export function commuteDecision(kind: CommuteReceiptScenario): NotificationDecis
   return materialNotificationDecision({ window: commuteWindow, occurrence, impact: selectedImpact, delivered });
 }
 
-export async function lockedMonitorReceipt(): Promise<{ readonly kind: string; readonly delivered: number; readonly senderCalls: number }> {
-  let senderCalls = 0;
-  const subscriptions = createSubscriptionStore();
-  subscriptions.upsert({
-    endpoint: 'https://push.example.test/subway-validation', keys: { p256dh: 'fixture-key', auth: 'fixture-auth' },
-    commuteWindows: [{
-      id: commuteWindow.id,
-      lifecycle: commuteWindow.lifecycle,
-      notificationEnabled: commuteWindow.notificationEnabled,
-      weekdays: commuteWindow.weekdays,
-      startsAt: commuteWindow.startsAt,
-      endsAt: commuteWindow.endsAt,
-      preparationLeadMinutes: commuteWindow.preparationLeadMinutes,
-      scope: commuteWindow.scope,
-    }],
-  });
-  const monitor = createCommuteMonitor({
-    stage: 'deterministic-test',
-    evaluationAuthorization: createCommuteEvaluationAuthorization({
-      stage: 'deterministic-test', exposureKey: 'commute-evaluation', authorizationId: 'validation-evaluation-only',
-    }),
-    deliveryAuthorization: undefined,
-    capture: () => [impact()],
-    sender: { send: async () => { senderCalls += 1; return { kind: 'delivered' as const }; } },
-    subscriptions,
-  });
-  const receipt = await monitor.evaluate({
-    trigger: 'scheduled', at: new Date('2026-08-03T12:00:00.000Z'), windows: [commuteWindow],
-    connected: true, permissionGranted: true,
-  });
-  return { kind: receipt.kind, delivered: receipt.kind === 'evaluated' ? receipt.delivered : 0, senderCalls };
-}
-
 export async function runReconnectionScenario(
   scenario: ReconnectionScenario,
-  onTransition: (phase: 'requested' | 'presented', stage: ReconnectionStage) => void,
+  onTransition: (transition: ReconnectionTransition) => void,
 ): Promise<ReconnectionState> {
   const context = reconnectionContext(scenario);
   const failedStage = scenario === 'Reconnect · stage 1 path invalidation' ? 1
@@ -297,9 +276,11 @@ export async function runReconnectionScenario(
   const result = await runReconnection({
     context,
     initial: { historicalPositioningGuidance: true, historicalTransferGuidance: true },
-    loadStage: async ({ stage }) => stage === failedStage ? undefined : validStage(context, stage),
+    loadStage: async ({ stage }) => stage === failedStage
+      ? stage === 3 ? oneSnapshotStage(context) : undefined
+      : validStage(context, stage),
     now: () => new Date('2026-08-05T12:00:01.000Z'),
-    onTransition: ({ phase, stage }) => onTransition(phase, stage),
+    onTransition,
   });
   if (result.kind !== 'complete') throw new Error('Validation recovery did not complete');
   return result.state;
@@ -312,7 +293,7 @@ function evidence(id: string, seconds: number) {
 function admitTimelineArrival(
   kind: 'live' | 'expected',
   trainIdentity: string,
-  routeId: 'A' | 'C',
+  routeId: 'A' | 'C' | 'F',
   startsAtSeconds: number,
   endsAtSeconds: number,
 ): ArrivalAdmissionDecision {
@@ -555,7 +536,7 @@ function reconnectionContext(scenario: ReconnectionScenario): PreservedReconnect
     mapTuple: { referenceMode: 'actual', theme: 'night', contentVersion: 'map-7', viewportKey: 'viewport-7' },
     activeTripId: 'trip-7', manualCursor: { legIndex: 0, stopId: 'A12' }, hasStoredTrainChoice: true,
     guidanceRequirements: { positioning: optional ? 'optional' : 'required', transfer: optional ? 'optional' : 'required' },
-    activeSurface: 'map', scrollOffset: 0, focusTargetId: null, readingAnchorId: 'point-a12',
+    activeSurface: 'map', scrollOffset: 0, focusTargetId: 'map-point-a12', readingAnchorId: 'point-a12',
     recovery: {
       epochId: 'epoch-7', requestIdentity: `request-${scenario.replace(/[^a-z0-9]+/giu, '-').toLowerCase()}`,
       generation: 7, startedAt: '2026-08-05T12:00:00.000Z', activeTripId: 'trip-7', contextKey: 'context-7',
@@ -566,7 +547,7 @@ function reconnectionContext(scenario: ReconnectionScenario): PreservedReconnect
       ],
       ownerScopes: {
         equipment: [{ kind: 'station', id: 'A12' }], 'accessible-path': [{ kind: 'station', id: 'A12' }],
-        'service-change': [{ kind: 'route', id: 'A' }], 'feed-health': [{ kind: 'station', id: 'A12' }],
+        'service-change': [{ kind: 'route', id: 'A' }, { kind: 'transfer', id: 'transfer-7' }], 'feed-health': [{ kind: 'station', id: 'A12' }],
         'train-admission': [{ kind: 'train', id: 'train-7' }], arrivals: [{ kind: 'station', id: 'A12' }],
         positioning: [{ kind: 'station', id: 'A12' }], 'transfer-guidance': [{ kind: 'transfer', id: 'transfer-7' }],
         maps: [{ kind: 'map', id: 'viewport-7' }], saved: [{ kind: 'saved-record', id: 'saved-7' }],
@@ -582,6 +563,30 @@ function ownerGate(context: PreservedReconnectionContext, domain: OwnerAcceptanc
     recoveryEpochId: context.recovery.epochId, requestIdentity: context.recovery.requestIdentity,
     generation: context.recovery.generation, activeTripId: context.recovery.activeTripId,
     contextKey: context.recovery.contextKey, scopeMembership: context.recovery.ownerScopes[domain], disposition: 'accepted-fresh',
+  };
+}
+
+function oneSnapshotStage(context: PreservedReconnectionContext): ReconnectionStageResult {
+  const feed = ownerGate(context, 'feed-health', 'feed-readmitted');
+  const train = ownerGate(context, 'train-admission', 'stored-train-awaiting-confirmation');
+  const arrivals = ownerGate(context, 'arrivals', 'arrivals-aggregate-one-snapshot');
+  const snapshot = ownerGate(context, 'arrivals', 'arrivals-snapshot-1');
+  return {
+    stage: 3,
+    feedRecovery: { gate: feed, disposition: 'readmitted' },
+    trainReadmission: { gate: train, disposition: 'admitted' },
+    arrivals: { gate: arrivals, disposition: 'withheld', freshSnapshotCount: 1, freshSnapshots: [snapshot] },
+    storedTrainChoice: 'unverified',
+    invalidation: {
+      id: `${context.recovery.requestIdentity}:warning:3`,
+      stage: 3,
+      ownerGate: train,
+      changedFact: 'The stored train choice has only one fresh confirming snapshot.',
+      scopes: [{ kind: 'train', id: 'train-7', label: 'train train-7' }],
+      consequence: 'Use the historical arrival only as a past observation.',
+      lastVerifiedDecisionPoint: { id: 'A12', label: 'Stored trip point A12' },
+      verifiedAlternative: null,
+    },
   };
 }
 

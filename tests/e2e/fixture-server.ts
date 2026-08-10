@@ -12,6 +12,7 @@ import { planJourney } from '../../src/server/services/journey-service';
 import type { JourneyCapturePackage } from '../../src/shared/domain/journey-capture';
 import type { BoardDecision } from '../../src/shared/domain/types';
 import { journeyGraphFixture } from '../helpers/journey-graph-fixture';
+import { lockedCommuteReceipt } from './fixture-commute-receipt';
 
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const clientDirectory = resolve(projectRoot, 'dist/client');
@@ -22,9 +23,11 @@ const fixturePort = 4173;
 interface FixtureState {
   boardTransport: 'ok' | 'drop';
   overlay: 'ready' | 'missing';
+  walkTransport: 'available' | 'unavailable';
+  walkDelayMs: number;
 }
 
-const state: FixtureState = { boardTransport: 'ok', overlay: 'ready' };
+const state: FixtureState = { boardTransport: 'ok', overlay: 'ready', walkTransport: 'available', walkDelayMs: 0 };
 const requestLog: string[] = [];
 const transitionLog: ValidationTransition[] = [];
 let snapshotSequence = 0;
@@ -134,20 +137,24 @@ const dependencies = createProductionDependencies({
   clock: fixtureClock,
   catalog,
   nearbyUniverse,
-  walk: async ({ destinations }) => Object.freeze({
-    kind: 'available' as const,
-    source: 'practical-walk' as const,
-    sourceId: 'practical-walk',
-    coverage: Object.freeze({ kind: 'complete-universe' as const }),
-    results: Object.freeze(destinations.map(({ id }) => Object.freeze({
-      destinationId: id,
-      range: id === 'entrance-a12'
-        ? { minimumSeconds: 95, maximumSeconds: 120 }
-        : id === 'entrance-r20'
-          ? { minimumSeconds: 135, maximumSeconds: 160 }
-          : { minimumSeconds: 175, maximumSeconds: 205 },
-    }))),
-  }),
+  walk: async ({ destinations }) => {
+    if (state.walkDelayMs > 0) await new Promise((resolveDelay) => setTimeout(resolveDelay, state.walkDelayMs));
+    if (state.walkTransport === 'unavailable') return Object.freeze({ kind: 'unavailable' as const, reason: 'unsupported' as const });
+    return Object.freeze({
+      kind: 'available' as const,
+      source: 'practical-walk' as const,
+      sourceId: 'practical-walk',
+      coverage: Object.freeze({ kind: 'complete-universe' as const }),
+      results: Object.freeze(destinations.map(({ id }) => Object.freeze({
+        destinationId: id,
+        range: id === 'entrance-a12'
+          ? { minimumSeconds: 95, maximumSeconds: 120 }
+          : id === 'entrance-r20'
+            ? { minimumSeconds: 135, maximumSeconds: 160 }
+            : { minimumSeconds: 175, maximumSeconds: 205 },
+      }))),
+    });
+  },
   mapReferences,
   snapshotProvider: Object.freeze({ capture: createSnapshot }),
 });
@@ -162,6 +169,8 @@ fixture.get('/__test/health', (_request, response) => response.status(200).json(
 fixture.post('/__test/reset', (_request, response) => {
   state.boardTransport = 'ok';
   state.overlay = 'ready';
+  state.walkTransport = 'available';
+  state.walkDelayMs = 0;
   requestLog.length = 0;
   transitionLog.length = 0;
   response.status(204).end();
@@ -182,9 +191,26 @@ fixture.post('/__test/state', (request, response) => {
     }
     state.overlay = candidate.overlay;
   }
+  if (candidate.walkTransport !== undefined) {
+    if (candidate.walkTransport !== 'available' && candidate.walkTransport !== 'unavailable') {
+      response.status(400).json({ error: 'invalid walk transport' });
+      return;
+    }
+    state.walkTransport = candidate.walkTransport;
+  }
+  if (candidate.walkDelayMs !== undefined) {
+    if (!Number.isSafeInteger(candidate.walkDelayMs) || candidate.walkDelayMs < 0 || candidate.walkDelayMs > 5_000) {
+      response.status(400).json({ error: 'invalid walk delay' });
+      return;
+    }
+    state.walkDelayMs = candidate.walkDelayMs;
+  }
   response.status(204).end();
 });
 fixture.get('/__test/requests', (_request, response) => response.status(200).json({ requests: [...requestLog] }));
+fixture.get('/__test/commute-lock', async (_request, response) => {
+  response.status(200).json(await lockedCommuteReceipt());
+});
 fixture.post('/__test/requests/clear', (_request, response) => {
   requestLog.length = 0;
   response.status(204).end();
@@ -193,18 +219,57 @@ fixture.get('/__test/transitions', (_request, response) => response.status(200).
 fixture.post('/__test/transitions', (request, response) => {
   const candidate = request.body as Partial<ValidationTransition>;
   const keys = Object.keys(candidate);
-  if (keys.length !== 3 || !keys.every((key) => ['scenario', 'phase', 'stage'].includes(key))
+  if (keys.length !== 9 || !keys.every((key) => [
+    'scenario', 'sequence', 'requestIdentity', 'phase', 'stage', 'stageStatus',
+    'ownerDisposition', 'evidenceIds', 'auditKinds',
+  ].includes(key))
     || !RECONNECTION_SCENARIOS.includes(candidate.scenario as ReconnectionScenario)
     || (candidate.phase !== 'requested' && candidate.phase !== 'presented')
-    || ![1, 2, 3, 4, 5].includes(candidate.stage as number)) {
+    || ![1, 2, 3, 4, 5].includes(candidate.stage as number)
+    || candidate.stageStatus !== candidate.phase
+    || typeof candidate.requestIdentity !== 'string'
+    || !/^(?:request|recovery)-[a-z0-9-]{1,120}$/u.test(candidate.requestIdentity)
+    || !Number.isSafeInteger(candidate.sequence)
+    || !Array.isArray(candidate.evidenceIds)
+    || candidate.evidenceIds.some((id) => typeof id !== 'string' || id.length === 0 || id.length > 200)
+    || !Array.isArray(candidate.auditKinds)
+    || candidate.auditKinds.some((kind) => ![
+      'stage-requested', 'stage-owner-accepted', 'stage-committed', 'warning-presented', 'stage-presented', 'warning-resolved',
+    ].includes(kind))) {
     response.status(400).json({ error: 'invalid transition receipt' });
     return;
   }
-  transitionLog.push({
+  const prior = transitionLog.filter(({ scenario }) => scenario === candidate.scenario);
+  const expectedSequence = prior.length + 1;
+  const expectedStage = Math.floor(prior.length / 2) + 1;
+  const expectedPhase = prior.length % 2 === 0 ? 'requested' : 'presented';
+  const firstRequestIdentity = prior[0]?.requestIdentity;
+  const dispositionValid = candidate.phase === 'requested'
+    ? candidate.ownerDisposition === 'pending' && candidate.evidenceIds.length === 0
+      && candidate.auditKinds.includes('stage-requested')
+    : (candidate.ownerDisposition === 'accepted-fresh' || candidate.ownerDisposition === 'governed-fail-closed')
+      && candidate.evidenceIds.length > 0
+      && ['stage-owner-accepted', 'stage-committed', 'stage-presented'].every((kind) => candidate.auditKinds!.includes(kind));
+  if (candidate.sequence !== expectedSequence
+    || candidate.stage !== expectedStage
+    || candidate.phase !== expectedPhase
+    || (firstRequestIdentity !== undefined && candidate.requestIdentity !== firstRequestIdentity)
+    || !dispositionValid) {
+    response.status(409).json({ error: 'out-of-order transition receipt' });
+    return;
+  }
+  const accepted: ValidationTransition = {
     scenario: candidate.scenario as ReconnectionScenario,
+    sequence: candidate.sequence,
+    requestIdentity: candidate.requestIdentity,
     phase: candidate.phase,
     stage: candidate.stage as 1 | 2 | 3 | 4 | 5,
-  });
+    stageStatus: candidate.stageStatus,
+    ownerDisposition: candidate.ownerDisposition as ValidationTransition['ownerDisposition'],
+    evidenceIds: [...candidate.evidenceIds],
+    auditKinds: [...candidate.auditKinds],
+  };
+  transitionLog.push(accepted);
   response.status(204).end();
 });
 fixture.use((request, response, next) => {
@@ -358,7 +423,14 @@ function journeyCapture(capturedAt: Date): JourneyCapturePackage {
       },
       warnings: [], vetoes: [],
     },
-    serviceClaims: [], equipmentClaims: [],
+    serviceClaims: currentJourneyItinerary.legs.slice(0, 1).map((leg) => ({
+      id: `service-claim-${leg.patternId}`,
+      scope: { kind: 'pattern' as const, patternId: leg.patternId, routeId: leg.routeId, direction: leg.direction },
+      state: 'normal' as const,
+      consequence: `${leg.routeLabel} service context was checked when this trip was captured.`,
+      lastCheckedAt: lastRetrievedAt,
+    })),
+    equipmentClaims: [],
   };
 }
 
@@ -368,12 +440,19 @@ const RECONNECTION_SCENARIOS = [
   'Reconnect · stage 3 train invalidation',
   'Reconnect · stage 4 required guidance invalidation',
   'Reconnect · optional guidance removed',
+  'Reconnect · app-integrated active trip',
 ] as const;
 type ReconnectionScenario = typeof RECONNECTION_SCENARIOS[number];
 interface ValidationTransition {
   readonly scenario: ReconnectionScenario;
+  readonly sequence: number;
+  readonly requestIdentity: string;
   readonly phase: 'requested' | 'presented';
   readonly stage: 1 | 2 | 3 | 4 | 5;
+  readonly stageStatus: 'requested' | 'presented';
+  readonly ownerDisposition: 'pending' | 'accepted-fresh' | 'governed-fail-closed';
+  readonly evidenceIds: readonly string[];
+  readonly auditKinds: readonly string[];
 }
 
 function createBoard(capturedAt: Date, observedAt: Date, retrievedAt: Date): BoardDecision {

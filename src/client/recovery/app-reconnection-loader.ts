@@ -313,9 +313,12 @@ async function loadArrivals(
   context: PreservedReconnectionContext,
   signal: AbortSignal,
 ): Promise<ReconnectionStageResult | undefined> {
-  if (!options.stationId || context.hasStoredTrainChoice) return undefined;
+  if (!options.stationId) return undefined;
   const first = await options.api.board(options.stationId, options.filters, signal);
   if (!isFreshBoard(first, context, options.stationId)) return undefined;
+  // A stored train identity cannot be re-admitted from one board snapshot.
+  // Observe the first owner snapshot, then leave the coordinator to fail closed.
+  if (context.hasStoredTrainChoice) return undefined;
   const firstAcceptedAt = exactNow(options.now);
   const second = await options.api.board(options.stationId, options.filters, signal);
   if (!isFreshBoard(second, context, options.stationId)

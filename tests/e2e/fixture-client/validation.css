@@ -14,6 +14,7 @@
   max-width: 18ch;
   margin-block-end: var(--space-2);
   font-size: var(--step-3);
+  overflow-wrap: anywhere;
 }
 
 .validation-eyebrow,
@@ -52,6 +53,8 @@
 }
 
 .validation-board {
+  --surface-gutter: 0px;
+
   padding: var(--space-3);
 }
 

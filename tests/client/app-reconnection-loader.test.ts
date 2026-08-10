@@ -172,6 +172,31 @@ describe('App reconnection owner loader', () => {
       invalidation: { scopes: [{ kind: 'leg', id: 'leg-2' }] },
     });
   });
+
+  test('observes exactly one fresh board but restores nothing for a stored train choice', async () => {
+    const first = {
+      ...boardEnvelope(),
+      responseIdentity: 'one-current-snapshot',
+      decidedAt: '2026-08-05T12:00:01.000Z',
+      serverTime: '2026-08-05T12:00:01.000Z',
+    };
+    const board = vi.fn(async () => first);
+    const loader = createAppReconnectionStageLoader({
+      api: createClientApi({ board }),
+      stationId: 'A12',
+      filters: { routeIds: ['A'], direction: 'southbound' },
+      hasUnrelatedSavedRecords: false,
+      artifacts: {},
+      activeTrip: timedActiveTrip(),
+      now: () => new Date(ACCEPTED_AT),
+    });
+
+    await expect(loader(
+      { stage: 3, context: recoveryContext(), state: null as any },
+      new AbortController().signal,
+    )).resolves.toBeUndefined();
+    expect(board).toHaveBeenCalledTimes(1);
+  });
 });
 
 function recoveryContext(serviceLegIds: readonly string[] = ['leg-1']): PreservedReconnectionContext {

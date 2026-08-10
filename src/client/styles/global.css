@@ -819,8 +819,12 @@ button[aria-pressed="true"] {
 }
 
 @media (max-width: 25rem) {
+  .app-shell {
+    --target: 48px;
+  }
+
   .app-frame {
-    --surface-gutter: var(--space-3);
+    --surface-gutter: 12px;
   }
 
   .runtime-label {
@@ -829,12 +833,33 @@ button[aria-pressed="true"] {
   }
 
   .station-card {
-    padding-inline-end: var(--space-3);
+    padding-inline: 16px 12px;
+    padding-inline-start: 24px;
+  }
+
+  .station-card__spine {
+    inset-inline-start: 13px;
+  }
+
+  .nearby-direction {
+    padding-inline-start: 16px;
+  }
+
+  .direction-track__heading h3 {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .claim-kind,
+  .claim-line,
+  .arrival-context {
+    min-width: 0;
+    overflow-wrap: anywhere;
   }
 
   .arrival-row {
-    grid-template-columns: 2.35rem minmax(0, 1fr) auto;
-    padding-inline: var(--space-2);
+    grid-template-columns: auto minmax(0, 1fr);
+    padding-inline: 10px;
   }
 
   .route-token {
@@ -844,12 +869,42 @@ button[aria-pressed="true"] {
   }
 
   .arrival-row__time {
+    grid-column: 1 / -1;
+    justify-self: end;
     font-size: 1.15rem;
+    overflow-wrap: anywhere;
+    text-align: end;
+    white-space: normal;
   }
 
   .claim-line,
   .arrival-context {
     grid-column: 1 / -1;
+  }
+
+  .context-dock {
+    margin-inline: 0;
+    padding-inline: 8px;
+  }
+
+  .context-dock > button span,
+  .context-dock__routes > button span {
+    min-width: 0;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+  }
+
+  .thumb-dock {
+    padding-inline: 8px;
+  }
+
+  .thumb-dock__button {
+    overflow-wrap: anywhere;
+  }
+
+  .thumb-dock__button > span {
+    min-width: 0;
+    max-width: 100%;
   }
 
   .choice-list button {
