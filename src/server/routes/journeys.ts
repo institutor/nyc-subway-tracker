@@ -69,7 +69,7 @@ export function journeyHandler(dependencies: AppDependencies) {
       apiVersion: API_VERSION,
       schemaVersion: SCHEMA_VERSION,
       responseIdentity: createResponseIdentity([
-        'journey', query.mode, query.originStationId, query.destinationStationId, decidedAt,
+        'journey', query.mode, query.originStationId, query.destinationStationId, decidedAt, snapshot.identity,
         JSON.stringify(sourceHealth), JSON.stringify(provenance), JSON.stringify(data),
       ]),
       decidedAt,
@@ -77,6 +77,7 @@ export function journeyHandler(dependencies: AppDependencies) {
       runtime: { mode: 'validation', surface: 'demonstration', availability: 'available' },
       gates: dependencies.exposure.public,
       gateDecision: dependencies.exposure.public['nearby-offline'],
+      decisionSnapshotIdentity: snapshot.identity,
       demonstrationLabel: DEMONSTRATION_LABEL,
       sourceHealth,
       provenance,

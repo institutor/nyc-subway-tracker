@@ -6,6 +6,7 @@ import {
   type ActiveTripRecord,
 } from '../../src/client/storage/active-trip-store';
 import type { BrowserStorage } from '../../src/client/storage/browser-store';
+import { encodeCanonicalStringTuple } from '../../src/shared/domain/canonical';
 
 class MemoryStorage implements BrowserStorage {
   readonly values = new Map<string, string>();
@@ -88,6 +89,47 @@ const trip = (overrides: Partial<ActiveTripRecord> = {}): ActiveTripRecord => ({
 });
 
 describe('strict one-trip device store', () => {
+  test('round-trips only an exact committed validation receipt and destination exit scope', () => {
+    const storage = new MemoryStorage();
+    const store = createBrowserActiveTripStore(storage);
+
+    expect(store.capture(validationTrip())).toMatchObject({
+      kind: 'saved',
+      trip: {
+        captureContext: { validationEvidenceReceipt: {
+          decisionSnapshotIdentity: 'validation-snapshot-2026-08-04-v2',
+          destinationStationId: 'A34', destinationPlatformId: 'A34S', pathId: 'path-a15-a34-accessible',
+        } },
+        exitGuidance: { destinationScope: {
+          stationComplexId: 'A34', constituentStationId: 'A34', platformId: 'A34S', equipmentId: 'EL-A34-01',
+        } },
+      },
+    });
+    expect(createBrowserActiveTripStore(storage).read()).toMatchObject({
+      kind: 'ready', migrated: false,
+      trip: { captureContext: { validationEvidenceReceipt: { canonicalItineraryIdentity: 'validation-direct-itinerary' } } },
+    });
+  });
+
+  test.each([
+    ['journey decision', (value: any) => { value.captureContext.validationEvidenceReceipt.journeyDecisionIdentity = 'response:other-journey'; }],
+    ['snapshot', (value: any) => { value.captureContext.validationEvidenceReceipt.decisionSnapshotIdentity = 'validation-snapshot-other'; }],
+    ['catalog version', (value: any) => { value.captureContext.validationEvidenceReceipt.stationCatalogVersion = 'catalog-other'; }],
+    ['capture package', (value: any) => { value.captureContext.validationEvidenceReceipt.capturePackageIdentity = 'capture-other'; }],
+    ['path', (value: any) => { value.equipmentClaims[0].pathId = 'path-other'; }],
+    ['station', (value: any) => { value.captureContext.validationEvidenceReceipt.destinationStationId = 'A33'; }],
+    ['platform', (value: any) => { value.exitGuidance.destinationScope.platformId = 'A34N'; }],
+    ['equipment', (value: any) => { value.exitGuidance.destinationScope.equipmentId = 'EL-OTHER'; }],
+    ['transfer', (value: any) => { value.transfers.push({ id: 'forged-transfer' }); }],
+    ['extra receipt key', (value: any) => { value.captureContext.validationEvidenceReceipt.forged = true; }],
+  ])('rejects a validation trip with tampered %s ownership', (_name, mutate) => {
+    const candidate = structuredClone(validationTrip()) as any;
+    mutate(candidate);
+    expect(createBrowserActiveTripStore(new MemoryStorage()).capture(candidate)).toEqual({
+      kind: 'unavailable', reason: 'invalid-trip',
+    });
+  });
+
   test('opens a v3 trip without mutation and returns immutable detached evidence', () => {
     const storage = new MemoryStorage();
     storage.values.set(ACTIVE_TRIP_STORE_KEY, JSON.stringify({ version: 3, trip: trip() }));
@@ -406,6 +448,78 @@ describe('strict one-trip device store', () => {
     expect(storage.values.get(legacyKey)).toBeDefined();
   });
 });
+
+function validationTrip(): ActiveTripRecord {
+  const journeyDecisionIdentity = 'response:validation-journey';
+  const itineraryId = 'validation-direct-itinerary';
+  const capturedAt = '2026-08-04T12:00:00.000Z';
+  return {
+    id: 'validation-trip', capturedAt,
+    captureContext: {
+      kind: 'response-owned', itineraryId, requestMode: 'online-current', timing: 'timed',
+      disclosure: 'Demonstration data — not live',
+      validationEvidenceReceipt: {
+        bootstrapDecisionIdentity: 'response:committed-validation-bootstrap',
+        journeyDecisionIdentity,
+        decisionSnapshotIdentity: 'validation-snapshot-2026-08-04-v2',
+        stationCatalogVersion: 'validation-catalog-2026-08-04-v2',
+        journeyGraphVersion: 'journey-graph-ca6e27786a0488d3dbdfe272ba834c89fec49413d22ae63407e23f4cf883831d',
+        mapDayVersion: 'validation-map-day-2026-08-04-v2', mapNightVersion: 'validation-map-night-2026-08-04-v2',
+        canonicalItineraryIdentity: itineraryId,
+        capturePackageIdentity: encodeCanonicalStringTuple([
+          'validation-capture-package-v1', journeyDecisionIdentity, itineraryId, capturedAt,
+          'A15', 'A34', 'online-current',
+        ]),
+        pathId: 'path-a15-a34-accessible',
+        originStationId: 'A15', originPlatformId: 'A15S',
+        destinationStationId: 'A34', destinationPlatformId: 'A34S',
+        routeId: 'A', direction: 'southbound', actualDestination: 'Far Rockaway',
+      },
+    },
+    origin: { name: '125 St', complexId: 'A15', constituentId: 'A15' },
+    destination: { name: 'Canal St', complexId: 'A34', constituentId: 'A34' },
+    accessibleRouteOnly: true,
+    legs: [{
+      id: 'validation-leg-1',
+      route: { id: 'A', label: 'A', spokenIdentity: 'A train', shape: 'circle' },
+      boundDirection: 'southbound', actualDestination: 'Far Rockaway',
+      points: [
+        { id: 'validation-point-a15', kind: 'stop', stationName: '125 St', complexId: 'A15', constituentId: 'A15', instruction: 'Board the A train.' },
+        { id: 'validation-point-a34', kind: 'stop', stationName: 'Canal St', complexId: 'A34', constituentId: 'A34', instruction: 'Leave the train.' },
+      ],
+    }],
+    transfers: [], serviceClaims: [],
+    equipmentClaims: [{
+      id: 'validation-equipment-claim-el-a34-01', equipmentId: 'EL-A34-01',
+      connectionId: 'connection-a34-platform', pathId: 'path-a15-a34-accessible',
+      observation: 'working', lastCheckedAt: '2026-08-04T11:59:59.000Z',
+    }],
+    cursor: { pointId: 'validation-point-a15' },
+    validity: {
+      result: 'current-itinerary', serviceDate: '2026-08-04', pattern: 'actual-now',
+      schedule: {
+        kind: 'current', editionId: 'validation-supplemented-edition-v1', anchorKind: 'published',
+        anchorAt: '2026-08-04T11:00:00.000Z', lastRetrievedAt: '2026-08-04T11:59:59.000Z',
+        effectiveFrom: '2026-08-04', effectiveUntil: '2026-08-04', currencyAgeSeconds: 3_600,
+        departures: [{
+          legId: 'validation-leg-1', pointId: 'validation-point-a15', clockTime: '08:15',
+          evidence: 'scheduled', timeZone: 'America/New_York',
+        }],
+      },
+      warnings: [], vetoes: [],
+    },
+    exitGuidance: {
+      ownerRecordId: 'validation-guidance-a34-v1', exitId: 'EXIT-A34-VALIDATION', legId: 'validation-leg-1',
+      purpose: 'Nearest verified elevator at Canal St',
+      verificationContext: 'At Canal St, use the middle platform zone.',
+      verifiedAt: capturedAt, limitations: ['ordinary pattern only'],
+      destinationScope: {
+        stationName: 'Canal St', stationComplexId: 'A34', constituentStationId: 'A34',
+        platformId: 'A34S', equipmentId: 'EL-A34-01',
+      },
+    },
+  };
+}
 
 function legacyTrip(overrides: Partial<ActiveTripRecord> = {}): Record<string, unknown> {
   const { captureContext: _captureContext, ...legacy } = trip(overrides);

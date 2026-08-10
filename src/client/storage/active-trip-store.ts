@@ -1,7 +1,8 @@
-import { normalizeBoundedIdentity, normalizeCanonicalIdentity } from '../../shared/domain/canonical';
+import { encodeCanonicalStringTuple, normalizeBoundedIdentity, normalizeCanonicalIdentity } from '../../shared/domain/canonical';
 import { parseServiceDate } from '../../shared/domain/clock';
 import type { Direction } from '../../shared/domain/types';
 import { JOURNEY_CAPTURE_DISCLOSURE } from '../../shared/domain/journey-capture';
+import { VALIDATION_RIDER_EVIDENCE_MANIFEST } from '../../shared/validation/rider-evidence';
 import type { BrowserStorage } from './browser-store';
 
 export const ACTIVE_TRIP_STORE_KEY = 'nyc-subway-tracker:active-trip:v3';
@@ -143,6 +144,7 @@ export type ActiveTripCaptureContext =
     readonly requestMode: 'online-current' | 'online-future' | 'offline-reference';
     readonly timing: 'timed' | 'untimed';
     readonly disclosure?: typeof JOURNEY_CAPTURE_DISCLOSURE;
+    readonly validationEvidenceReceipt?: ActiveTripValidationEvidenceReceipt;
   }
   | { readonly kind: 'legacy-migrated' };
 
@@ -164,6 +166,33 @@ export interface ActiveTripExitGuidance {
   readonly verificationContext: string;
   readonly verifiedAt: string;
   readonly limitations: readonly string[];
+  readonly destinationScope?: {
+    readonly stationName: string;
+    readonly stationComplexId: string;
+    readonly constituentStationId: string;
+    readonly platformId: string;
+    readonly equipmentId: string;
+  };
+}
+
+export interface ActiveTripValidationEvidenceReceipt {
+  readonly bootstrapDecisionIdentity: string;
+  readonly journeyDecisionIdentity: string;
+  readonly decisionSnapshotIdentity: string;
+  readonly stationCatalogVersion: string;
+  readonly journeyGraphVersion: string;
+  readonly mapDayVersion: string;
+  readonly mapNightVersion: string;
+  readonly canonicalItineraryIdentity: string;
+  readonly capturePackageIdentity: string;
+  readonly pathId: string;
+  readonly originStationId: string;
+  readonly originPlatformId: string;
+  readonly destinationStationId: string;
+  readonly destinationPlatformId: string;
+  readonly routeId: string;
+  readonly direction: Direction;
+  readonly actualDestination: string;
 }
 
 export interface ActiveTripContingency {
@@ -423,7 +452,7 @@ function parseCaptureContext(value: unknown): ActiveTripCaptureContext {
     strictRecord(value, ['kind']);
     return Object.freeze({ kind: 'legacy-migrated' });
   }
-  const root = strictRecord(value, ['kind', 'itineraryId', 'requestMode', 'timing'], ['disclosure']);
+  const root = strictRecord(value, ['kind', 'itineraryId', 'requestMode', 'timing'], ['disclosure', 'validationEvidenceReceipt']);
   if (root.kind !== 'response-owned') throw new Error('Invalid capture context');
   return deepFreeze({
     kind: 'response-owned',
@@ -433,6 +462,38 @@ function parseCaptureContext(value: unknown): ActiveTripCaptureContext {
     ...(root.disclosure === undefined ? {} : {
       disclosure: enumeration(root.disclosure, [JOURNEY_CAPTURE_DISCLOSURE] as const, 'capture disclosure'),
     }),
+    ...(root.validationEvidenceReceipt === undefined ? {} : {
+      validationEvidenceReceipt: parseValidationEvidenceReceipt(root.validationEvidenceReceipt),
+    }),
+  });
+}
+
+function parseValidationEvidenceReceipt(value: unknown): ActiveTripValidationEvidenceReceipt {
+  const root = strictRecord(value, [
+    'bootstrapDecisionIdentity', 'journeyDecisionIdentity', 'decisionSnapshotIdentity',
+    'stationCatalogVersion', 'journeyGraphVersion', 'mapDayVersion', 'mapNightVersion',
+    'canonicalItineraryIdentity', 'capturePackageIdentity', 'pathId',
+    'originStationId', 'originPlatformId', 'destinationStationId', 'destinationPlatformId',
+    'routeId', 'direction', 'actualDestination',
+  ]);
+  return deepFreeze({
+    bootstrapDecisionIdentity: identity(root.bootstrapDecisionIdentity, 'validation bootstrap decision'),
+    journeyDecisionIdentity: identity(root.journeyDecisionIdentity, 'validation journey decision'),
+    decisionSnapshotIdentity: identity(root.decisionSnapshotIdentity, 'validation decision snapshot'),
+    stationCatalogVersion: identity(root.stationCatalogVersion, 'validation station catalog'),
+    journeyGraphVersion: identity(root.journeyGraphVersion, 'validation journey graph'),
+    mapDayVersion: identity(root.mapDayVersion, 'validation day map'),
+    mapNightVersion: identity(root.mapNightVersion, 'validation night map'),
+    canonicalItineraryIdentity: display(root.canonicalItineraryIdentity, 'validation itinerary', 512),
+    capturePackageIdentity: display(root.capturePackageIdentity, 'validation capture package', 512),
+    pathId: identity(root.pathId, 'validation accessible path'),
+    originStationId: identity(root.originStationId, 'validation origin'),
+    originPlatformId: identity(root.originPlatformId, 'validation origin platform'),
+    destinationStationId: identity(root.destinationStationId, 'validation destination'),
+    destinationPlatformId: identity(root.destinationPlatformId, 'validation destination platform'),
+    routeId: identity(root.routeId, 'validation route'),
+    direction: direction(root.direction),
+    actualDestination: display(root.actualDestination, 'validation actual destination'),
   });
 }
 
@@ -661,7 +722,7 @@ function parsePatternBoundary(value: unknown): ActiveTripPatternBoundary {
 }
 
 function parseExitGuidance(value: unknown): ActiveTripExitGuidance {
-  const root = strictRecord(value, ['ownerRecordId', 'exitId', 'legId', 'purpose', 'verificationContext', 'verifiedAt', 'limitations']);
+  const root = strictRecord(value, ['ownerRecordId', 'exitId', 'legId', 'purpose', 'verificationContext', 'verifiedAt', 'limitations'], ['destinationScope']);
   return deepFreeze({
     ownerRecordId: identity(root.ownerRecordId, 'exit owner record'),
     exitId: identity(root.exitId, 'exit'),
@@ -670,6 +731,18 @@ function parseExitGuidance(value: unknown): ActiveTripExitGuidance {
     verificationContext: display(root.verificationContext, 'exit verification'),
     verifiedAt: instant(root.verifiedAt, 'exit guidance'),
     limitations: boundedStrings(root.limitations, 0, MAX_STEPS, 'exit limitations'),
+    ...(root.destinationScope === undefined ? {} : { destinationScope: parseExitGuidanceScope(root.destinationScope) }),
+  });
+}
+
+function parseExitGuidanceScope(value: unknown): NonNullable<ActiveTripExitGuidance['destinationScope']> {
+  const root = strictRecord(value, ['stationName', 'stationComplexId', 'constituentStationId', 'platformId', 'equipmentId']);
+  return deepFreeze({
+    stationName: display(root.stationName, 'exit station name'),
+    stationComplexId: identity(root.stationComplexId, 'exit station complex'),
+    constituentStationId: identity(root.constituentStationId, 'exit constituent station'),
+    platformId: identity(root.platformId, 'exit platform'),
+    equipmentId: identity(root.equipmentId, 'exit equipment'),
   });
 }
 
@@ -723,6 +796,40 @@ function validateTripReferences(trip: ActiveTripRecord): void {
       || (trip.captureContext.requestMode === 'online-current' && trip.validity.pattern !== 'actual-now')
       || (trip.captureContext.timing === 'timed') !== timedSchedule) {
       throw new Error('Capture context contradicts retained validity');
+    }
+    const receipt = trip.captureContext.validationEvidenceReceipt;
+    if (receipt) {
+      const manifest = VALIDATION_RIDER_EVIDENCE_MANIFEST;
+      const onlyLeg = trip.legs.length === 1 ? trip.legs[0] : undefined;
+      const expectedCaptureIdentity = encodeCanonicalStringTuple([
+        'validation-capture-package-v1', receipt.journeyDecisionIdentity,
+        trip.captureContext.itineraryId, trip.capturedAt, trip.origin.constituentId,
+        trip.destination.constituentId, trip.captureContext.requestMode,
+      ]);
+      if (trip.captureContext.disclosure !== JOURNEY_CAPTURE_DISCLOSURE
+        || receipt.decisionSnapshotIdentity !== manifest.decisionSnapshotIdentity
+        || receipt.stationCatalogVersion !== manifest.stationCatalogVersion
+        || receipt.journeyGraphVersion !== manifest.journeyGraphVersion
+        || receipt.mapDayVersion !== manifest.mapDayVersion
+        || receipt.mapNightVersion !== manifest.mapNightVersion
+        || receipt.pathId !== manifest.pathId
+        || receipt.originStationId !== manifest.originStationId
+        || receipt.originPlatformId !== manifest.originPlatformId
+        || receipt.destinationStationId !== manifest.destinationStationId
+        || receipt.destinationPlatformId !== manifest.destinationPlatformId
+        || receipt.routeId !== manifest.routeId
+        || receipt.direction !== manifest.direction
+        || receipt.actualDestination !== manifest.actualDestination
+        || receipt.canonicalItineraryIdentity !== trip.captureContext.itineraryId
+        || receipt.capturePackageIdentity !== expectedCaptureIdentity
+        || receipt.originStationId !== trip.origin.constituentId
+        || receipt.destinationStationId !== trip.destination.constituentId
+        || !trip.accessibleRouteOnly || !onlyLeg || trip.transfers.length !== 0
+        || onlyLeg.route.id !== receipt.routeId || onlyLeg.boundDirection !== receipt.direction
+        || onlyLeg.actualDestination !== receipt.actualDestination
+        || !trip.equipmentClaims.some((claim) => claim.pathId === receipt.pathId)) {
+        throw new Error('Validation evidence receipt lost exact trip ownership');
+      }
     }
   }
   if (first.complexId !== trip.origin.complexId || first.constituentId !== trip.origin.constituentId
@@ -782,8 +889,23 @@ function validateTripReferences(trip: ActiveTripRecord): void {
     const leg = legById.get(departure.legId);
     if (!leg?.points.some(({ id }) => id === departure.pointId)) throw new Error('Scheduled departure is outside its leg');
   }
-  if (trip.exitGuidance && (!legById.has(trip.exitGuidance.legId) || trip.exitGuidance.verifiedAt > trip.capturedAt)) {
-    throw new Error('Exit guidance is outside the trip');
+  if (trip.exitGuidance) {
+    if (!legById.has(trip.exitGuidance.legId) || trip.exitGuidance.verifiedAt > trip.capturedAt) {
+      throw new Error('Exit guidance is outside the trip');
+    }
+    const scope = trip.exitGuidance.destinationScope;
+    if (scope && (scope.stationComplexId !== trip.destination.complexId
+      || scope.constituentStationId !== trip.destination.constituentId
+      || !trip.equipmentClaims.some(({ equipmentId }) => equipmentId === scope.equipmentId))) {
+      throw new Error('Exit guidance is not owned by the destination path');
+    }
+    const receipt = trip.captureContext.kind === 'response-owned'
+      ? trip.captureContext.validationEvidenceReceipt
+      : undefined;
+    if (receipt && (!scope || scope.platformId !== receipt.destinationPlatformId
+      || scope.equipmentId !== trip.equipmentClaims.find(({ pathId }) => pathId === receipt.pathId)?.equipmentId)) {
+      throw new Error('Validation exit guidance lost its destination receipt');
+    }
   }
   for (const contingency of trip.contingencies ?? []) {
     const leg = legById.get(contingency.affectedLegId);

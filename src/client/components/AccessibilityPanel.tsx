@@ -25,7 +25,7 @@ export function AccessibilityPanel(props: AccessibilityPanelProps) {
   return <AccessibilityPanelForSurface {...props} surface="public" />;
 }
 
-/** Explicit validation-only harness; App never imports or selects this component. */
+/** Validation-only presentation; callers must supply evidence admitted for the validation surface. */
 export function ValidationAccessibilityPanel(props: AccessibilityPanelProps) {
   return <AccessibilityPanelForSurface {...props} surface="validation" />;
 }

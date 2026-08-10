@@ -42,7 +42,7 @@ export function bootstrapHandler(dependencies: AppDependencies) {
       apiVersion: API_VERSION,
       schemaVersion: SCHEMA_VERSION,
       responseIdentity: createResponseIdentity([
-        'bootstrap', dependencies.config.mode, decidedAt, JSON.stringify(contentVersions),
+        'bootstrap', dependencies.config.mode, decidedAt, snapshot.identity, JSON.stringify(contentVersions),
         JSON.stringify(sourceHealth), JSON.stringify(provenance),
       ]),
       decidedAt,
@@ -55,6 +55,7 @@ export function bootstrapHandler(dependencies: AppDependencies) {
       gates: dependencies.exposure.public,
       sourceHealth,
       provenance,
+      ...(validation ? { decisionSnapshotIdentity: snapshot.identity } : {}),
       ...(validation ? { demonstrationLabel: DEMONSTRATION_LABEL } : {}),
       data: { productName: 'NYC Subway Tracker', unofficial: true, contentVersions },
     };

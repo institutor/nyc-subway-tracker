@@ -13,50 +13,50 @@ const VALID_THROUGH = '2026-08-04T12:01:30.000Z';
 const SERVICE_DATE = '2026-08-04';
 
 const catalog = {
-  contentVersion: 'validation-catalog-2026-08-04-v1',
+  contentVersion: 'validation-catalog-2026-08-04-v2',
   complexes: [
-    complex('A12', '125 St', ['A', 'C']),
-    complex('D14', '59 St', ['A', 'C']),
+    complex('A15', '125 St', ['A', 'B', 'C', 'D']),
+    complex('A24', '59 St-Columbus Circle', ['A', 'B', 'C', 'D']),
     complex('L03', '14 St–Union Sq', ['L', 'N', 'Q', 'R', 'W']),
-    complex('R20', 'Canal St', ['N', 'Q', 'R', 'W']),
+    complex('A34', 'Canal St', ['A', 'C', 'E']),
   ],
 } as const;
 
 const nearbyUniverse = [
-  { id: 'entrance-a12', coordinate: { latitude: 40.811, longitude: -73.952 } },
-  { id: 'entrance-r20', coordinate: { latitude: 40.719, longitude: -74.002 } },
+  { id: 'entrance-a15', coordinate: { latitude: 40.811, longitude: -73.952 } },
+  { id: 'entrance-a34', coordinate: { latitude: 40.719, longitude: -74.002 } },
   { id: 'entrance-l03', coordinate: { latitude: 40.735, longitude: -73.991 } },
 ] as const;
 
 const journeyGraph: JourneyGraph = {
   nodes: [
-    node('a12-direct', 'A12', 'A12S'), node('r20-direct', 'R20', 'R20S'),
-    node('a12-transfer', 'A12', 'A12S'), node('d14-in', 'D14', 'D14S'),
-    node('d14-out', 'D14', 'D14E'), node('r20-transfer', 'R20', 'R20E'),
+    node('a15-direct', 'A15', 'A15S'), node('a34-direct', 'A34', 'A34S'),
+    node('a15-transfer', 'A15', 'A15S'), node('a24-in', 'A24', 'A24S'),
+    node('a24-out', 'A24', 'A24S'), node('a34-transfer', 'A34', 'A34S'),
   ],
   patterns: [
-    pattern('direct', 'A', 'southbound', 'Far Rockaway', ['occ-a12-direct', 'occ-r20-direct']),
-    pattern('transfer-a', 'A', 'southbound', 'Far Rockaway', ['occ-a12-transfer', 'occ-d14-in']),
-    pattern('transfer-c', 'C', 'eastbound', 'Euclid Av', ['occ-d14-out', 'occ-r20-transfer']),
+    pattern('direct', 'A', 'southbound', 'Far Rockaway', ['occ-a15-direct', 'occ-a34-direct']),
+    pattern('transfer-a', 'A', 'southbound', 'Far Rockaway', ['occ-a15-transfer', 'occ-a24-in']),
+    pattern('transfer-c', 'C', 'southbound', 'Euclid Av', ['occ-a24-out', 'occ-a34-transfer']),
   ],
   transfers: [{
-    id: 'transfer-d14', fromOccurrenceId: 'occ-d14-in', toOccurrenceId: 'occ-d14-out',
+    id: 'transfer-a24', fromOccurrenceId: 'occ-a24-in', toOccurrenceId: 'occ-a24-out',
     evidence: { kind: 'verified', accessibility: 'eligible', risk: 'clear' },
   }],
 };
 
 const referenceJourney = requireTwoItineraries(planJourney(journeyGraph, {
-  mode: 'online-current', originStationId: 'A12', destinationStationId: 'R20', accessibleRouteOnly: false,
+  mode: 'online-current', originStationId: 'A15', destinationStationId: 'A34', accessibleRouteOnly: false,
 }));
 
 const mapReferences = {
   day: {
-    contentVersion: 'validation-map-day-2026-08-04-v1',
+    contentVersion: 'validation-map-day-2026-08-04-v2',
     attribution: 'Unofficial app-owned subway reference geometry',
     features: mapFeatures(),
   },
   night: {
-    contentVersion: 'validation-map-night-2026-08-04-v1',
+    contentVersion: 'validation-map-night-2026-08-04-v2',
     attribution: 'Unofficial app-owned subway reference geometry',
     features: mapFeatures(),
   },
@@ -78,9 +78,9 @@ export function createValidationDependencyOverrides(): ProductionDependencyOverr
       coverage: Object.freeze({ kind: 'complete-universe' as const }),
       results: Object.freeze(destinations.map(({ id }) => Object.freeze({
         destinationId: id,
-        range: id === 'entrance-a12'
+        range: id === 'entrance-a15'
           ? { minimumSeconds: 95, maximumSeconds: 120 }
-          : id === 'entrance-r20'
+          : id === 'entrance-a34'
             ? { minimumSeconds: 135, maximumSeconds: 160 }
             : { minimumSeconds: 175, maximumSeconds: 205 },
       }))),
@@ -92,7 +92,7 @@ export function createValidationDependencyOverrides(): ProductionDependencyOverr
 
 function createSnapshot(): DecisionSnapshot {
   return {
-    identity: 'validation-snapshot-2026-08-04-v1',
+    identity: 'validation-snapshot-2026-08-04-v2',
     sourceHealth: [
       sourceHealth('gtfs-rt', 'subway-rt-ace'),
       sourceHealth('alerts', 'subway-alerts'),
@@ -105,9 +105,9 @@ function createSnapshot(): DecisionSnapshot {
     ],
     nearby: nearbySnapshot(),
     boards: [
-      { decision: board('A12', '125 St', ['A', 'C'], 'A', 'Inwood–207 St', 'Far Rockaway', true), validThrough: VALID_THROUGH },
+      { decision: board('A15', '125 St', ['A', 'B', 'C', 'D'], 'A', 'Inwood–207 St', 'Far Rockaway', true), validThrough: VALID_THROUGH },
       { decision: board('L03', '14 St–Union Sq', ['L'], 'L', '8 Av', 'Canarsie–Rockaway Pkwy'), validThrough: VALID_THROUGH },
-      { decision: board('R20', 'Canal St', ['N', 'Q'], 'N', 'Astoria–Ditmars Blvd', 'Coney Island–Stillwell Av'), validThrough: VALID_THROUGH },
+      { decision: board('A34', 'Canal St', ['A', 'C', 'E'], 'A', 'Inwood–207 St', 'Far Rockaway', true), validThrough: VALID_THROUGH },
     ],
     mapOverlays: [
       {
@@ -118,7 +118,7 @@ function createSnapshot(): DecisionSnapshot {
         ],
         segments: [
           { id: 'line-a', routeIds: ['A'], state: 'affected', alertIds: ['alert-a-north'] },
-          { id: 'line-n', routeIds: ['N'], state: 'normal', alertIds: [] },
+          { id: 'line-l', routeIds: ['L'], state: 'normal', alertIds: [] },
         ],
       },
       {
@@ -129,14 +129,14 @@ function createSnapshot(): DecisionSnapshot {
         ],
         segments: [
           { id: 'line-a', routeIds: ['A'], state: 'affected', alertIds: ['alert-a-north'] },
-          { id: 'line-n', routeIds: ['N'], state: 'normal', alertIds: [] },
+          { id: 'line-l', routeIds: ['L'], state: 'normal', alertIds: [] },
         ],
       },
     ],
     journeyGraph,
-    journeyCaptures: referenceJourney.itineraries.flatMap((itinerary, index) => [
+    journeyCaptures: referenceJourney.itineraries.flatMap((itinerary) => [
       journeyCapture(itinerary, false),
-      ...(index === 0 ? [journeyCapture(itinerary, true)] : []),
+      ...(itinerary.transfers === 0 ? [journeyCapture(itinerary, true)] : []),
     ]),
   };
 }
@@ -152,8 +152,8 @@ function requireTwoItineraries(
 
 function nearbySnapshot(): NonNullable<DecisionSnapshot['nearby']> {
   const stations = [
-    { id: 'A12', name: '125 St', routes: ['A', 'C'], north: 'Inwood–207 St', south: 'Far Rockaway' },
-    { id: 'R20', name: 'Canal St', routes: ['N', 'Q'], north: 'Astoria–Ditmars Blvd', south: 'Coney Island–Stillwell Av' },
+    { id: 'A15', name: '125 St', routes: ['A', 'B', 'C', 'D'], north: 'Inwood–207 St', south: 'Far Rockaway' },
+    { id: 'A34', name: 'Canal St', routes: ['A', 'C', 'E'], north: 'Inwood–207 St', south: 'Far Rockaway' },
     { id: 'L03', name: '14 St–Union Sq', routes: ['L'], north: '8 Av', south: 'Canarsie–Rockaway Pkwy' },
   ] as const;
   return {
@@ -182,7 +182,7 @@ function board(
 ): BoardDecision {
   const route = { id: primaryRoute, label: primaryRoute };
   return {
-    responseIdentity: `validation-board-${stationId}-v1`,
+    responseIdentity: `validation-board-${stationId}-v2`,
     mode: 'demonstration',
     station: { id: stationId, name, complexId: stationId, routeIds },
     directions: [
@@ -192,7 +192,7 @@ function board(
     feedHealth: [{ source: 'gtfs-rt', state: 'current', assessedAt: DECIDED_AT, lastAcceptedAt: RETRIEVED_AT }],
     alerts: alert ? [{
       id: 'alert-a-north', text: 'A trains are running with delays.',
-      activeFrom: new Date('2026-08-04T11:45:00.000Z'), routeIds: ['A'], stationIds: ['A12'],
+      activeFrom: new Date('2026-08-04T11:45:00.000Z'), routeIds: ['A'], stationIds: [stationId],
       directions: ['northbound'], provenance: domainProvenance('alerts', 'subway-alerts'),
     }] : [],
     decidedAt: DECIDED_AT,
@@ -226,7 +226,7 @@ function journeyCapture(
   return {
     itineraryId: itinerary.id,
     requestMode: 'online-current' as const,
-    scope: { mode: 'online-current' as const, originStationId: 'A12', destinationStationId: 'R20', accessibleRouteOnly },
+    scope: { mode: 'online-current' as const, originStationId: 'A15', destinationStationId: 'A34', accessibleRouteOnly },
     serviceDate: SERVICE_DATE,
     timing: 'timed' as const,
     capturedAt: DECIDED_AT.toISOString(),
@@ -259,10 +259,10 @@ function journeyCapture(
       lastCheckedAt: RETRIEVED_AT.toISOString(),
     })),
     equipmentClaims: accessibleRouteOnly ? [{
-      id: 'validation-equipment-claim-el-a12-01',
-      equipmentId: 'EL-A12-01',
-      connectionId: 'connection-a12-platform',
-      pathId: 'path-a12-r20-accessible',
+      id: 'validation-equipment-claim-el-a34-01',
+      equipmentId: 'EL-A34-01',
+      connectionId: 'connection-a34-platform',
+      pathId: 'path-a15-a34-accessible',
       observation: 'working' as const,
       lastCheckedAt: RETRIEVED_AT.toISOString(),
     }] : [],
@@ -304,9 +304,9 @@ function service(stationId: string, routeId: string, bound: Direction, destinati
 function mapFeatures() {
   return [
     { id: 'line-a', kind: 'line' as const, routeIds: ['A'], geometry: { type: 'LineString' as const, coordinates: [[-73.952, 40.811], [-74.002, 40.719]] } },
-    { id: 'line-n', kind: 'line' as const, routeIds: ['N'], geometry: { type: 'LineString' as const, coordinates: [[-73.991, 40.735], [-74.002, 40.719]] } },
-    { id: 'station-a12', kind: 'station' as const, routeIds: ['A', 'C'], geometry: { type: 'Point' as const, coordinates: [-73.952, 40.811] } },
-    { id: 'station-r20', kind: 'station' as const, routeIds: ['N', 'Q'], geometry: { type: 'Point' as const, coordinates: [-74.002, 40.719] } },
+    { id: 'line-l', kind: 'line' as const, routeIds: ['L'], geometry: { type: 'LineString' as const, coordinates: [[-74.002, 40.74], [-73.991, 40.735]] } },
+    { id: 'station-a15', kind: 'station' as const, routeIds: ['A', 'B', 'C', 'D'], geometry: { type: 'Point' as const, coordinates: [-73.952, 40.811] } },
+    { id: 'station-a34', kind: 'station' as const, routeIds: ['A', 'C', 'E'], geometry: { type: 'Point' as const, coordinates: [-74.002, 40.719] } },
   ];
 }
 

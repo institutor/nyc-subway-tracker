@@ -43,16 +43,25 @@ test('the ordinary app carries Accessible Route Only through planning, active tr
   await page.getByRole('button', { name: 'Plan current trip' }).click();
 
   const itinerary = page.getByRole('article', { name: 'Primary direct itinerary' });
+  const transfer = page.getByRole('article', { name: 'Alternative transfer itinerary' });
+  await expect(itinerary).toContainText('125 St to Canal St · Southbound');
   await expect(itinerary.getByText('Complete path verified', { exact: true })).toBeVisible();
   await expect(itinerary.getByText(/No official outage reported/)).toBeVisible();
-  await expect(itinerary.getByRole('region', { name: 'Platform guidance' })).toContainText('Board near the middle');
+  await expect(itinerary.getByRole('region', { name: 'Platform guidance' })).toContainText('Canal St');
+  await expect(itinerary.getByRole('region', { name: 'Platform guidance' })).toContainText('middle');
+  await expect(transfer.getByText('Complete path verified', { exact: true })).toHaveCount(0);
+  await expect(transfer.getByText(/No official outage reported/)).toHaveCount(0);
+  await expect(transfer.getByRole('region', { name: 'Platform guidance' })).toHaveCount(0);
+  await expect(transfer.getByRole('button', { name: 'Use this trip' })).toHaveCount(0);
   await itinerary.getByRole('button', { name: 'Use this trip' }).click();
 
   const active = page.getByRole('region', { name: 'Device-held active trip' });
   await expect(active.getByRole('heading', { name: '125 St to Canal St' })).toBeVisible();
   await expect(active.getByText('Accessible Route Only · On', { exact: true })).toBeVisible();
-  await expect(active.getByRole('region', { name: 'Platform guidance' })).toContainText('Board near the middle');
+  await expect(active.getByRole('region', { name: 'Platform guidance' })).toContainText('Canal St');
   await expect(active.getByRole('heading', { name: 'Exit guidance' })).toBeVisible();
+  await expect(active.getByRole('heading', { name: 'Exit guidance' }).locator('..')).toContainText('A34S');
+  await expect(active.getByRole('heading', { name: 'Exit guidance' }).locator('..')).toContainText('EL-A34-01');
 
   await page.reload({ waitUntil: 'domcontentloaded' });
   await page.getByRole('button', { name: 'Open active trip to Canal St' }).click();
@@ -63,7 +72,7 @@ test('the ordinary app carries Accessible Route Only through planning, active tr
   const offlineTrip = page.getByRole('region', { name: 'Device-held active trip' });
   await expect(offlineTrip.getByText('Accessible Route Only · On', { exact: true })).toBeVisible();
   await expect(offlineTrip.getByRole('alert')).toContainText('Current elevator status cannot be verified offline');
-  await expect(offlineTrip.locator('article').filter({ hasText: 'EL-A12-01' })).toContainText('Unknown offline');
+  await expect(offlineTrip.locator('article').filter({ hasText: 'EL-A34-01' })).toContainText('Unknown offline');
   await expect(offlineTrip.getByRole('heading', { name: 'Exit guidance' })).toBeVisible();
   await expect(offlineTrip.getByText(/No official outage reported/)).toHaveCount(0);
 });

@@ -108,6 +108,10 @@ export function ActiveTripCard({
         <section className="trip-module">
           <h3>Exit guidance</h3>
           <p><strong>{trip.exitGuidance.exitId}</strong> · {trip.exitGuidance.purpose}</p>
+          {trip.exitGuidance.destinationScope ? <p>
+            At {trip.exitGuidance.destinationScope.stationName} · Platform {trip.exitGuidance.destinationScope.platformId}
+            {' · '}Equipment {trip.exitGuidance.destinationScope.equipmentId}
+          </p> : null}
           <p>{trip.exitGuidance.verificationContext}</p>
           <p className="claim-line"><time dateTime={trip.exitGuidance.verifiedAt}>Verified {formatDate(trip.exitGuidance.verifiedAt)}</time><span>{trip.exitGuidance.limitations.join(' ')}</span></p>
         </section>

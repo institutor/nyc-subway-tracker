@@ -19,27 +19,146 @@ import {
   resolvePlatformGuidance,
   type PlatformGuidanceRecord,
 } from '../domain/platform-guidance';
+import { JOURNEY_CAPTURE_DISCLOSURE } from '../domain/journey-capture';
+import { encodeCanonicalStringTuple } from '../domain/canonical';
 
-const PATH_ID = 'path-a12-r20-accessible';
+const PATH_ID = 'path-a15-a34-accessible';
 const PATH_VERSION = 'coverage-v1';
-const EQUIPMENT_ID = 'EL-A12-01';
+const EQUIPMENT_ID = 'EL-A34-01';
 const EQUIPMENT_SCOPE = 'validation-equipment-scope';
 const EQUIPMENT_VERSION = 'validation-equipment-v1';
+const SNAPSHOT_ID = 'validation-snapshot-2026-08-04-v2';
+const CATALOG_VERSION = 'validation-catalog-2026-08-04-v2';
+const JOURNEY_VERSION = 'journey-graph-ca6e27786a0488d3dbdfe272ba834c89fec49413d22ae63407e23f4cf883831d';
+const MAP_DAY_VERSION = 'validation-map-day-2026-08-04-v2';
+const MAP_NIGHT_VERSION = 'validation-map-night-2026-08-04-v2';
+
+export const VALIDATION_RIDER_EVIDENCE_MANIFEST = Object.freeze({
+  decisionSnapshotIdentity: SNAPSHOT_ID,
+  stationCatalogVersion: CATALOG_VERSION,
+  journeyGraphVersion: JOURNEY_VERSION,
+  mapDayVersion: MAP_DAY_VERSION,
+  mapNightVersion: MAP_NIGHT_VERSION,
+  pathId: PATH_ID,
+  originStationId: 'A15', originPlatformId: 'A15S',
+  destinationStationId: 'A34', destinationPlatformId: 'A34S',
+  routeId: 'A', direction: 'southbound', actualDestination: 'Far Rockaway',
+} as const);
+
+export interface ValidationRiderEvidenceOwner {
+  readonly decisionIdentity: string;
+  readonly snapshotIdentity: string;
+  readonly decisionTime: Date;
+  readonly disclosure: typeof JOURNEY_CAPTURE_DISCLOSURE;
+  readonly contentVersions: {
+    readonly stationCatalog: string;
+    readonly maps: { readonly day: string; readonly night: string };
+    readonly journeyGraph: string;
+  };
+}
+
+export interface ValidationRiderEvidenceReceipt {
+  readonly bootstrapDecisionIdentity: string;
+  readonly decisionSnapshotIdentity: string;
+  readonly stationCatalogVersion: string;
+  readonly journeyGraphVersion: string;
+  readonly mapDayVersion: string;
+  readonly mapNightVersion: string;
+  readonly pathId: string;
+  readonly originStationId: 'A15';
+  readonly originPlatformId: 'A15S';
+  readonly destinationStationId: 'A34';
+  readonly destinationPlatformId: 'A34S';
+  readonly routeId: 'A';
+  readonly direction: 'southbound';
+  readonly actualDestination: 'Far Rockaway';
+}
 
 export type ValidationRiderEvidence = Readonly<{
   path: NonNullable<ReturnType<typeof assessAccessiblePath>>;
   equipment: readonly {
     readonly decision: EquipmentStatusDecision;
-    readonly label: '125 St platform elevator';
+    readonly label: 'Canal St platform elevator';
     readonly required: true;
   }[];
   guidance: NonNullable<ReturnType<typeof resolvePlatformGuidance>>;
   decisionTime: Date;
+  receipt: ValidationRiderEvidenceReceipt;
 }>;
 
+export type BoundValidationRiderEvidence = ValidationRiderEvidence & Readonly<{
+  journeyReceipt: {
+    readonly journeyDecisionIdentity: string;
+    readonly canonicalItineraryIdentity: string;
+    readonly capturePackageIdentity: string;
+  };
+}>;
+
+interface ValidationJourneyResponseOwner {
+  readonly responseIdentity: string;
+  readonly decidedAt: string;
+  readonly decisionSnapshotIdentity?: string;
+  readonly demonstrationLabel?: string;
+  readonly runtime: { readonly mode: string; readonly surface: string; readonly availability: string };
+  readonly data: null | {
+    readonly kind: string;
+    readonly scope: {
+      readonly mode: string;
+      readonly originStationId: string;
+      readonly destinationStationId: string;
+      readonly accessibleRouteOnly: boolean;
+    };
+  };
+}
+
+interface ValidationJourneyItineraryOwner {
+  readonly id: string;
+  readonly transfers: number;
+  readonly transferIds: readonly string[];
+  readonly legs: readonly {
+    readonly patternId: string;
+    readonly routeId: string;
+    readonly direction: string;
+    readonly actualDestination: string;
+    readonly fromOccurrenceId: string;
+    readonly toOccurrenceId: string;
+    readonly orderedOccurrenceIds: readonly string[];
+    readonly fromStationId: string;
+    readonly toStationId: string;
+    readonly orderedStationIds: readonly string[];
+  }[];
+  readonly capture?: {
+    readonly itineraryId: string;
+    readonly requestMode: string;
+    readonly timing: string;
+    readonly capturedAt: string;
+    readonly disclosure?: string;
+    readonly scope: {
+      readonly mode: string;
+      readonly originStationId: string;
+      readonly destinationStationId: string;
+      readonly accessibleRouteOnly: boolean;
+    };
+    readonly equipmentClaims: readonly {
+      readonly equipmentId: string;
+      readonly connectionId: string;
+      readonly pathId: string;
+      readonly observation: string;
+    }[];
+  };
+}
+
 /** Bounded demonstration evidence composed through the same domain gates used by rider components. */
-export function createValidationRiderEvidence(decisionTime: Date): ValidationRiderEvidence | undefined {
-  const now = cloneInstant(decisionTime);
+export function createValidationRiderEvidence(owner: ValidationRiderEvidenceOwner): ValidationRiderEvidence | undefined {
+  if (!owner || typeof owner !== 'object'
+    || typeof owner.decisionIdentity !== 'string' || !owner.decisionIdentity
+    || owner.snapshotIdentity !== SNAPSHOT_ID
+    || owner.disclosure !== JOURNEY_CAPTURE_DISCLOSURE
+    || owner.contentVersions?.stationCatalog !== CATALOG_VERSION
+    || owner.contentVersions?.journeyGraph !== JOURNEY_VERSION
+    || owner.contentVersions?.maps?.day !== MAP_DAY_VERSION
+    || owner.contentVersions?.maps?.night !== MAP_NIGHT_VERSION) return undefined;
+  const now = cloneInstant(owner.decisionTime);
   if (!now) return undefined;
   const accessibilityExposure = resolveAccessibilityExposure(
     VALIDATION_EXPOSURE_REGISTRY,
@@ -66,13 +185,13 @@ export function createValidationRiderEvidence(decisionTime: Date): ValidationRid
   });
   if (path.status !== 'eligible') return undefined;
   const guidance = resolvePlatformGuidance([guidanceRecord()], {
-    complex: { id: 'A12', name: '125 St' },
-    constituent: { id: 'A12', name: '125 St' },
+    complex: { id: 'A34', name: 'Canal St' },
+    constituent: { id: 'A34', name: 'Canal St' },
     route: 'A',
     servicePattern: 'ordinary',
     direction: 'southbound',
     destination: 'Far Rockaway',
-    platformId: 'A12S',
+    platformId: 'A34S',
     orientation: 'southbound travel axis',
     objectiveType: 'accessible-exit',
     objectiveTarget: EQUIPMENT_ID,
@@ -85,10 +204,84 @@ export function createValidationRiderEvidence(decisionTime: Date): ValidationRid
   if (!guidance) return undefined;
   return deepFreeze({
     path,
-    equipment: [{ decision: equipmentDecision, label: '125 St platform elevator', required: true }],
+    equipment: [{ decision: equipmentDecision, label: 'Canal St platform elevator', required: true }],
     guidance,
     decisionTime: now,
+    receipt: {
+      bootstrapDecisionIdentity: owner.decisionIdentity,
+      decisionSnapshotIdentity: owner.snapshotIdentity,
+      stationCatalogVersion: owner.contentVersions.stationCatalog,
+      journeyGraphVersion: owner.contentVersions.journeyGraph,
+      mapDayVersion: owner.contentVersions.maps.day,
+      mapNightVersion: owner.contentVersions.maps.night,
+      pathId: PATH_ID,
+      originStationId: 'A15', originPlatformId: 'A15S',
+      destinationStationId: 'A34', destinationPlatformId: 'A34S',
+      routeId: 'A', direction: 'southbound', actualDestination: 'Far Rockaway',
+    },
   });
+}
+
+export function bindValidationRiderEvidenceToItinerary(
+  evidence: ValidationRiderEvidence | undefined,
+  response: ValidationJourneyResponseOwner,
+  itinerary: ValidationJourneyItineraryOwner,
+): BoundValidationRiderEvidence | undefined {
+  if (!evidence || !response.data || (response.data.kind !== 'planned' && response.data.kind !== 'untimed')) return undefined;
+  const [leg] = itinerary.legs;
+  const capture = itinerary.capture;
+  const [equipment] = capture?.equipmentClaims ?? [];
+  const exact = response.runtime.mode === 'validation'
+    && response.runtime.surface === 'demonstration'
+    && response.runtime.availability === 'available'
+    && response.demonstrationLabel === JOURNEY_CAPTURE_DISCLOSURE
+    && response.decisionSnapshotIdentity === evidence.receipt.decisionSnapshotIdentity
+    && response.decidedAt === evidence.decisionTime.toISOString()
+    && response.data.scope.mode === 'online-current'
+    && response.data.scope.accessibleRouteOnly
+    && response.data.scope.originStationId === evidence.receipt.originStationId
+    && response.data.scope.destinationStationId === evidence.receipt.destinationStationId
+    && itinerary.transfers === 0 && itinerary.transferIds.length === 0 && itinerary.legs.length === 1
+    && leg?.patternId === 'pattern-direct'
+    && leg.routeId === evidence.receipt.routeId
+    && leg.direction === evidence.receipt.direction
+    && leg.actualDestination === evidence.receipt.actualDestination
+    && leg.fromStationId === evidence.receipt.originStationId
+    && leg.toStationId === evidence.receipt.destinationStationId
+    && exactStrings(leg.orderedStationIds, ['A15', 'A34'])
+    && leg.fromOccurrenceId === 'occ-a15-direct'
+    && leg.toOccurrenceId === 'occ-a34-direct'
+    && exactStrings(leg.orderedOccurrenceIds, ['occ-a15-direct', 'occ-a34-direct'])
+    && capture?.itineraryId === itinerary.id
+    && capture.requestMode === 'online-current'
+    && capture.timing === 'timed'
+    && capture.capturedAt === response.decidedAt
+    && capture.disclosure === JOURNEY_CAPTURE_DISCLOSURE
+    && capture.scope.mode === response.data.scope.mode
+    && capture.scope.originStationId === response.data.scope.originStationId
+    && capture.scope.destinationStationId === response.data.scope.destinationStationId
+    && capture.scope.accessibleRouteOnly === response.data.scope.accessibleRouteOnly
+    && capture.equipmentClaims.length === 1
+    && equipment?.equipmentId === EQUIPMENT_ID
+    && equipment.connectionId === 'connection-a34-platform'
+    && equipment.pathId === evidence.receipt.pathId
+    && equipment.observation === 'working';
+  if (!exact || !capture) return undefined;
+  return deepFreeze({
+    ...evidence,
+    journeyReceipt: {
+      journeyDecisionIdentity: response.responseIdentity,
+      canonicalItineraryIdentity: itinerary.id,
+      capturePackageIdentity: encodeCanonicalStringTuple([
+        'validation-capture-package-v1', response.responseIdentity, itinerary.id, capture.capturedAt,
+        capture.scope.originStationId, capture.scope.destinationStationId, capture.requestMode,
+      ]),
+    },
+  });
+}
+
+function exactStrings(actual: readonly string[], expected: readonly string[]): boolean {
+  return actual.length === expected.length && actual.every((value, index) => value === expected[index]);
 }
 
 function createEquipmentDecision(now: Date): EquipmentStatusDecision {
@@ -128,21 +321,21 @@ function createEquipmentDecision(now: Date): EquipmentStatusDecision {
 function accessibleJourney(): AccessibleJourneyIntent {
   return {
     origin: {
-      stationComplexId: 'A12', constituentStationId: 'A12', entranceId: 'ENT-A12-VALIDATION',
-      streetEndpointId: 'endpoint-a12-street', platformId: 'A12S', boardingAreaId: 'A12S-middle',
+      stationComplexId: 'A15', constituentStationId: 'A15', entranceId: 'ENT-A15-VALIDATION',
+      streetEndpointId: 'endpoint-a15-street', platformId: 'A15S', boardingAreaId: 'A15S-middle',
     },
     destination: {
-      stationComplexId: 'R20', constituentStationId: 'R20', platformId: 'R20S',
-      exitId: 'EXIT-R20-VALIDATION', streetEndpointId: 'endpoint-r20-street',
+      stationComplexId: 'A34', constituentStationId: 'A34', platformId: 'A34S',
+      exitId: 'EXIT-A34-VALIDATION', streetEndpointId: 'endpoint-a34-street',
     },
     rideSegments: [{
-      id: 'ride-a12-r20', routeId: 'A', direction: 'southbound',
+      id: 'ride-a15-a34', routeId: 'A', direction: 'southbound',
       origin: {
-        stationComplexId: 'A12', constituentStationId: 'A12', platformId: 'A12S',
-        boardingAreaId: 'A12S-middle', endpointId: 'endpoint-a12-platform',
+        stationComplexId: 'A15', constituentStationId: 'A15', platformId: 'A15S',
+        boardingAreaId: 'A15S-middle', endpointId: 'endpoint-a15-platform',
       },
       destination: {
-        stationComplexId: 'R20', constituentStationId: 'R20', platformId: 'R20S', endpointId: 'endpoint-r20-platform',
+        stationComplexId: 'A34', constituentStationId: 'A34', platformId: 'A34S', endpointId: 'endpoint-a34-platform',
       },
     }],
     transferIds: [],
@@ -150,53 +343,53 @@ function accessibleJourney(): AccessibleJourneyIntent {
 }
 
 function accessibilityPackage(): AccessibilityPackage {
-  const originStreet = endpoint('endpoint-a12-street', 'street', 'A12', 'A12', null);
-  const originPlatform = endpoint('endpoint-a12-platform', 'platform', 'A12', 'A12', 'A12S');
-  const destinationPlatform = endpoint('endpoint-r20-platform', 'platform', 'R20', 'R20', 'R20S');
-  const destinationStreet = endpoint('endpoint-r20-street', 'street', 'R20', 'R20', null);
-  const originEdgeId = 'edge-a12-elevator';
-  const destinationEdgeId = 'edge-r20-level';
+  const originStreet = endpoint('endpoint-a15-street', 'street', 'A15', 'A15', null);
+  const originPlatform = endpoint('endpoint-a15-platform', 'platform', 'A15', 'A15', 'A15S');
+  const destinationPlatform = endpoint('endpoint-a34-platform', 'platform', 'A34', 'A34', 'A34S');
+  const destinationStreet = endpoint('endpoint-a34-street', 'street', 'A34', 'A34', null);
+  const originEdgeId = 'edge-a15-level';
+  const destinationEdgeId = 'edge-a34-elevator';
   const coverage: StationDirectionCoverageRow = {
-    coverageRecordId: 'validation-accessible-a12-r20',
+    coverageRecordId: 'validation-accessible-a15-a34',
     coverageRecordVersion: PATH_VERSION,
     origin: {
-      stationComplex: { id: 'A12', name: '125 St' },
-      constituentStation: { id: 'A12', name: '125 St' },
+      stationComplex: { id: 'A15', name: '125 St' },
+      constituentStation: { id: 'A15', name: '125 St' },
       entrance: {
-        id: 'ENT-A12-VALIDATION', description: 'St Nicholas Avenue accessible entrance', streetCorner: 'southwest',
+        id: 'ENT-A15-VALIDATION', description: 'St Nicholas Avenue accessible entrance', streetCorner: 'southwest',
         streetEndpoint: originStreet,
       },
-      platform: { id: 'A12S', boardingAreaId: 'A12S-middle', endpoint: originPlatform },
+      platform: { id: 'A15S', boardingAreaId: 'A15S-middle', endpoint: originPlatform },
       orderedAccessEdgeIds: [originEdgeId],
-      equipmentIds: [EQUIPMENT_ID],
+      equipmentIds: [],
     },
     destination: {
-      stationComplex: { id: 'R20', name: 'Canal St' },
-      constituentStation: { id: 'R20', name: 'Canal St' },
-      platform: { id: 'R20S', endpoint: destinationPlatform },
+      stationComplex: { id: 'A34', name: 'Canal St' },
+      constituentStation: { id: 'A34', name: 'Canal St' },
+      platform: { id: 'A34S', endpoint: destinationPlatform },
       exit: {
-        id: 'EXIT-R20-VALIDATION', description: 'Canal Street accessible exit', streetCorner: 'northeast',
+        id: 'EXIT-A34-VALIDATION', description: 'Canal Street accessible exit', streetCorner: 'northeast',
         streetEndpoint: destinationStreet,
       },
       orderedAccessEdgeIds: [destinationEdgeId],
-      equipmentIds: [],
+      equipmentIds: [EQUIPMENT_ID],
     },
     rideSegments: [{
-      id: 'ride-a12-r20', routeId: 'A', direction: 'southbound',
+      id: 'ride-a15-a34', routeId: 'A', direction: 'southbound',
       origin: {
-        stationComplexId: 'A12', constituentStationId: 'A12', platformId: 'A12S',
-        boardingAreaId: 'A12S-middle', endpoint: originPlatform,
+        stationComplexId: 'A15', constituentStationId: 'A15', platformId: 'A15S',
+        boardingAreaId: 'A15S-middle', endpoint: originPlatform,
       },
       destination: {
-        stationComplexId: 'R20', constituentStationId: 'R20', platformId: 'R20S', endpoint: destinationPlatform,
+        stationComplexId: 'A34', constituentStationId: 'A34', platformId: 'A34S', endpoint: destinationPlatform,
       },
     }],
     transfers: [],
-    orderedRideSegmentIds: ['ride-a12-r20'],
+    orderedRideSegmentIds: ['ride-a15-a34'],
     orderedTransferIds: [],
     journeyChain: [
       { kind: 'access-edge', edgeId: originEdgeId },
-      { kind: 'ride', rideSegmentId: 'ride-a12-r20' },
+      { kind: 'ride', rideSegmentId: 'ride-a15-a34' },
       { kind: 'access-edge', edgeId: destinationEdgeId },
     ],
     completePathId: PATH_ID,
@@ -205,7 +398,7 @@ function accessibilityPackage(): AccessibilityPackage {
     accessiblePathMembershipByEdge: { [originEdgeId]: true, [destinationEdgeId]: true },
     operatingRestrictions: ['ordinary A service only'],
     evidenceSources: ['Committed validation accessibility package'],
-    evidenceReferences: ['validation/accessibility-a12-r20-v1'],
+    evidenceReferences: ['validation/accessibility-a15-a34-v1'],
     verificationDate: '2026-07-30',
     verifier: { name: 'Validation Accessibility Reviewer', role: 'Accessibility' },
     productDecision: review('Product'),
@@ -217,39 +410,39 @@ function accessibilityPackage(): AccessibilityPackage {
     unsupportedScope: { lines: [], directions: [], entrances: [], platforms: [], servicePatterns: [], paths: [] },
   };
   return {
-    packageId: 'validation-accessibility-package-a12-r20',
+    packageId: 'validation-accessibility-package-a15-a34',
     version: PATH_VERSION,
     canonicalPathIdentity: PATH_ID,
     coverage,
     edges: [
       {
-        id: originEdgeId, order: 1, movementType: 'elevator', start: originStreet, end: originPlatform,
+        id: originEdgeId, order: 1, movementType: 'level-path', start: originStreet, end: originPlatform,
         journeyScope: {
-          kind: 'origin-access', rideSegmentId: 'ride-a12-r20', transferId: null,
-          stationComplexId: 'A12', constituentStationId: 'A12', routeId: 'A', direction: 'southbound', platformId: 'A12S',
+          kind: 'origin-access', rideSegmentId: 'ride-a15-a34', transferId: null,
+          stationComplexId: 'A15', constituentStationId: 'A15', routeId: 'A', direction: 'southbound', platformId: 'A15S',
         },
-        equipmentId: EQUIPMENT_ID, officialAccessiblePath: true, restrictions: ['ordinary A service only'],
-        verificationDate: '2026-07-30', evidenceReference: 'validation/accessibility-a12-r20-v1',
+        equipmentId: null, officialAccessiblePath: true, restrictions: ['ordinary A service only'],
+        verificationDate: '2026-07-30', evidenceReference: 'validation/accessibility-a15-a34-v1',
         reviewDisposition: 'approved', canonicalPathIdentity: PATH_ID,
       },
       {
-        id: destinationEdgeId, order: 2, movementType: 'level-path', start: destinationPlatform, end: destinationStreet,
+        id: destinationEdgeId, order: 2, movementType: 'elevator', start: destinationPlatform, end: destinationStreet,
         journeyScope: {
-          kind: 'destination-access', rideSegmentId: 'ride-a12-r20', transferId: null,
-          stationComplexId: 'R20', constituentStationId: 'R20', routeId: 'A', direction: 'southbound', platformId: 'R20S',
+          kind: 'destination-access', rideSegmentId: 'ride-a15-a34', transferId: null,
+          stationComplexId: 'A34', constituentStationId: 'A34', routeId: 'A', direction: 'southbound', platformId: 'A34S',
         },
-        equipmentId: null, officialAccessiblePath: true, restrictions: ['ordinary A service only'],
-        verificationDate: '2026-07-30', evidenceReference: 'validation/accessibility-a12-r20-v1',
+        equipmentId: EQUIPMENT_ID, officialAccessiblePath: true, restrictions: ['ordinary A service only'],
+        verificationDate: '2026-07-30', evidenceReference: 'validation/accessibility-a15-a34-v1',
         reviewDisposition: 'approved', canonicalPathIdentity: PATH_ID,
       },
     ],
     approvalReceipt: {
-      receiptId: 'validation-accessibility-approval-a12-r20',
+      receiptId: 'validation-accessibility-approval-a15-a34',
       evidenceOwner: 'app-owned-accessibility-path-approvals',
       decision: 'approved',
-      packageId: 'validation-accessibility-package-a12-r20',
+      packageId: 'validation-accessibility-package-a15-a34',
       packageVersion: PATH_VERSION,
-      coverageRecordId: 'validation-accessible-a12-r20',
+      coverageRecordId: 'validation-accessible-a15-a34',
       coverageRecordVersion: PATH_VERSION,
       canonicalPathIdentity: PATH_ID,
       approvedOn: '2026-07-30',
@@ -258,9 +451,9 @@ function accessibilityPackage(): AccessibilityPackage {
 }
 
 function guidanceRecord(): PlatformGuidanceRecord {
-  const complex = { id: 'A12', name: '125 St' } as const;
-  const constituent = { id: 'A12', name: '125 St' } as const;
-  const parent = 'validation-guidance-a12-v1';
+  const complex = { id: 'A34', name: 'Canal St' } as const;
+  const constituent = { id: 'A34', name: 'Canal St' } as const;
+  const parent = 'validation-guidance-a34-v1';
   const version = 'v1';
   const roleReview = (role: PlatformGuidanceRecord['productDecision']['role'], reviewer: string) => ({
     reviewId: `${parent}:${role}`,
@@ -282,24 +475,24 @@ function guidanceRecord(): PlatformGuidanceRecord {
       sourceId: 'validation-guidance-source', reviewedOn: '2026-07-30', status: 'reviewed',
       parentCoverageRowId: parent, parentRecordVersion: version,
     },
-    route: 'A', servicePattern: 'ordinary', direction: 'southbound', destination: 'Far Rockaway', platformId: 'A12S',
+    route: 'A', servicePattern: 'ordinary', direction: 'southbound', destination: 'Far Rockaway', platformId: 'A34S',
     layoutOrientation: 'southbound travel axis', frontRearOrder: 'front-to-back south', zoneGeometry: 'middle zone markers 4-6',
     objectiveType: 'accessible-exit', objectiveTarget: EQUIPMENT_ID,
     physicalRelationships: 'platform to elevator to mezzanine to street',
-    zoneBenefit: { position: 'middle', copy: 'Nearest verified elevator' },
+    zoneBenefit: { position: 'middle', copy: 'Nearest verified elevator at Canal St' },
     certaintyCeiling: 'verified', accessiblePathVersion: PATH_VERSION, restrictions: ['ordinary pattern only'],
     supportedScope: {
       complex, constituent, route: 'A', servicePattern: 'ordinary', direction: 'southbound', destination: 'Far Rockaway',
-      platformId: 'A12S', layoutOrientation: 'southbound travel axis', objectiveType: 'accessible-exit',
+      platformId: 'A34S', layoutOrientation: 'southbound travel axis', objectiveType: 'accessible-exit',
       objectiveTarget: EQUIPMENT_ID, accessiblePathVersion: PATH_VERSION, position: 'middle',
     },
     unsupportedScope: {
       complexIds: [], constituentIds: [], routes: [], servicePatterns: ['rerouted'], directions: ['northbound'],
-      destinations: [], platformIds: ['A12N'], layoutOrientations: [], objectiveTypes: [],
+      destinations: [], platformIds: ['A34N'], layoutOrientations: [], objectiveTypes: [],
       objectiveTargets: [], accessiblePathVersions: [], positions: [], conditions: ['rerouted'],
     },
-    task7RecordVersion: 'validation-task7-a12-v1',
-    durableFieldEvidence: 'validation/guidance-a12-v1',
+    task7RecordVersion: 'validation-task7-a34-v1',
+    durableFieldEvidence: 'validation/guidance-a34-v1',
     verificationDate: '2026-07-30',
     verifier: { name: 'Validation Guidance Reviewer', role: 'Accessibility' },
     reverificationTriggers: [],

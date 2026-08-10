@@ -9,8 +9,10 @@ import type {
 } from '../api/client';
 import type { StationChoice } from '../state/app-state';
 import type { OfflineJourneyPlanner } from '../offline/plan-offline-journey';
-import { JOURNEY_CAPTURE_DISCLOSURE } from '../../shared/domain/journey-capture';
-import type { ValidationRiderEvidence } from '../../shared/validation/rider-evidence';
+import {
+  bindValidationRiderEvidenceToItinerary,
+  type ValidationRiderEvidence,
+} from '../../shared/validation/rider-evidence';
 import { ValidationAccessibilityPanel } from './AccessibilityPanel';
 import { ValidationPlatformGuidance } from './PlatformGuidance';
 import { RouteToken } from './RouteToken';
@@ -181,9 +183,7 @@ function JourneyResults({
       {response.demonstrationLabel ? <p className="claim-line"><span>{response.demonstrationLabel}</span></p> : null}
       {response.data.itineraries.map((itinerary, index) => {
         const transfer = itinerary.transfers > 0;
-        const riderEvidence = validationEvidenceOwnsItinerary(validationEvidence, response, itinerary)
-          ? validationEvidence
-          : undefined;
+        const riderEvidence = bindValidationRiderEvidenceToItinerary(validationEvidence, response, itinerary);
         return (
           <article className="journey-card" key={itinerary.id} aria-label={`${index === 0 ? 'Primary' : 'Alternative'} ${transfer ? 'transfer' : 'direct'} itinerary`}>
             <header>
@@ -229,24 +229,6 @@ function JourneyResults({
       })}
     </div>
   );
-}
-
-function validationEvidenceOwnsItinerary(
-  evidence: ValidationRiderEvidence | undefined,
-  response: JourneyEnvelopeDto,
-  itinerary: JourneyItineraryDto,
-): evidence is ValidationRiderEvidence {
-  if (!evidence || !response.data || (response.data.kind !== 'planned' && response.data.kind !== 'untimed')) return false;
-  const firstLeg = itinerary.legs[0];
-  return response.runtime.mode === 'validation'
-    && response.runtime.surface === 'demonstration'
-    && response.demonstrationLabel === JOURNEY_CAPTURE_DISCLOSURE
-    && response.data.scope.accessibleRouteOnly
-    && response.data.scope.originStationId === evidence.path.journeyScope.origin.constituentStationId
-    && response.data.scope.destinationStationId === evidence.path.journeyScope.destination.constituentStationId
-    && firstLeg?.routeId === evidence.path.routeId
-    && firstLeg.direction === evidence.path.direction
-    && firstLeg.actualDestination === evidence.guidance.destination;
 }
 
 function stationName(catalog: readonly CatalogComplexDto[], stationId: string): string {

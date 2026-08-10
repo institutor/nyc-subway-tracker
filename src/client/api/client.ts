@@ -58,6 +58,7 @@ export interface DynamicEnvelopeBase {
   readonly gateDecision?: GateDecisionDto;
   readonly sourceHealth?: readonly SourceHealthDto[];
   readonly provenance?: readonly ProvenanceDto[];
+  readonly decisionSnapshotIdentity?: string;
   readonly demonstrationLabel?: typeof DEMONSTRATION_LABEL;
 }
 
@@ -1235,7 +1236,7 @@ function parseRoute(value: unknown): RouteDto {
 function dynamicRoot(value: unknown, requiredTail: readonly string[], optionalTail: readonly string[] = []) {
   return strictRecord(value, [
     'apiVersion', 'schemaVersion', 'responseIdentity', 'decidedAt', 'serverTime', 'runtime', 'gates', ...requiredTail,
-  ], ['gateDecision', 'sourceHealth', 'provenance', 'demonstrationLabel', ...optionalTail]);
+  ], ['gateDecision', 'sourceHealth', 'provenance', 'decisionSnapshotIdentity', 'demonstrationLabel', ...optionalTail]);
 }
 
 function dynamicBase(root: Record<string, unknown>): DynamicEnvelopeBase {
@@ -1247,6 +1248,7 @@ function dynamicBase(root: Record<string, unknown>): DynamicEnvelopeBase {
     ...(root.gateDecision === undefined ? {} : { gateDecision: parseGate(root.gateDecision) }),
     ...(root.sourceHealth === undefined ? {} : { sourceHealth: boundedArray(root.sourceHealth, 128).map(parseSourceHealth) }),
     ...(root.provenance === undefined ? {} : { provenance: boundedArray(root.provenance, 128).map(parseProvenance) }),
+    ...(root.decisionSnapshotIdentity === undefined ? {} : { decisionSnapshotIdentity: identity(root.decisionSnapshotIdentity) }),
     ...(root.demonstrationLabel === undefined ? {} : { demonstrationLabel: demonstration(root.demonstrationLabel) }),
   };
 }

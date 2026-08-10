@@ -26,6 +26,7 @@ export interface DynamicEnvelope<T> {
   readonly gateDecision?: LockedExposureDecision;
   readonly sourceHealth?: readonly SourceHealthDto[];
   readonly provenance?: readonly ProvenanceDto[];
+  readonly decisionSnapshotIdentity?: string;
   readonly demonstrationLabel?: typeof DEMONSTRATION_LABEL;
   readonly data: T;
 }

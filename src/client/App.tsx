@@ -8,7 +8,13 @@ import {
   type JourneyCaptureClaimScope,
   type JourneyCapturePackage,
 } from '../shared/domain/journey-capture';
-import { createValidationRiderEvidence, type ValidationRiderEvidence } from '../shared/validation/rider-evidence';
+import {
+  bindValidationRiderEvidenceToItinerary,
+  createValidationRiderEvidence,
+  type BoundValidationRiderEvidence,
+  type ValidationRiderEvidence,
+  type ValidationRiderEvidenceOwner,
+} from '../shared/validation/rider-evidence';
 import {
   createTransitApiClient,
   type BoardEnvelopeDto,
@@ -614,10 +620,9 @@ export function App({
     });
   }, [acceptSavedMutation, savedStore]);
 
-  const validationDecisionTime = selectCurrentValidationDecisionTime(bootstrap);
   const validationEvidence = useMemo(
-    () => validationDecisionTime ? createValidationRiderEvidence(new Date(validationDecisionTime)) : undefined,
-    [validationDecisionTime],
+    () => createCurrentValidationRiderEvidence(bootstrap),
+    [bootstrap],
   );
 
   const activateTrip = useCallback((itinerary: JourneyItineraryDto, response: JourneyEnvelopeDto) => {
@@ -1009,6 +1014,9 @@ export function captureActiveTrip(
   });
   const origin = resolvePlace(response.data.scope.originStationId, catalog);
   const destination = resolvePlace(response.data.scope.destinationStationId, catalog);
+  const boundValidationEvidence = response.data.scope.accessibleRouteOnly
+    ? bindValidationRiderEvidenceToItinerary(validationEvidence, response, ownedItinerary)
+    : undefined;
   try {
     return {
       id: tripId,
@@ -1019,6 +1027,9 @@ export function captureActiveTrip(
         requestMode: capture.requestMode,
         timing: capture.timing,
         ...(capture.disclosure === undefined ? {} : { disclosure: capture.disclosure }),
+        ...(boundValidationEvidence ? {
+          validationEvidenceReceipt: activeTripValidationReceipt(boundValidationEvidence),
+        } : {}),
       },
       origin,
       destination,
@@ -1048,16 +1059,22 @@ export function captureActiveTrip(
           patternBoundary: { ...capture.validity.patternBoundary },
         }),
       },
-      ...(response.data.scope.accessibleRouteOnly && validationEvidence
-        && validationEvidenceOwnsItinerary(validationEvidence, response, ownedItinerary) ? {
+      ...(boundValidationEvidence ? {
           exitGuidance: {
-            ownerRecordId: validationEvidence.guidance.coverageRowId,
-            exitId: validationEvidence.path.journeyScope.destination.exitId,
+            ownerRecordId: boundValidationEvidence.guidance.coverageRowId,
+            exitId: boundValidationEvidence.path.journeyScope.destination.exitId,
             legId: legs[legs.length - 1]!.id,
-            purpose: validationEvidence.guidance.zoneBenefit.copy,
-            verificationContext: `Board near the ${validationEvidence.guidance.position}. ${validationEvidence.guidance.zoneBenefit.copy}.`,
-            verifiedAt: validationEvidence.guidance.evaluatedAt,
-            limitations: [...validationEvidence.guidance.restrictions],
+            purpose: boundValidationEvidence.guidance.zoneBenefit.copy,
+            verificationContext: `At Canal St, use the ${boundValidationEvidence.guidance.position} platform zone. ${boundValidationEvidence.guidance.zoneBenefit.copy}.`,
+            verifiedAt: boundValidationEvidence.guidance.evaluatedAt,
+            limitations: [...boundValidationEvidence.guidance.restrictions],
+            destinationScope: {
+              stationName: boundValidationEvidence.guidance.complex.name,
+              stationComplexId: boundValidationEvidence.receipt.destinationStationId,
+              constituentStationId: boundValidationEvidence.receipt.destinationStationId,
+              platformId: boundValidationEvidence.receipt.destinationPlatformId,
+              equipmentId: boundValidationEvidence.equipment[0]!.decision.targetEquipmentId,
+            },
           },
         } : {}),
     };
@@ -1070,49 +1087,94 @@ export function captureActiveTrip(
 export function selectCurrentValidationDecisionTime(
   bootstrap: BootstrapEnvelopeDto | undefined,
 ): string | undefined {
-  return bootstrap?.runtime.mode === 'validation'
-    && bootstrap.runtime.surface === 'demonstration'
-    && bootstrap.runtime.availability === 'available'
-    && bootstrap.demonstrationLabel === JOURNEY_CAPTURE_DISCLOSURE
-    ? bootstrap.decidedAt
-    : undefined;
+  return createCurrentValidationRiderEvidence(bootstrap)?.decisionTime.toISOString();
+}
+
+function createCurrentValidationRiderEvidence(
+  bootstrap: BootstrapEnvelopeDto | undefined,
+): ValidationRiderEvidence | undefined {
+  const owner = validationRiderEvidenceOwner(bootstrap);
+  return owner ? createValidationRiderEvidence(owner) : undefined;
+}
+
+function validationRiderEvidenceOwner(
+  bootstrap: BootstrapEnvelopeDto | undefined,
+): ValidationRiderEvidenceOwner | undefined {
+  if (!bootstrap || bootstrap.runtime.mode !== 'validation'
+    || bootstrap.runtime.surface !== 'demonstration'
+    || bootstrap.runtime.availability !== 'available'
+    || bootstrap.demonstrationLabel !== JOURNEY_CAPTURE_DISCLOSURE
+    || !bootstrap.decisionSnapshotIdentity) return undefined;
+  return {
+    decisionIdentity: bootstrap.responseIdentity,
+    snapshotIdentity: bootstrap.decisionSnapshotIdentity,
+    decisionTime: new Date(bootstrap.decidedAt),
+    disclosure: bootstrap.demonstrationLabel,
+    contentVersions: bootstrap.data.contentVersions,
+  };
 }
 
 function validationEvidenceOwnsActiveTrip(
   evidence: ValidationRiderEvidence,
   trip: ActiveTripRecord,
 ): boolean {
-  const firstLeg = trip.legs[0];
+  const receipt = trip.captureContext.kind === 'response-owned'
+    ? trip.captureContext.validationEvidenceReceipt
+    : undefined;
+  const onlyLeg = trip.legs.length === 1 ? trip.legs[0] : undefined;
+  const orderedStations = onlyLeg?.points.map(({ constituentId }) => constituentId) ?? [];
   return trip.captureContext.kind === 'response-owned'
     && trip.captureContext.disclosure === JOURNEY_CAPTURE_DISCLOSURE
+    && Boolean(receipt)
+    && receipt?.bootstrapDecisionIdentity === evidence.receipt.bootstrapDecisionIdentity
+    && receipt.decisionSnapshotIdentity === evidence.receipt.decisionSnapshotIdentity
+    && receipt.stationCatalogVersion === evidence.receipt.stationCatalogVersion
+    && receipt.journeyGraphVersion === evidence.receipt.journeyGraphVersion
+    && receipt.mapDayVersion === evidence.receipt.mapDayVersion
+    && receipt.mapNightVersion === evidence.receipt.mapNightVersion
+    && receipt.canonicalItineraryIdentity === trip.captureContext.itineraryId
+    && receipt.pathId === evidence.receipt.pathId
+    && receipt.originPlatformId === evidence.receipt.originPlatformId
+    && receipt.destinationPlatformId === evidence.receipt.destinationPlatformId
     && trip.accessibleRouteOnly
-    && trip.origin.constituentId === evidence.path.journeyScope.origin.constituentStationId
-    && trip.destination.constituentId === evidence.path.journeyScope.destination.constituentStationId
-    && firstLeg?.route.id === evidence.path.routeId
-    && firstLeg.boundDirection === evidence.path.direction
-    && firstLeg.actualDestination === evidence.guidance.destination
+    && trip.transfers.length === 0
+    && trip.origin.constituentId === evidence.receipt.originStationId
+    && trip.destination.constituentId === evidence.receipt.destinationStationId
+    && orderedStations.length === 2
+    && orderedStations[0] === evidence.receipt.originStationId
+    && orderedStations[1] === evidence.receipt.destinationStationId
+    && onlyLeg?.route.id === evidence.receipt.routeId
+    && onlyLeg.boundDirection === evidence.receipt.direction
+    && onlyLeg.actualDestination === evidence.receipt.actualDestination
     && trip.exitGuidance?.ownerRecordId === evidence.guidance.coverageRowId
+    && trip.exitGuidance.destinationScope?.stationComplexId === evidence.receipt.destinationStationId
+    && trip.exitGuidance.destinationScope.constituentStationId === evidence.receipt.destinationStationId
+    && trip.exitGuidance.destinationScope.platformId === evidence.receipt.destinationPlatformId
     && evidence.path.equipmentIds.every((equipmentId) => trip.equipmentClaims.some((claim) => (
-      claim.equipmentId === equipmentId && claim.pathId === evidence.path.pathId
+      claim.equipmentId === equipmentId && claim.pathId === evidence.receipt.pathId
     )));
 }
 
-function validationEvidenceOwnsItinerary(
-  evidence: ValidationRiderEvidence,
-  response: JourneyEnvelopeDto,
-  itinerary: JourneyItineraryDto,
-): boolean {
-  if (!response.data || (response.data.kind !== 'planned' && response.data.kind !== 'untimed')) return false;
-  const firstLeg = itinerary.legs[0];
-  return response.runtime.mode === 'validation'
-    && response.runtime.surface === 'demonstration'
-    && response.demonstrationLabel === JOURNEY_CAPTURE_DISCLOSURE
-    && response.data.scope.accessibleRouteOnly
-    && response.data.scope.originStationId === evidence.path.journeyScope.origin.constituentStationId
-    && response.data.scope.destinationStationId === evidence.path.journeyScope.destination.constituentStationId
-    && firstLeg?.routeId === evidence.path.routeId
-    && firstLeg.direction === evidence.path.direction
-    && firstLeg.actualDestination === evidence.guidance.destination;
+function activeTripValidationReceipt(evidence: BoundValidationRiderEvidence) {
+  return {
+    bootstrapDecisionIdentity: evidence.receipt.bootstrapDecisionIdentity,
+    journeyDecisionIdentity: evidence.journeyReceipt.journeyDecisionIdentity,
+    decisionSnapshotIdentity: evidence.receipt.decisionSnapshotIdentity,
+    stationCatalogVersion: evidence.receipt.stationCatalogVersion,
+    journeyGraphVersion: evidence.receipt.journeyGraphVersion,
+    mapDayVersion: evidence.receipt.mapDayVersion,
+    mapNightVersion: evidence.receipt.mapNightVersion,
+    canonicalItineraryIdentity: evidence.journeyReceipt.canonicalItineraryIdentity,
+    capturePackageIdentity: evidence.journeyReceipt.capturePackageIdentity,
+    pathId: evidence.receipt.pathId,
+    originStationId: evidence.receipt.originStationId,
+    originPlatformId: evidence.receipt.originPlatformId,
+    destinationStationId: evidence.receipt.destinationStationId,
+    destinationPlatformId: evidence.receipt.destinationPlatformId,
+    routeId: evidence.receipt.routeId,
+    direction: evidence.receipt.direction,
+    actualDestination: evidence.receipt.actualDestination,
+  };
 }
 
 function translateCaptureSchedule(

@@ -254,7 +254,7 @@ describe('versioned subway API', () => {
     }, { clock: createFixedClock(DECIDED_AT) });
 
     await withApi(createApp(dependencies), async ({ request }) => {
-      const response = await request('/api/v1/stations/A12/board');
+      const response = await request('/api/v1/stations/A15/board');
       const body = await response.json();
       expect(body).toMatchObject({
         runtime: { mode: 'validation', surface: 'demonstration', availability: 'available' },
@@ -262,7 +262,7 @@ describe('versioned subway API', () => {
         gateDecision: { exposed: false, reasonCode: 'GATE_0_NOT_PASSED' },
         data: {
           mode: 'demonstration',
-          station: { id: 'A12', name: '125 St' },
+          station: { id: 'A15', name: '125 St' },
           directions: [
             { direction: 'northbound', primary: expect.any(Array) },
             { direction: 'southbound', primary: expect.any(Array) },
@@ -1661,10 +1661,10 @@ describe('versioned subway API', () => {
       expect(bootstrap.sourceHealth).toMatchObject([{ sourceId: 'mta-realtime-bdfm' }]);
       expect(bootstrap.provenance).toMatchObject([{ sourceId: 'mta-realtime-bdfm' }]);
       expect(bootstrap.data.contentVersions).toEqual({
-        stationCatalog: 'validation-catalog-2026-08-04-v1',
+        stationCatalog: 'validation-catalog-2026-08-04-v2',
         maps: {
-          day: 'validation-map-day-2026-08-04-v1',
-          night: 'validation-map-night-2026-08-04-v1',
+          day: 'validation-map-day-2026-08-04-v2',
+          night: 'validation-map-night-2026-08-04-v2',
         },
         journeyGraph: expect.stringMatching(/^journey-graph-/),
       });
