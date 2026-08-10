@@ -4,6 +4,10 @@ import {
   bindJourneyCapturePackage,
   type JourneyCapturePackage,
 } from '../../shared/domain/journey-capture';
+import {
+  admitOperationalSourceOwners,
+  isCanonicalOperationalServiceEpoch,
+} from '../../shared/domain/operational-source-owners';
 
 const API_VERSION = 'v1';
 const SCHEMA_VERSION = '2026-08-04';
@@ -149,12 +153,22 @@ export interface MapOverlaySegmentDto {
   readonly alertIds: readonly string[];
 }
 
+export interface MapOverlaySourceOwnerDto {
+  readonly source: 'supplemented-gtfs' | 'gtfs-rt' | 'alerts';
+  readonly sourceId: string;
+  readonly observedAt: string;
+  readonly retrievedAt: string;
+  readonly lastAcceptedAt: string;
+  readonly assessedAt: string;
+}
+
 export interface MapOverlayEnvelopeDto extends DynamicEnvelopeBase {
   readonly cacheState: TransportCacheState;
   readonly data: {
     readonly theme: MapThemeDto;
     readonly serviceEpoch: string | null;
     readonly segments: readonly MapOverlaySegmentDto[];
+    readonly sourceOwners: readonly MapOverlaySourceOwnerDto[];
   } | null;
 }
 
@@ -789,11 +803,22 @@ function parseMapOverlay(
   const data = root.data === null ? null : parseMapOverlayData(root.data);
   if ((base.runtime.availability === 'locked') !== (data === null)) invalid();
   if (data && data.theme !== requestedTheme) invalid();
+  if (data?.serviceEpoch) {
+    const admitted = admitOperationalSourceOwners({
+      ownerRefs: data.sourceOwners,
+      provenance: base.provenance ?? [],
+      sourceHealth: base.sourceHealth ?? [],
+      decidedAt: base.decidedAt,
+      serverTime: base.serverTime,
+      claimedReceipts: data.sourceOwners,
+    });
+    if (!admitted) invalid();
+  }
   return freeze({ ...base, cacheState, data });
 }
 
 function parseMapOverlayData(value: unknown): NonNullable<MapOverlayEnvelopeDto['data']> {
-  const row = strictRecord(value, ['theme', 'serviceEpoch', 'segments']);
+  const row = strictRecord(value, ['theme', 'serviceEpoch', 'segments', 'sourceOwners']);
   const segments = boundedArray(row.segments, 50_000).map((candidate): MapOverlaySegmentDto => {
     const segment = strictRecord(candidate, ['id', 'routeIds', 'state', 'alertIds']);
     return {
@@ -803,8 +828,26 @@ function parseMapOverlayData(value: unknown): NonNullable<MapOverlayEnvelopeDto[
     };
   });
   assertUnique(segments.map(({ id }) => id));
+  const sourceOwners = boundedArray(row.sourceOwners, 16).map((candidate): MapOverlaySourceOwnerDto => {
+    const owner = strictRecord(candidate, [
+      'source', 'sourceId', 'observedAt', 'retrievedAt', 'lastAcceptedAt', 'assessedAt',
+    ]);
+    return {
+      source: enumeration(owner.source, ['supplemented-gtfs', 'gtfs-rt', 'alerts'] as const),
+      sourceId: identity(owner.sourceId),
+      observedAt: iso(owner.observedAt),
+      retrievedAt: iso(owner.retrievedAt),
+      lastAcceptedAt: iso(owner.lastAcceptedAt),
+      assessedAt: iso(owner.assessedAt),
+    };
+  });
+  assertUnique(sourceOwners.map(({ source, sourceId }) => `${source}\u0000${sourceId}`));
+  const serviceEpoch = row.serviceEpoch === null ? null : identity(row.serviceEpoch);
+  if (serviceEpoch !== null && !isCanonicalOperationalServiceEpoch(serviceEpoch)) invalid();
+  if (serviceEpoch === null && (segments.length !== 0 || sourceOwners.length !== 0)) invalid();
+  if (serviceEpoch !== null && sourceOwners.length === 0) invalid();
   return {
-    theme: parseMapTheme(row.theme), serviceEpoch: row.serviceEpoch === null ? null : identity(row.serviceEpoch), segments,
+    theme: parseMapTheme(row.theme), serviceEpoch, segments, sourceOwners,
   };
 }
 

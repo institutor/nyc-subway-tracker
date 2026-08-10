@@ -3,12 +3,16 @@ import type { Request, Response } from 'express';
 import { API_VERSION, DEMONSTRATION_LABEL, SCHEMA_VERSION } from '../api/contracts';
 import { captureDecisionSnapshot } from '../api/decision-snapshot';
 import { sendImmutableJson, sendNoStoreJson, sendPublicHistoricalJson } from '../api/http';
-import { toProvenanceDtos, toSourceHealthDtos } from '../api/provenance-dto';
+import { projectPublicSource, toProvenanceDtos, toSourceHealthDtos } from '../api/provenance-dto';
 import { createResponseIdentity } from '../api/response-identity';
 import type { AppDependencies } from '../bootstrap';
 import type { MapTheme } from '../services/map-service';
 import { captureNow } from './boards';
 import { ApiRequestError, assertExactQuery, parseApiIdentifier } from '../api/request-validation';
+import {
+  admitOperationalSourceOwners,
+  isCanonicalOperationalServiceEpoch,
+} from '../../shared/domain/operational-source-owners';
 
 export function mapReferenceHandler(dependencies: AppDependencies) {
   return (request: Request, response: Response): void => {
@@ -67,8 +71,20 @@ export function mapOverlayHandler(dependencies: AppDependencies) {
       return;
     }
     const snapshot = captureDecisionSnapshot(dependencies.snapshotProvider);
-    const overlay = snapshot.mapOverlays?.find((value) => value.theme === theme);
-    const data = overlay
+    const matchingOverlays = snapshot.mapOverlays?.filter((value) => value.theme === theme) ?? [];
+    const overlay = matchingOverlays.length === 1 ? matchingOverlays[0] : undefined;
+    const sourceHealth = toSourceHealthDtos(snapshot.sourceHealth);
+    const provenance = toProvenanceDtos(snapshot.provenance);
+    const sourceOwners = overlay && isCanonicalOperationalServiceEpoch(overlay.serviceEpoch)
+      ? admitOperationalSourceOwners({
+          ownerRefs: overlay.sourceOwners.map(({ source, sourceId }) => projectPublicSource(source, sourceId)),
+          provenance,
+          sourceHealth,
+          decidedAt,
+          serverTime: decidedAt,
+        })
+      : undefined;
+    const data = overlay && sourceOwners
       ? deepFreeze({
           theme,
           serviceEpoch: overlay.serviceEpoch,
@@ -78,10 +94,9 @@ export function mapOverlayHandler(dependencies: AppDependencies) {
             state: segment.state,
             alertIds: [...segment.alertIds],
           })),
+          sourceOwners,
         })
-      : deepFreeze({ theme, serviceEpoch: null, segments: [] });
-    const sourceHealth = toSourceHealthDtos(snapshot.sourceHealth);
-    const provenance = toProvenanceDtos(snapshot.provenance);
+      : deepFreeze({ theme, serviceEpoch: null, segments: [], sourceOwners: [] });
     sendPublicHistoricalJson(response, 200, {
       apiVersion: API_VERSION,
       schemaVersion: SCHEMA_VERSION,

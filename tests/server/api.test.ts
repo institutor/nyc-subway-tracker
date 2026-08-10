@@ -30,7 +30,7 @@ const nearbySnapshot = {
   identity: 'snapshot-nearby-1',
   sourceHealth: [{
     source: 'gtfs-rt', sourceId: 'subway-rt-ace', state: 'current',
-    assessedAt: '2026-08-04T11:59:58.000Z', lastAcceptedAt: '2026-08-04T11:59:58.000Z',
+    assessedAt: '2026-08-04T12:00:00.000Z', lastAcceptedAt: '2026-08-04T11:59:59.000Z',
   }],
   provenance: [{
     source: 'gtfs-rt', sourceId: 'subway-rt-ace', observedAt: '2026-08-04T11:59:58.000Z',
@@ -153,7 +153,8 @@ const operationalSnapshot = {
   mapOverlays: [{
     theme: 'day',
     serviceEpoch: 'overlay-7',
-    segments: [{ id: 'segment-a-uptown', routeIds: ['A'], state: 'affected', alertIds: ['alert-a-north'] }],
+    sourceOwners: [{ source: 'gtfs-rt', sourceId: 'subway-rt-ace' }],
+    segments: [{ id: 'segment-a-uptown', routeIds: ['A'], state: 'normal', alertIds: [] }],
   }],
 } as const;
 
@@ -878,10 +879,89 @@ describe('versioned subway API', () => {
         demonstrationLabel: 'Demonstration data — not live',
         data: {
           theme: 'day', serviceEpoch: 'overlay-7',
-          segments: [{ id: 'segment-a-uptown', routeIds: ['A'], state: 'affected', alertIds: ['alert-a-north'] }],
+          segments: [{ id: 'segment-a-uptown', routeIds: ['A'], state: 'normal', alertIds: [] }],
+          sourceOwners: [{
+            source: 'gtfs-rt', sourceId: 'mta-realtime-ace',
+            observedAt: '2026-08-04T11:59:58.000Z', retrievedAt: '2026-08-04T11:59:59.000Z',
+            lastAcceptedAt: '2026-08-04T11:59:59.000Z', assessedAt: '2026-08-04T12:00:00.000Z',
+          }],
         },
       });
       expect(capture).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  test.each([
+    ['missing owner', (snapshot: any) => { snapshot.mapOverlays[0].sourceOwners[0].sourceId = 'subway-alerts'; }],
+    ['duplicate owner', (snapshot: any) => {
+      snapshot.mapOverlays[0].sourceOwners.push(structuredClone(snapshot.mapOverlays[0].sourceOwners[0]));
+    }],
+    ['ambiguous provenance', (snapshot: any) => {
+      snapshot.provenance.push(structuredClone(snapshot.provenance[0]));
+    }],
+    ['ambiguous health', (snapshot: any) => {
+      snapshot.sourceHealth.push(structuredClone(snapshot.sourceHealth[0]));
+    }],
+    ['unavailable owner', (snapshot: any) => {
+      snapshot.sourceHealth.find((row: any) => row.sourceId === 'subway-rt-ace').state = 'unavailable';
+    }],
+    ['stale owner', (snapshot: any) => {
+      const provenance = snapshot.provenance.find((row: any) => row.sourceId === 'subway-rt-ace');
+      const health = snapshot.sourceHealth.find((row: any) => row.sourceId === 'subway-rt-ace');
+      provenance.observedAt = '2026-08-04T10:00:00.000Z';
+      provenance.retrievedAt = '2026-08-04T10:00:01.000Z';
+      health.assessedAt = '2026-08-04T12:00:00.000Z';
+      health.lastAcceptedAt = '2026-08-04T10:00:01.000Z';
+    }],
+    ['stale observation hidden by a fresh retrieval', (snapshot: any) => {
+      snapshot.provenance.find((row: any) => row.sourceId === 'subway-rt-ace').observedAt = '2026-08-04T10:00:00.000Z';
+    }],
+    ['current regular-GTFS owner', (snapshot: any) => {
+      snapshot.mapOverlays[0].sourceOwners = [{ source: 'regular-gtfs', sourceId: 'regular-subway-gtfs' }];
+      snapshot.provenance[0].source = 'regular-gtfs';
+      snapshot.provenance[0].sourceId = 'regular-subway-gtfs';
+      snapshot.sourceHealth[0].source = 'regular-gtfs';
+      snapshot.sourceHealth[0].sourceId = 'regular-subway-gtfs';
+    }],
+    ['current practical-walk owner', (snapshot: any) => {
+      snapshot.mapOverlays[0].sourceOwners = [{ source: 'practical-walk', sourceId: 'practical-walk' }];
+      snapshot.provenance[0].source = 'practical-walk';
+      snapshot.provenance[0].sourceId = 'practical-walk';
+      snapshot.sourceHealth[0].source = 'practical-walk';
+      snapshot.sourceHealth[0].sourceId = 'practical-walk';
+    }],
+    ['new epoch over stale owner', (snapshot: any) => {
+      snapshot.mapOverlays[0].serviceEpoch = 'overlay-new-wrapper-epoch';
+      const provenance = snapshot.provenance.find((row: any) => row.sourceId === 'subway-rt-ace');
+      const health = snapshot.sourceHealth.find((row: any) => row.sourceId === 'subway-rt-ace');
+      provenance.observedAt = '2026-08-04T10:00:00.000Z';
+      provenance.retrievedAt = '2026-08-04T10:00:01.000Z';
+      health.lastAcceptedAt = '2026-08-04T10:00:01.000Z';
+    }],
+    ['one stale owner in a composite', (snapshot: any) => {
+      snapshot.mapOverlays[0].sourceOwners.push({ source: 'alerts', sourceId: 'subway-alerts' });
+      snapshot.provenance.push({
+        source: 'alerts', sourceId: 'subway-alerts', observedAt: '2026-08-04T10:00:00.000Z',
+        retrievedAt: '2026-08-04T10:00:01.000Z', version: 'alerts-old',
+      });
+      snapshot.sourceHealth.push({
+        source: 'alerts', sourceId: 'subway-alerts', state: 'current', assessedAt: '2026-08-04T12:00:00.000Z',
+        lastAcceptedAt: '2026-08-04T10:00:01.000Z',
+      });
+    }],
+    ['duplicate theme overlay', (snapshot: any) => {
+      snapshot.mapOverlays.push(structuredClone(snapshot.mapOverlays[0]));
+    }],
+  ])('fails the Actual-now overlay closed for a %s', async (_label, mutate) => {
+    const snapshot = structuredClone(operationalSnapshot) as any;
+    mutate(snapshot);
+    const dependencies = createProductionDependencies({
+      dataDirectory: '.data-test-do-not-read', mode: 'validation', sources: {},
+    }, { clock: createFixedClock(DECIDED_AT), mapReferences, snapshotProvider: { capture: () => snapshot } });
+
+    await withApi(createApp(dependencies), async ({ request }) => {
+      const body = await (await request('/api/v1/maps/day/overlay')).json();
+      expect(body.data).toEqual({ theme: 'day', serviceEpoch: null, segments: [], sourceOwners: [] });
     });
   });
 
@@ -1305,8 +1385,13 @@ describe('versioned subway API', () => {
         walkObjects(body, (value) => {
           for (const key of Object.keys(value)) expect(key).not.toMatch(/^(?:crowding|capacity|occupancy|carLoad|car-load|loadFactor)$/i);
           if ('observedAt' in value && 'retrievedAt' in value) {
-            expect(Object.keys(value).sort()).toEqual(expect.arrayContaining(['observedAt', 'retrievedAt', 'source', 'sourceId']));
-            expect(Object.keys(value).every((key) => ['source', 'sourceId', 'observedAt', 'retrievedAt', 'version'].includes(key))).toBe(true);
+            const keys = Object.keys(value).sort();
+            expect(keys).toEqual(expect.arrayContaining(['observedAt', 'retrievedAt', 'source', 'sourceId']));
+            if ('lastAcceptedAt' in value || 'assessedAt' in value) {
+              expect(keys).toEqual(['assessedAt', 'lastAcceptedAt', 'observedAt', 'retrievedAt', 'source', 'sourceId']);
+            } else {
+              expect(keys.every((key) => ['source', 'sourceId', 'observedAt', 'retrievedAt', 'version'].includes(key))).toBe(true);
+            }
           }
         });
       }

@@ -16,6 +16,10 @@ import { VectorNetworkMap, type MapViewport } from '../components/VectorNetworkM
 import type { StationChoice } from '../state/app-state';
 import type { OfflineJourneyPlanner } from '../offline/plan-offline-journey';
 import type { ValidationRiderEvidence } from '../../shared/validation/rider-evidence';
+import {
+  admitOperationalSourceOwners,
+  isCanonicalOperationalServiceEpoch,
+} from '../../shared/domain/operational-source-owners';
 
 export interface MapContext {
   readonly serviceMeaning: MapServiceMeaning;
@@ -30,7 +34,7 @@ type MapOverlayState =
   | { readonly phase: 'ready-current'; readonly data: MapOverlayEnvelopeDto }
   | {
       readonly phase: 'unavailable';
-      readonly reason: 'offline' | 'historical' | 'owner-locked' | 'missing-data' | 'wrong-theme' | 'missing-epoch' | 'request-failed';
+      readonly reason: 'offline' | 'historical' | 'owner-locked' | 'missing-data' | 'wrong-theme' | 'missing-epoch' | 'unverified-owner' | 'request-failed';
     };
 
 export function MapView({
@@ -239,8 +243,16 @@ function classifyOverlay(response: MapOverlayEnvelopeDto): MapOverlayState {
   if (response.runtime.availability !== 'available') return { phase: 'unavailable', reason: 'owner-locked' };
   if (!response.data) return { phase: 'unavailable', reason: 'missing-data' };
   if (response.data.theme !== 'day') return { phase: 'unavailable', reason: 'wrong-theme' };
-  if (typeof response.data.serviceEpoch !== 'string' || response.data.serviceEpoch.length === 0) {
+  if (!isCanonicalOperationalServiceEpoch(response.data.serviceEpoch)) {
     return { phase: 'unavailable', reason: 'missing-epoch' };
   }
+  if (!admitOperationalSourceOwners({
+    ownerRefs: response.data.sourceOwners,
+    provenance: response.provenance ?? [],
+    sourceHealth: response.sourceHealth ?? [],
+    decidedAt: response.decidedAt,
+    serverTime: response.serverTime,
+    claimedReceipts: response.data.sourceOwners,
+  })) return { phase: 'unavailable', reason: 'unverified-owner' };
   return { phase: 'ready-current', data: response };
 }

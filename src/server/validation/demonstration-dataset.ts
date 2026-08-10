@@ -112,6 +112,10 @@ function createSnapshot(): DecisionSnapshot {
     mapOverlays: [
       {
         theme: 'day', serviceEpoch: 'validation-service-epoch-v1',
+        sourceOwners: [
+          { source: 'alerts', sourceId: 'subway-alerts' },
+          { source: 'gtfs-rt', sourceId: 'subway-rt-ace' },
+        ],
         segments: [
           { id: 'line-a', routeIds: ['A'], state: 'affected', alertIds: ['alert-a-north'] },
           { id: 'line-n', routeIds: ['N'], state: 'normal', alertIds: [] },
@@ -119,6 +123,10 @@ function createSnapshot(): DecisionSnapshot {
       },
       {
         theme: 'night', serviceEpoch: 'validation-service-epoch-v1',
+        sourceOwners: [
+          { source: 'alerts', sourceId: 'subway-alerts' },
+          { source: 'gtfs-rt', sourceId: 'subway-rt-ace' },
+        ],
         segments: [
           { id: 'line-a', routeIds: ['A'], state: 'affected', alertIds: ['alert-a-north'] },
           { id: 'line-n', routeIds: ['N'], state: 'normal', alertIds: [] },

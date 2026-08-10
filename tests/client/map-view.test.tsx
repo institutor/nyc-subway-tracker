@@ -186,6 +186,27 @@ describe('independent map service meaning', () => {
     },
   );
 
+  test.each(['stale', 'stale-observation', 'unavailable'] as const)(
+    'keeps Actual now unavailable when its operational source owner is %s',
+    async (outcome) => {
+      const api = mapApi();
+      api.mapOverlay.mockResolvedValue(operationalOverlay(outcome));
+      render(<MapView
+        api={api}
+        bootstrap={bootstrap}
+        catalog={catalog}
+        connected
+        initialContext={{ serviceMeaning: 'actual-now', spatialView: 'schematic', viewport: { centerX: 40.7, centerY: -74, zoom: 1 } }}
+        onContextChange={vi.fn()}
+        onActivateTrip={vi.fn()}
+      />);
+
+      expect(await screen.findByText('Current service overlay could not be verified. Choose a reference pattern to continue.')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Actual now' })).toBeDisabled();
+      expect(within(screen.getByTestId('vector-network-map')).queryByText('Actual now')).not.toBeInTheDocument();
+    },
+  );
+
   test('resets to the NYC overview without claiming to locate the rider', async () => {
     const onContextChange = vi.fn();
     render(<MapView
@@ -400,9 +421,7 @@ function mapApi(cacheState: 'network' | 'historical' = 'network') {
   });
   return {
     mapReference: vi.fn(async (theme: 'day' | 'night') => reference(theme)),
-    mapOverlay: vi.fn(async (theme: 'day' | 'night') => ({
-      ...dynamic, cacheState, data: { theme, serviceEpoch: 'epoch-7', segments: [{ id: 'line-a', routeIds: ['A'], state: 'normal', alertIds: [] }] },
-    })),
+    mapOverlay: vi.fn(async (theme: 'day' | 'night') => ({ ...operationalOverlay('current', theme), cacheState })),
   } as unknown as TransitApiClient & { mapReference: ReturnType<typeof vi.fn>; mapOverlay: ReturnType<typeof vi.fn> };
 }
 
@@ -418,13 +437,48 @@ function mapReference(theme: 'day' | 'night', featureId: string): MapReferenceEn
 }
 
 function currentOverlay() {
+  return operationalOverlay('current');
+}
+
+function operationalOverlay(
+  ownerState: 'current' | 'stale' | 'stale-observation' | 'unavailable',
+  theme: 'day' | 'night' = 'day',
+) {
+  const stale = ownerState === 'stale';
+  const observedAt = stale || ownerState === 'stale-observation'
+    ? '2026-08-04T10:00:00.000Z'
+    : '2026-08-04T11:59:58.000Z';
+  const retrievedAt = stale ? '2026-08-04T10:00:01.000Z' : '2026-08-04T11:59:59.000Z';
+  const lastAcceptedAt = retrievedAt;
+  const assessedAt = '2026-08-04T12:00:00.000Z';
+  const provenance = { source: 'alerts' as const, sourceId: 'mta-service-alerts', observedAt, retrievedAt };
+  const health = {
+    source: 'alerts' as const, sourceId: 'mta-service-alerts',
+    state: ownerState === 'unavailable' ? 'unavailable' as const : 'current' as const,
+    assessedAt, lastAcceptedAt,
+    reasonCode: ownerState === 'unavailable' ? 'SOURCE_UNAVAILABLE' as const : 'SOURCE_CURRENT' as const,
+  };
+  const realtimeProvenance = {
+    source: 'gtfs-rt' as const, sourceId: 'mta-realtime-ace',
+    observedAt: '2026-08-04T11:59:58.000Z', retrievedAt: '2026-08-04T11:59:59.000Z',
+  };
+  const realtimeHealth = {
+    source: 'gtfs-rt' as const, sourceId: 'mta-realtime-ace', state: 'current' as const,
+    assessedAt, lastAcceptedAt: '2026-08-04T11:59:59.000Z', reasonCode: 'SOURCE_CURRENT' as const,
+  };
   return {
     ...dynamic,
     cacheState: 'network' as const,
+    provenance: [provenance, realtimeProvenance],
+    sourceHealth: [health, realtimeHealth],
     data: {
-      theme: 'day' as const,
+      theme,
       serviceEpoch: 'epoch-current',
       segments: [{ id: 'line-a', routeIds: ['A'], state: 'normal' as const, alertIds: [] }],
+      sourceOwners: [
+        { ...provenance, assessedAt, lastAcceptedAt },
+        { ...realtimeProvenance, assessedAt, lastAcceptedAt: realtimeHealth.lastAcceptedAt },
+      ],
     },
   };
 }

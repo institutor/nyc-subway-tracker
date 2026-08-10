@@ -1,6 +1,6 @@
 import { describe, expect, test, vi } from 'vitest';
 
-import type { BoardEnvelopeDto, JourneyEnvelopeDto } from '../../src/client/api/client';
+import type { BoardEnvelopeDto, JourneyEnvelopeDto, MapOverlayEnvelopeDto } from '../../src/client/api/client';
 import {
   createAppReconnectionStageLoader,
   type AppReconnectionArtifacts,
@@ -8,6 +8,7 @@ import {
 import type { ActiveTripRecord } from '../../src/client/storage/active-trip-store';
 import type { PreservedReconnectionContext } from '../../src/shared/domain/reconnection';
 import { boardEnvelope, createClientApi, disclosure } from '../helpers/client-fixtures';
+import { encodeCanonicalStringTuple } from '../../src/shared/domain/canonical';
 
 const STARTED_AT = '2026-08-05T12:00:00.000Z';
 const ACCEPTED_AT = '2026-08-05T12:00:02.000Z';
@@ -416,7 +417,117 @@ describe('App reconnection owner loader', () => {
     )).resolves.toBeUndefined();
     expect(board).toHaveBeenCalledTimes(1);
   });
+
+  test('does not refresh Actual-now from a new wrapper over pre-recovery overlay source evidence', async () => {
+    const overlay = mapOverlayWithOwner({
+      observedAt: '2026-08-04T12:00:00.100Z', retrievedAt: '2026-08-04T12:00:00.200Z',
+      lastAcceptedAt: '2026-08-04T12:00:00.200Z', assessedAt: '2026-08-05T12:00:00.300Z',
+    });
+    const loader = createAppReconnectionStageLoader({
+      api: createClientApi({ mapOverlay: vi.fn(async () => overlay) }), stationId: 'A12',
+      filters: { routeIds: ['A'], direction: 'southbound' }, hasUnrelatedSavedRecords: false,
+      artifacts: {}, activeTrip: timedActiveTrip(), now: () => new Date(ACCEPTED_AT),
+    });
+
+    await expect(loader(
+      { stage: 5, context: recoveryContext(), state: null as any }, new AbortController().signal,
+    )).resolves.toBeUndefined();
+  });
+
+  test('refreshes Actual-now with a source-owned gate only after current overlay evidence is admitted', async () => {
+    const overlay = mapOverlayWithOwner(FIRST_REALTIME_OWNER);
+    const artifacts: AppReconnectionArtifacts = {};
+    const loader = createAppReconnectionStageLoader({
+      api: createClientApi({ mapOverlay: vi.fn(async () => overlay) }), stationId: 'A12',
+      filters: { routeIds: ['A'], direction: 'southbound' }, hasUnrelatedSavedRecords: false,
+      artifacts, activeTrip: timedActiveTrip(), now: () => new Date(ACCEPTED_AT),
+    });
+
+    await expect(loader(
+      { stage: 5, context: recoveryContext(), state: null as any }, new AbortController().signal,
+    )).resolves.toMatchObject({
+      stage: 5,
+      maps: {
+        disposition: 'refreshed',
+        gate: {
+          evidenceId: 'map-owner:alerts:mta-service-alerts:2026-08-05T12:00:00.100Z:2026-08-05T12:00:00.200Z:2026-08-05T12:00:00.200Z',
+          evidenceAt: '2026-08-05T12:00:00.200Z',
+        },
+      },
+    });
+    expect(artifacts.mapOverlay).toBe(overlay);
+  });
+
+  test('retains the complete canonical owner set in a composite map recovery gate', async () => {
+    const alertOwner = mapOverlayWithOwner(FIRST_REALTIME_OWNER);
+    const realtimeProvenance = {
+      source: 'gtfs-rt' as const, sourceId: 'mta-realtime-ace',
+      observedAt: SECOND_REALTIME_OWNER.observedAt, retrievedAt: SECOND_REALTIME_OWNER.retrievedAt,
+    };
+    const realtimeHealth = {
+      source: 'gtfs-rt' as const, sourceId: 'mta-realtime-ace', state: 'current' as const,
+      assessedAt: SECOND_REALTIME_OWNER.assessedAt, lastAcceptedAt: SECOND_REALTIME_OWNER.lastAcceptedAt,
+      reasonCode: 'SOURCE_CURRENT' as const,
+    };
+    const overlay: MapOverlayEnvelopeDto = {
+      ...alertOwner,
+      decidedAt: '2026-08-05T12:00:02.000Z',
+      serverTime: '2026-08-05T12:00:02.000Z',
+      provenance: [...(alertOwner.provenance ?? []), realtimeProvenance],
+      sourceHealth: [...(alertOwner.sourceHealth ?? []), realtimeHealth],
+      data: alertOwner.data ? {
+        ...alertOwner.data,
+        sourceOwners: [
+          ...alertOwner.data.sourceOwners,
+          { ...realtimeProvenance, assessedAt: realtimeHealth.assessedAt, lastAcceptedAt: realtimeHealth.lastAcceptedAt },
+        ],
+      } : null,
+    };
+    const loader = createAppReconnectionStageLoader({
+      api: createClientApi({ mapOverlay: vi.fn(async () => overlay) }), stationId: 'A12',
+      filters: { routeIds: ['A'], direction: 'southbound' }, hasUnrelatedSavedRecords: false,
+      artifacts: {}, activeTrip: timedActiveTrip(), now: () => new Date(ACCEPTED_AT),
+    });
+    const ownerTuple = encodeCanonicalStringTuple([
+      'alerts', 'mta-service-alerts', FIRST_REALTIME_OWNER.observedAt,
+      FIRST_REALTIME_OWNER.retrievedAt, FIRST_REALTIME_OWNER.lastAcceptedAt,
+      'gtfs-rt', 'mta-realtime-ace', SECOND_REALTIME_OWNER.observedAt,
+      SECOND_REALTIME_OWNER.retrievedAt, SECOND_REALTIME_OWNER.lastAcceptedAt,
+    ]);
+
+    await expect(loader(
+      { stage: 5, context: recoveryContext(), state: null as any }, new AbortController().signal,
+    )).resolves.toMatchObject({
+      maps: { gate: { evidenceId: `map-owner-set:${ownerTuple}`, evidenceAt: SECOND_REALTIME_OWNER.lastAcceptedAt } },
+    });
+  });
 });
+
+function mapOverlayWithOwner(evidence: {
+  readonly observedAt: string;
+  readonly retrievedAt: string;
+  readonly lastAcceptedAt: string;
+  readonly assessedAt: string;
+}): MapOverlayEnvelopeDto {
+  const provenance = {
+    source: 'alerts' as const, sourceId: 'mta-service-alerts',
+    observedAt: evidence.observedAt, retrievedAt: evidence.retrievedAt,
+  };
+  const health = {
+    source: 'alerts' as const, sourceId: 'mta-service-alerts', state: 'current' as const,
+    assessedAt: evidence.assessedAt, lastAcceptedAt: evidence.lastAcceptedAt,
+    reasonCode: 'SOURCE_CURRENT' as const,
+  };
+  return {
+    ...boardEnvelope(), responseIdentity: 'overlay-wrapper-current', cacheState: 'network',
+    decidedAt: '2026-08-05T12:00:01.000Z', serverTime: '2026-08-05T12:00:01.000Z',
+    provenance: [provenance], sourceHealth: [health],
+    data: {
+      theme: 'day', serviceEpoch: 'overlay-current', segments: [],
+      sourceOwners: [{ ...provenance, lastAcceptedAt: health.lastAcceptedAt, assessedAt: health.assessedAt }],
+    },
+  } as MapOverlayEnvelopeDto;
+}
 
 function storedTrainBoard(arrivalAt = '2026-08-05T12:15:00.000Z') {
   const envelope = boardEnvelope();

@@ -17,6 +17,12 @@ import type {
   ReconnectionStageResult,
 } from '../../shared/domain/reconnection';
 import type { ReconnectionStageRequest } from './run-reconnection';
+import {
+  admitOperationalSourceOwners,
+  isCanonicalOperationalServiceEpoch,
+  operationalSourceOwnerEvidence,
+  type OperationalSourceOwnerReceipt,
+} from '../../shared/domain/operational-source-owners';
 
 const SELECTED_DEPARTURE_TOLERANCE_MS = 90_000;
 
@@ -577,11 +583,13 @@ async function loadBackground(
   signal: AbortSignal,
 ): Promise<ReconnectionStageResult | undefined> {
   const overlay = await options.api.mapOverlay(context.mapTuple.theme, signal);
-  if (!isFreshOverlay(overlay, context)) return undefined;
+  const sourceOwners = freshOverlayOwners(overlay, context);
+  const mapEvidence = sourceOwners ? operationalSourceOwnerEvidence(sourceOwners) : undefined;
+  if (!sourceOwners || !mapEvidence) return undefined;
   const acceptedAt = exactNow(options.now);
   const mapScope = exactScope(context, 'map', context.mapTuple.viewportKey);
   const savedScope = ownerScope(context, 'saved');
-  const mapGate = acceptedGate(context, 'maps', overlay.responseIdentity, overlay.decidedAt, acceptedAt, mapScope);
+  const mapGate = acceptedGate(context, 'maps', mapEvidence.evidenceId, mapEvidence.evidenceAt, acceptedAt, mapScope);
   const savedGate: OwnerAcceptance = options.hasUnrelatedSavedRecords
     ? failClosedGate(context, 'saved', acceptedAt, savedScope, 'Saved-station owners were not refreshed by this request.')
     : acceptedGate(
@@ -872,14 +880,22 @@ function exactInstant(value: string): number | null {
   return Number.isFinite(parsed) && new Date(parsed).toISOString() === value ? parsed : null;
 }
 
-function isFreshOverlay(overlay: MapOverlayEnvelopeDto, context: PreservedReconnectionContext): boolean {
-  return overlay.cacheState === 'network'
-    && overlay.runtime.availability === 'available'
-    && overlay.data?.theme === context.mapTuple.theme
-    && typeof overlay.data.serviceEpoch === 'string'
-    && overlay.data.serviceEpoch.length > 0
-    && freshInstant(overlay.decidedAt, context.recovery.startedAt)
-    && freshInstant(overlay.serverTime, context.recovery.startedAt);
+function freshOverlayOwners(
+  overlay: MapOverlayEnvelopeDto,
+  context: PreservedReconnectionContext,
+): readonly OperationalSourceOwnerReceipt[] | undefined {
+  if (overlay.cacheState !== 'network' || overlay.runtime.availability !== 'available'
+    || overlay.data?.theme !== context.mapTuple.theme
+    || !isCanonicalOperationalServiceEpoch(overlay.data.serviceEpoch)) return undefined;
+  return admitOperationalSourceOwners({
+    ownerRefs: overlay.data.sourceOwners,
+    provenance: overlay.provenance ?? [],
+    sourceHealth: overlay.sourceHealth ?? [],
+    decidedAt: overlay.decidedAt,
+    serverTime: overlay.serverTime,
+    claimedReceipts: overlay.data.sourceOwners,
+    notBefore: context.recovery.startedAt,
+  });
 }
 
 function freshInstant(candidate: string, epoch: string): boolean {

@@ -67,11 +67,23 @@ describe('offline tools API boundary', () => {
   });
 
   test('keeps dynamic Actual-now overlay separate and validates its exact service epoch', async () => {
+    const provenance = {
+      source: 'alerts', sourceId: 'mta-service-alerts',
+      observedAt: '2026-08-04T11:59:58.000Z', retrievedAt: '2026-08-04T11:59:59.000Z',
+    } as const;
+    const health = {
+      source: 'alerts', sourceId: 'mta-service-alerts', state: 'current',
+      assessedAt: '2026-08-04T12:00:00.000Z', lastAcceptedAt: '2026-08-04T11:59:59.000Z',
+      reasonCode: 'SOURCE_CURRENT',
+    } as const;
     const client = createTransitApiClient(async () => json({
       ...dynamic,
+      sourceHealth: [health],
+      provenance: [provenance],
       data: {
         theme: 'day', serviceEpoch: 'epoch-7',
         segments: [{ id: 'segment-a', routeIds: ['A'], state: 'affected', alertIds: ['alert-a'] }],
+        sourceOwners: [{ ...provenance, assessedAt: health.assessedAt, lastAcceptedAt: health.lastAcceptedAt }],
       },
     }, { 'x-subway-cache-state': 'historical' }));
 
@@ -80,8 +92,29 @@ describe('offline tools API boundary', () => {
     expect(result.data).toEqual({
       theme: 'day', serviceEpoch: 'epoch-7',
       segments: [{ id: 'segment-a', routeIds: ['A'], state: 'affected', alertIds: ['alert-a'] }],
+      sourceOwners: [{ ...provenance, assessedAt: health.assessedAt, lastAcceptedAt: health.lastAcceptedAt }],
     });
     expect(result.cacheState).toBe('historical');
+  });
+
+  test.each([
+    ['missing owner receipts', { theme: 'day', serviceEpoch: 'epoch-7', segments: [] }],
+    ['segments without an epoch', {
+      theme: 'day', serviceEpoch: null,
+      segments: [{ id: 'segment-a', routeIds: ['A'], state: 'affected', alertIds: ['alert-a'] }],
+      sourceOwners: [],
+    }],
+    ['owners without an epoch', {
+      theme: 'day', serviceEpoch: null, segments: [],
+      sourceOwners: [{
+        source: 'alerts', sourceId: 'mta-service-alerts',
+        observedAt: '2026-08-04T11:59:58.000Z', retrievedAt: '2026-08-04T11:59:59.000Z',
+        lastAcceptedAt: '2026-08-04T11:59:59.000Z', assessedAt: '2026-08-04T12:00:00.000Z',
+      }],
+    }],
+  ])('rejects an Actual-now overlay with %s', async (_label, data) => {
+    await expect(createTransitApiClient(async () => json({ ...dynamic, data })).mapOverlay('day'))
+      .rejects.toThrow('Transit information is unavailable.');
   });
 
   test('loads an immutable exact-version journey graph and rejects graph/version mismatch', async () => {

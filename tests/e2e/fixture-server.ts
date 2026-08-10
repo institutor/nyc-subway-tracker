@@ -39,6 +39,7 @@ const state: FixtureState = {
 };
 const requestLog: string[] = [];
 const transitionLog: ValidationTransition[] = [];
+const MAX_TRANSITION_EVIDENCE_ID_LENGTH = 1_024;
 let snapshotSequence = 0;
 let lastClockMillisecond = 0;
 
@@ -265,7 +266,9 @@ fixture.post('/__test/transitions', (request, response) => {
     || !/^(?:request|recovery)-[a-z0-9-]{1,120}$/u.test(candidate.requestIdentity)
     || !Number.isSafeInteger(candidate.sequence)
     || !Array.isArray(candidate.evidenceIds)
-    || candidate.evidenceIds.some((id) => typeof id !== 'string' || id.length === 0 || id.length > 200)
+    || candidate.evidenceIds.some((id) => (
+      typeof id !== 'string' || id.length === 0 || id.length > MAX_TRANSITION_EVIDENCE_ID_LENGTH
+    ))
     || !Array.isArray(candidate.auditKinds)
     || candidate.auditKinds.some((kind) => ![
       'stage-requested', 'stage-owner-accepted', 'stage-committed', 'warning-presented', 'stage-presented', 'warning-resolved',
@@ -385,6 +388,10 @@ function createSnapshot(): DecisionSnapshot {
       mapOverlays: [{
         theme: 'day',
         serviceEpoch: `browser-fixture-epoch-${snapshotSequence}`,
+        sourceOwners: [
+          { source: 'alerts', sourceId: 'subway-alerts' },
+          { source: 'gtfs-rt', sourceId: 'subway-rt-ace' },
+        ],
         segments: [{ id: 'segment-a-uptown', routeIds: ['A'], state: 'affected', alertIds: ['alert-a-north'] }],
       }],
     } : { mapOverlays: [] }),

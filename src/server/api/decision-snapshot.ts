@@ -1,6 +1,6 @@
 import { normalizeBoundedIdentity } from '../../shared/domain/canonical';
 import type { NearbyRankingInput } from '../../shared/domain/station-ranking';
-import type { BoardDecision } from '../../shared/domain/types';
+import type { BoardDecision, SourceKind } from '../../shared/domain/types';
 import type { JourneyGraph } from '../../shared/domain/journey-router';
 import type { JourneyCapturePackage } from '../../shared/domain/journey-capture';
 
@@ -40,6 +40,10 @@ export interface DecisionSnapshot {
 export interface MapOverlaySnapshot {
   readonly theme: 'day' | 'night';
   readonly serviceEpoch: string;
+  readonly sourceOwners: readonly {
+    readonly source: Extract<SourceKind, 'supplemented-gtfs' | 'gtfs-rt' | 'alerts'>;
+    readonly sourceId: string;
+  }[];
   readonly segments: readonly {
     readonly id: string;
     readonly routeIds: readonly string[];

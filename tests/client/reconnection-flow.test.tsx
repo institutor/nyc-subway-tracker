@@ -512,13 +512,26 @@ function recoveryBoard(identity: string, instant: string): BoardEnvelopeDto {
 }
 
 function recoveryOverlay(): MapOverlayEnvelopeDto {
+  const provenance = {
+    source: 'alerts' as const, sourceId: 'mta-service-alerts',
+    observedAt: '2026-08-05T12:00:03.000Z', retrievedAt: '2026-08-05T12:00:03.500Z',
+  };
+  const health = {
+    source: 'alerts' as const, sourceId: 'mta-service-alerts', state: 'current' as const,
+    assessedAt: '2026-08-05T12:00:04.000Z', lastAcceptedAt: '2026-08-05T12:00:03.500Z',
+    reasonCode: 'SOURCE_CURRENT' as const,
+  };
   return {
     ...boardEnvelope(),
     responseIdentity: 'recovery-overlay',
     decidedAt: '2026-08-05T12:00:04.000Z',
     serverTime: '2026-08-05T12:00:04.000Z',
     cacheState: 'network',
-    data: { theme: 'day', serviceEpoch: 'recovery-map-7', segments: [] },
+    provenance: [provenance], sourceHealth: [health],
+    data: {
+      theme: 'day', serviceEpoch: 'recovery-map-7', segments: [],
+      sourceOwners: [{ ...provenance, assessedAt: health.assessedAt, lastAcceptedAt: health.lastAcceptedAt }],
+    },
   };
 }
 
